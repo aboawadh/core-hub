@@ -69,6 +69,8 @@ $ pnpm lint                    → All matched files use Prettier code style!
 $ pnpm typecheck               → exit=0
 ```
 صورة الأندرويد: `apps/android/app/build/shots/tasks/android-detail.png` و`android-detail-dark.png`.
+CI على #181 بعد الدمج (رأس الفرع `ccab6b74`، يضم هذا العمل ودفعة أزرار المحادثة): كل الفحوص نجحت — Android build, unit tests, lint (4m19s)، Build and test on the iOS simulator (6m50s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Docker، Desktop، Installers ×3.
+
 الاختبارات الجديدة تفشل على الشيفرة القديمة (لا توجد `TaskRules`/`TaskOps` فيها، و`DestinationsTest` كان يتوقع كل الحالات).
 
 ## المخاطر والرجوع
