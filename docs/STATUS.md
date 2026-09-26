@@ -571,6 +571,20 @@ its approval.
   `null`). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
   detail); **iOS verified only on the CI simulator, neither tried on the owner's phones**.
   Comments, checklist, history, projects and bulk actions are part II.
+- **Inbox and your own settings on both phones** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-inbox-settings.md`, apps night batch 4): Notifications is
+  Inbox | Settings; the inbox filters All / Unread, shows the unread count, **marks all read**, a tap
+  marks a notice read and opens what it is about (its chat, the board, Schedules), and each notice can
+  be marked read or unread. **Account** on both: your picture (picked on the phone, made small, sent as
+  a JPEG; or back to the generated one — proposed, owner to confirm, since the web only shows it), your
+  display name, your password (current, new, again), and **messaging accounts** (list, link with a
+  code the bot receives, the list checked until the link shows, unlink after a question). **Display**
+  on Android now has the hub's preferences iOS already had (links, sending while the agent works,
+  reasoning, tool calls, compact, text size), saved at once. **Privacy** on both: each token's kind,
+  scopes, last use and expiry, **revoke after a question** (iOS revoked on a swipe before), and
+  Hermes's hide-ids switch for admins as on the web. The contract has no delete for a notice and no
+  list of browser sign-ins, so neither is offered. Android: JVM tests against a scripted hub and
+  Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
