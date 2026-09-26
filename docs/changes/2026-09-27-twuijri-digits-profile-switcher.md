@@ -87,7 +87,8 @@ hub.core.android.shots.ScreenShots       tests=4 failures=0 errors=0
 - على JDK 17 نفسه: `String.format(ar-SA, "%d", 43)` = «٤٣» و`ar-SA-u-nu-latn` = «43» (أول اختبار في `DigitsTest` يثبت ذلك،
   فالاختبار يفشل على الشيفرة القديمة). لقطات الدرج (`build/shots/*/android-02-chats.png`) تُظهر «Sara ● ▦ Work ⇅» في التذييل.
 - الآيفون لا يُبنى على Linux: `DigitsTests.swift` وتغييرات Swift تُثبت في مهمة iOS على #181.
-- CI على #181: يُضاف بعد الدفع.
+- CI على #181 عند `857466ad` (أول دمج لهذه المهمة): كل المهام ناجحة، ومنها «Build and test on the iOS simulator»
+  (فيه `DigitsTests`) و«Android build, unit tests, lint» و«Web smoke journeys» و«PR adds or updates a change record».
 
 ## المخاطر والرجوع
 - `Locale.setDefault` في الأندرويد يضيف مفتاح الأرقام فقط ولا يغيّر اللغة، فـ`AppLanguage.system()` يقرأ لغة الجهاز كما كان.
