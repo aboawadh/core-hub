@@ -78,7 +78,14 @@ $ pnpm contracts:lint           → contracts:lint  OK
 $ pnpm contracts:check-clients  → check-clients  OK — 899 client file(s) scanned, 254 contract path(s) known.
 $ pnpm i18n:check               → ios: 1000 keys, ar/en in parity … android: Arabic resources use Latin digits … OK
 ```
-iOS لا يُبنى على Linux: تُقرأ الشيفرة بعناية ويتحقق منها CI (نتيجة `ios.yml` وCI الـPR #181 تُضاف أدناه).
+iOS لا يُبنى على Linux؛ `gh workflow run ios.yml --ref night/client-nulls` (run 36279937209):
+```
+✓ Generate the Swift client (CoreHubClient)
+✓ Build and test on the iOS simulator — Executed 222 tests, with 0 failures
+ChatControlsTests testDefaultModelAndAutomaticNamingSendAnExplicitNullAndNothingElseDoes]' passed
+SchedulesTests testATriggerAndATargetGoOutWithTheirNullFields]' passed
+TaskDetailTests testAnEditSendsOnlyWhatChanged]' passed
+```
 الاختبارات الجديدة تفشل على الشيفرة القديمة: لا `sendNull`/`Clearable`/`modelPatch`/`AUTO_TITLE` فيها، وأجسام
 `{"model":null}` و`{"title":null}` و`"expression":null` لا تخرج من العميل القديم بلا `ScheduleBodies`.
 
