@@ -90,8 +90,9 @@ final class InboxModel {
         do {
             try await mark(notice.id, read)
         } catch {
-            failure = HubFailure(error)
+            // Put back what the hub has, and keep saying why.
             await refresh()
+            failure = HubFailure(error)
         }
     }
 

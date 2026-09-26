@@ -10,7 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,9 +66,8 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
     var next by remember { mutableStateOf<String?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    var tick by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(unreadOnly, tick) {
+    LaunchedEffect(unreadOnly) {
         ops.notices(unreadOnly)
             .onSuccess { page -> inbox = OwnSettingsRules.Inbox(page.items, page.unreadCount); next = page.nextCursor; error = null }
             .onFailure { error = it as HubError; if (inbox == null) inbox = OwnSettingsRules.Inbox(emptyList(), 0) }
@@ -80,7 +78,13 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
         val marked = OwnSettingsRules.marking(now, notice.id, read)
         if (marked == now) return
         inbox = marked
-        scope.launch { ops.mark(notice.id, read).onFailure { error = it as HubError; tick++ } }
+        scope.launch {
+            ops.mark(notice.id, read).onFailure { refused ->
+                // Put back what the hub has, and keep saying why.
+                ops.notices(unreadOnly).onSuccess { page -> inbox = OwnSettingsRules.Inbox(page.items, page.unreadCount); next = page.nextCursor }
+                error = refused as HubError
+            }
+        }
     }
 
     LazyColumn(Modifier.fillMaxSize().testTag("notices.list"), contentPadding = settingsPagePadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
