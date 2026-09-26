@@ -67,7 +67,19 @@ $ node scripts/icons/lucide-mobile.mjs --check → lucide: 105 shared + 18 Andro
 ```
 صور الأندرويد: `apps/android/app/build/shots/{light,dark}/{en-US,ar-SA}/android-01-chat.png` (شريحة النموذج فوق المحرّر، «نسخ» و«…»
 تحت الردود)، `android-05-new-chat.png` (شريحتا المجلد والنموذج)، `apps/android/app/build/shots/chat-controls/android-chips.png`.
-iOS لا يُبنى على لينكس: انظر نتيجة `ios.yml` أدناه.
+iOS لا يُبنى على لينكس؛ شغّلتُ `ios.yml` على الفرع:
+```
+$ gh workflow run ios.yml --ref night/apps-chat-controls   (run 36274637610)
+✓ Generate the Swift client (CoreHubClient) in 39s
+✓ Build and test on the iOS simulator in 5m31s — Executed 199 tests, with 0 failures
+Test Case '-[CoreHubTests.ChatControlsTests testAChangeTheHubAnsweredShowsOnTheOpenChat]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testANewChatsFolderIsANameUnderTheRootOrTheAutomaticOne]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testCompressingAndSteeringSayWhatHappened]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testEveryChatControlsStringExistsInBothLanguages]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testTheApprovalsChipReadsTheAgentsOwnFieldAndItsDefault]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testTheChatsMenuOffersWhatThisChatCanDo]' passed
+Test Case '-[CoreHubTests.ChatControlsTests testTheModelChipOffersTheVisibleChatModelsByTheirKey]' passed
+```
 
 ## المخاطر والرجوع
 - الكتالوج يُقرأ كاملًا (حتى 10 صفحات × 200) عند فتح المحادثة، ويُحفظ لكل بروفايل في الآيفون حتى لا تتأخر الشريحة.
