@@ -542,6 +542,19 @@ its approval.
   location** for an agent that asks (§105: a run may ask, the hub's `devices.locate` tool, a
   one-time consent on the phone). Unit and view-model tests on both; **not yet tried on the owner's
   phones**; the Android drag is hand-made in Compose.
+- **Chat controls on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-chat-controls.md`,
+  apps night batch 1): compact chips above the composer — a new chat's **working folder**
+  (`sessions.listWorkingDirs`: automatic, an existing folder, or a new name), the **model** (the
+  profile's chat models, searchable by provider; a new chat is created with it, a chat is changed with
+  `sessions.update`), the agent's **approval mode** (its own `approval_mode` / `approvals_mode`
+  setting, each mode explained, admins only) and **Steer** while a reply runs (`sessions.steerRun`,
+  falling back to the next message). The conversation's «…»: rename, pin, archive, fork into a new
+  chat, **compress** (`sessions.compress`, agents with `compress`), export, delete after a question;
+  a long press on a chat in the list offers the same plus Select. Under a reply: copy and «…» (read
+  aloud, reply with `reply_to_message_id`, fork from here); a long press on your own message does the
+  same. Not possible through the generated clients yet: going back to the default model or clearing a
+  title (they drop `null` from `SessionPatch`). Android: JVM tests against a stand-in hub and
+  Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
