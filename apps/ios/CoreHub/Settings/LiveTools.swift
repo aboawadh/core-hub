@@ -445,3 +445,8 @@ private struct ProcessRow: View {
         .joined(separator: " · ")
     }
 }
+
+extension PhonePage {
+    static let logs = PhonePage(.logs) { _ in LogsPage() }
+    static let performance = PhonePage(.performance) { _ in PerformancePage() }
+}

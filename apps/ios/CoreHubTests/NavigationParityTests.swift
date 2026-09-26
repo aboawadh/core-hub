@@ -144,6 +144,19 @@ final class NavigationParityTests: XCTestCase {
                        ["agent_memory", "agent_jobs", "agent_channels"])
     }
 
+    // docs/clients/phone-pages.md: every Settings and agent page is registered once, in the manifest's order.
+    func testThePageRegistryNamesEverySettingsAndAgentPageOnceInOrder() throws {
+        let m = try manifest()
+        let ios = Set(onIOS(m).map(\.id))
+        XCTAssertEqual(PageRegistry.settings.map(\.destination.rawValue),
+                       (m.settingsTabs + m.settingsManagement + m.settingsTools).filter(ios.contains))
+        XCTAssertEqual(PageRegistry.agent.map(\.destination.rawValue), m.agentLevel.filter(ios.contains))
+        for page in PageRegistry.settings + PageRegistry.agent {
+            XCTAssertEqual(PageRegistry.page(page.destination)?.destination, page.destination)
+        }
+        XCTAssertFalse(PageRegistry.notNative.contains(.account), "a native page is not in the fallback list")
+    }
+
     // 8: the profile is a filter — a link names a page, and the selector does not move it.
     func testLinksOpenTheirPageInTheirProfile() {
         let chat = URL(string: "corehub://open/chat/01J8QK3ZR2W7M5N4P6T8V9X0YA?profile=work")!

@@ -92,33 +92,12 @@ struct SettingsPage: View {
     @Environment(\.l10n) private var l10n
 
     var body: some View {
-        Group {
-            switch destination {
-            case .account: AccountPage()
-            case .users: PeopleNativePage()
-            case .webhooks: WebhooksPage()
-            case .display: DisplayPage()
-            case .notifications: NotificationsPage()
-            case .privacy: PrivacyPage()
-            case .thisDevice: ThisDevicePage()
-            case .about: AboutPage()
-            case .models: ModelsNativePage()
-            case .deviceConnections: DeviceConnectionsPage()
-            case .knowledge: KnowledgePage()
-            case .logs: LogsPage()
-            case .usage: UsageNativePage()
-            case .performance: PerformancePage()
-            case .theme: ThemePage()
-            case .workspaces: WorkspacesPage()
-            case .updates: UpdatesPage()
-            case .plugins: HubPluginsPage()
-            default: PlaceholderScreen(destination: destination)
-            }
-        }
-        .navigationTitle(l10n(destination.titleKey))
-        .navigationBarTitleDisplayMode(.inline)
-        .background(Tone.bg)
-        .accessibilityIdentifier("screen.\(destination.rawValue)")
+        // Each page registers itself from its own file (Pages/PhonePage.swift).
+        RegisteredPage(destination: destination)
+            .navigationTitle(l10n(destination.titleKey))
+            .navigationBarTitleDisplayMode(.inline)
+            .background(Tone.bg)
+            .accessibilityIdentifier("screen.\(destination.rawValue)")
     }
 }
 

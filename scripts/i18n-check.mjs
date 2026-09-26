@@ -2,7 +2,7 @@
 // `pnpm i18n:check`: Arabic/English key parity for every locale set in the repository.
 // Today: packages/server, packages/cli and packages/web src/i18n/{ar,en}.json. Later: apps/* locale files —
 // add their directories to LOCALE_SETS; the rule is the same (same keys, same placeholders, no empties).
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,7 +13,7 @@ const LOCALE_SETS = [
   { name: 'cli', dir: 'packages/cli/src/i18n', required: true },
   { name: 'web', dir: 'packages/web/src/i18n', required: true },
   { name: 'desktop', dir: 'apps/desktop/src/i18n', required: false },
-  { name: 'ios', dir: 'apps/ios/CoreHub/i18n', required: false },
+  { name: 'ios', dir: 'apps/ios/CoreHub/i18n', required: false, areas: true },
 ];
 
 const OLD_WORD = { en: /\bworkspaces?\b/i, ar: /مساح(?:ة|ات) (?:ال)?عمل/ };
@@ -58,6 +58,26 @@ for (const set of LOCALE_SETS) {
       catalogues[language] = flatten(JSON.parse(readFileSync(file, 'utf8')));
     } catch (error) {
       fail(`${set.dir}/${language}.json: ${error.message}`);
+    }
+    // A phone app's areas keep their strings in files of their own (`<area>.<lang>.json`,
+    // docs/clients/phone-pages.md), merged into one catalogue; a key may live in one file only.
+    if (set.areas && catalogues[language]) {
+      const areaFiles = readdirSync(dir)
+        .filter((name) => name.endsWith(`.${language}.json`))
+        .sort();
+      for (const name of areaFiles) {
+        try {
+          for (const [key, value] of flatten(
+            JSON.parse(readFileSync(path.join(dir, name), 'utf8')),
+          )) {
+            if (catalogues[language].has(key))
+              fail(`${set.name}: "${key}" is in ${name} and another ${language} file`);
+            catalogues[language].set(key, value);
+          }
+        } catch (error) {
+          fail(`${set.dir}/${name}: ${error.message}`);
+        }
+      }
     }
   }
   if (Object.keys(catalogues).length !== LANGUAGES.length) continue;

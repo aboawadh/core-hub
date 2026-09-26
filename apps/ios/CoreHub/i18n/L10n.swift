@@ -62,13 +62,40 @@ struct L10n {
         defer { lock.unlock() }
         if let hit = cache[cacheKey] { return hit }
         var table: [String: String] = [:]
-        if let url = bundle.url(forResource: language.rawValue, withExtension: "json"),
-           let data = try? Data(contentsOf: url),
-           let object = try? JSONSerialization.jsonObject(with: data) {
-            flatten(object, prefix: "", into: &table)
+        for url in catalogues(language, bundle: bundle) {
+            if let data = try? Data(contentsOf: url),
+               let object = try? JSONSerialization.jsonObject(with: data) {
+                flatten(object, prefix: "", into: &table)
+            }
         }
         cache[cacheKey] = table
         return table
+    }
+
+    /// The catalogue files of a language: `<lang>.json`, then each area's `<area>.<lang>.json` by name
+    /// (docs/clients/phone-pages.md: a batch adds its strings in a file of its own; no key is in two files).
+    static func catalogues(_ language: AppLanguage, bundle: Bundle) -> [URL] {
+        let base = bundle.url(forResource: language.rawValue, withExtension: "json")
+        let areas = (bundle.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? [])
+            .filter { $0.lastPathComponent.hasSuffix(".\(language.rawValue).json") }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        return (base.map { [$0] } ?? []) + areas
+    }
+
+    /// Keys found in more than one catalogue file of a language (none, or a batch collided).
+    static func duplicates(_ language: AppLanguage, bundle: Bundle) -> [String] {
+        var seen: [String: String] = [:]
+        var twice: [String] = []
+        for url in catalogues(language, bundle: bundle) {
+            guard let data = try? Data(contentsOf: url), let object = try? JSONSerialization.jsonObject(with: data) else { continue }
+            var table: [String: String] = [:]
+            flatten(object, prefix: "", into: &table)
+            for key in table.keys {
+                if seen[key] != nil { twice.append(key) }
+                seen[key] = url.lastPathComponent
+            }
+        }
+        return twice.sorted()
     }
 
     static func flatten(_ value: Any, prefix: String, into table: inout [String: String]) {
