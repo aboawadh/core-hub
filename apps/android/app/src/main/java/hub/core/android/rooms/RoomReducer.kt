@@ -6,11 +6,14 @@ import hub.core.android.realtime.ROOMS_NAMESPACE
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.Approval
 import hub.core.client.model.ApprovalStatus
+import hub.core.client.model.HandoffChain
+import hub.core.client.model.HandoffPolicy
 import hub.core.client.model.Member
 import hub.core.client.model.Message
 import hub.core.client.model.MessageRole
 import hub.core.client.model.Room
 import hub.core.client.model.RoomDetail
+import hub.core.client.model.RoomMemory
 import hub.core.client.model.Run
 import hub.core.client.model.Seat
 import hub.core.client.model.SeatStatus
@@ -31,14 +34,18 @@ data class RoomInfo(
     val inviteCode: String?,
     val leadSeatId: String?,
     val archived: Boolean,
+    /** Whether and how far agents pass the turn (room settings). */
+    val handoff: HandoffPolicy? = null,
 ) {
     companion object {
         fun of(room: Room) = RoomInfo(
             room.id, room.profile, room.name, room.canManage, room.canMentionAll, room.inviteCode, room.leadSeatId, room.archivedAt != null,
+            room.handoff,
         )
 
         fun of(room: RoomDetail) = RoomInfo(
             room.id, room.profile, room.name, room.canManage, room.canMentionAll, room.inviteCode, room.leadSeatId, room.archivedAt != null,
+            room.handoff,
         )
     }
 }
@@ -59,6 +66,12 @@ data class RoomState(
     /** The tool a seat's run is in right now, by run id. */
     val tools: Map<String, String> = emptyMap(),
     val deleted: Boolean = false,
+    /** The room's rolling summary. */
+    val memory: RoomMemory? = null,
+    /** Handoff chains going on now (from the room). */
+    val activeChains: List<HandoffChain> = emptyList(),
+    /** The room's chains newest first (`rooms.listHandoffs`, kept by `handoff.updated`). */
+    val handoffs: List<HandoffChain> = emptyList(),
 ) {
     /** Seats doing something now: queued, thinking, replying or waiting for a person. */
     val busySeats: List<Seat> get() = seats.filter { it.status != SeatStatus.IDLE && it.status != SeatStatus.OFFLINE }
@@ -91,6 +104,8 @@ object RoomReducer {
             messages = (fresh.values + newer).sortedBy { it.seq },
             approvals = detail.pendingApprovals.filter { it.status == ApprovalStatus.PENDING }.associateBy { it.id },
             typing = detail.typing.associate { it.memberId to it.name },
+            memory = detail.memory,
+            activeChains = detail.handoffChains,
         )
     }
 
@@ -163,7 +178,22 @@ object RoomReducer {
             }
             "room.updated" -> {
                 val updated = p.decode("room", Room.serializer())?.takeIf { ours(it.id) } ?: return state
-                state.copy(room = RoomInfo.of(updated), seats = updated.seats)
+                // The event goes to every member alike, so it says nobody manages the room and hides
+                // its invite code: who manages it and the code stay as the room said them.
+                state.copy(room = RoomInfo.of(updated).copy(canManage = room.canManage, inviteCode = room.inviteCode), seats = updated.seats)
+            }
+            "memory.updated" -> {
+                if (!ours(p.string("room_id"))) return state
+                p.decode("memory", RoomMemory.serializer())?.let { state.copy(memory = it) } ?: state
+            }
+            "handoff.updated" -> {
+                if (!ours(p.string("room_id"))) return state
+                val chain = p.decode("chain", HandoffChain.serializer()) ?: return state
+                state.copy(
+                    handoffs = listOf(chain) + state.handoffs.filter { it.id != chain.id },
+                    activeChains = (if (chain.status == HandoffChain.Status.ACTIVE) listOf(chain) else emptyList()) +
+                        state.activeChains.filter { it.id != chain.id },
+                )
             }
             "room.deleted" -> if (ours(p.string("room_id"))) state.copy(deleted = true) else state
             "approval.requested" -> p.decode("approval", Approval.serializer())

@@ -85,6 +85,14 @@ import hub.core.client.model.ApprovalKind
 import hub.core.client.model.Member
 import hub.core.client.model.Seat
 import hub.core.client.model.SeatStatus
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import hub.core.android.ui.components.ConfirmDeleteDialog
+import hub.core.android.ui.components.RowAction
+import hub.core.android.ui.components.RowActionsButton
+import hub.core.android.ui.components.rememberConfirmDelete
+import hub.core.android.ui.kit.HubMenu
+import hub.core.android.ui.kit.MenuItem
 
 /**
  * One room (destination `rooms`): the transcript — your messages on the right, everyone else,
@@ -118,6 +126,7 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
     ) {
         actions()
         HubIconButton(Lucide.Users, stringResource(R.string.room_members), { members = true }, kind = IconKind.Glass, modifier = Modifier.testTag("room.members"))
+        if (!ui.loading) RoomMenuButton(vm, ui)
     }
 
     val me = vm.me
@@ -175,6 +184,7 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                     ApprovalCard(approval) { vm.respond(approval, it, null) }
                 }
             }
+            HandoffStrip(vm, ui)
             state.busySeats.forEach { seat -> SeatActivity(seat, state.stepOf(seat)) { vm.stopSeat(seat) } }
             val typing = state.typing.filterKeys { id -> state.members.none { it.id == id && it.userId == me } }.values
             if (typing.isNotEmpty()) {
@@ -273,6 +283,7 @@ private fun SeatActivity(seat: Seat, step: String?, onStop: () -> Unit) {
  * The members sheet: the room's agents (with what each is doing, and the lead), its people (who
  * is here now), the invite for the manager, and Leave for everyone but the maker.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
     val t = LocalTokens.current
@@ -281,22 +292,54 @@ private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
     val state = ui.state
     val room = state.room
     val me = vm.me
+    val manage = room?.canManage == true
+    var seatForm by remember { mutableStateOf<SeatForm?>(null) }
+    val removing = rememberConfirmDelete<Seat>()
+    var leaving by remember { mutableStateOf(false) }
+    val seatActions = @Composable { seat: Seat ->
+        buildList {
+            add(RowAction(stringResource(R.string.rooms_manage_seat_edit), Lucide.Pencil) { seatForm = SeatForm(seat) })
+            if (seat.id != room?.leadSeatId) add(RowAction(stringResource(R.string.rooms_manage_make_lead), Lucide.Pin) { vm.makeLead(seat) })
+            add(RowAction(stringResource(R.string.rooms_manage_seat_remove), Lucide.Trash, danger = true) { removing.ask(seat) })
+        }
+    }
     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 560.dp).testTag("room.members.sheet"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         item {
             GroupedList(title = stringResource(R.string.room_seats)) {
+                if (state.seats.isEmpty()) Custom { Text(stringResource(R.string.rooms_manage_no_seats), fontSize = FontTokens.sizeSm.sp, color = t.textMuted) }
                 state.seats.forEach { seat ->
+                    val actions = if (manage) seatActions(seat) else emptyList()
+                    var menu by remember(seat.id) { mutableStateOf(false) }
                     Custom {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            hub.core.android.ui.components.AgentAvatar(
-                                hub.core.android.ui.components.AgentIdentity.of(seat.agentId, seat.name, agents, seat.name), vm.profile, 28.dp,
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text("@${seat.name}", fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.Medium)
-                                seat.description?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 2) }
+                        Box(if (actions.isEmpty()) Modifier else Modifier.combinedClickable(onClick = {}, onLongClick = { menu = true })) {
+                            Row(
+                                Modifier.testTag("room.seat.row.${seat.id}"),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                hub.core.android.ui.components.AgentAvatar(
+                                    hub.core.android.ui.components.AgentIdentity.of(seat.agentId, seat.name, agents, seat.name), vm.profile, 28.dp,
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text("@${seat.name}", fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.Medium)
+                                    val line = seatLine(seat)
+                                    if (line.isNotBlank()) Text(line, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 2)
+                                }
+                                if (seat.id == room?.leadSeatId) Badge(stringResource(R.string.room_lead), tone = BadgeTone.Info)
+                                if (seat.status != SeatStatus.IDLE) Badge(stringResource(seatStatusLabel(seat.status)), tone = BadgeTone.Success, dot = true)
+                                if (actions.isNotEmpty()) RowActionsButton(actions, Modifier.testTag("room.seat.menu.${seat.id}"))
                             }
-                            if (seat.id == room?.leadSeatId) Badge(stringResource(R.string.room_lead), tone = BadgeTone.Info)
-                            if (seat.status != SeatStatus.IDLE) Badge(stringResource(seatStatusLabel(seat.status)), tone = BadgeTone.Success, dot = true)
+                            HubMenu(menu, { menu = false }) {
+                                actions.forEach { a -> MenuItem(a.label, { menu = false; a.onClick() }, icon = a.icon, danger = a.danger) }
+                            }
                         }
+                    }
+                }
+                if (manage) {
+                    Custom {
+                        HubButton(
+                            stringResource(R.string.rooms_manage_seat_add), { seatForm = SeatForm(null) }, kind = ButtonKind.Ghost, size = ControlSize.Md,
+                            icon = Lucide.UserPlus, modifier = Modifier.testTag("room.seat.add"),
+                        )
                     }
                 }
             }
@@ -343,17 +386,32 @@ private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
                 }
             }
         }
+        item { hub.core.android.ui.kit.HubCard(padding = 12.dp) { RoomMemoryCard(vm, ui) } }
         val mine = state.members.firstOrNull { it.userId == me }
         if (mine != null && mine.role != Member.Role.OWNER) {
             item {
                 HubButton(
-                    stringResource(R.string.room_leave), { vm.leave(); onClose() }, kind = ButtonKind.Danger, icon = Lucide.LogOut, fill = true,
+                    stringResource(R.string.room_leave), { leaving = true }, kind = ButtonKind.Danger, icon = Lucide.LogOut, fill = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp).testTag("room.leave"),
                 )
             }
         }
     }
+    seatForm?.let { form -> SeatFormSheet(vm, form.seat) { seatForm = null } }
+    ConfirmDeleteDialog(
+        removing, { stringResource(R.string.rooms_manage_seat_remove_title, it.name) }, { vm.removeSeat(it) },
+        body = stringResource(R.string.rooms_manage_seat_remove_body), confirm = stringResource(R.string.rooms_manage_seat_remove),
+    )
+    if (leaving) {
+        RoomQuestion(
+            stringResource(R.string.rooms_manage_leave_title), stringResource(R.string.rooms_manage_leave_body, room?.name.orEmpty()),
+            stringResource(R.string.rooms_manage_leave), { leaving = false },
+        ) { vm.leave(); onClose(); Result.success(Unit) }
+    }
 }
+
+/** The seat the form edits; `null` adds one. */
+private data class SeatForm(val seat: Seat?)
 
 private fun seatStatusLabel(status: SeatStatus): Int = when (status) {
     SeatStatus.QUEUED -> R.string.room_status_queued

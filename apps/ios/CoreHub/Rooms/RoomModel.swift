@@ -55,6 +55,8 @@ final class RoomModel {
                 guard RoomEvents.names.contains(name), let envelope = Envelope.parse(argument) else { return }
                 self?.state.apply(envelope)
                 if self?.state.deleted == true { self?.gone = true }
+                // Clearing the context resets the summary and the token count: read the room again.
+                if name == "room.cleared", self?.state.deleted == false { Task { await self?.fetch() } }
             })
             listeners.append(namespace.onConnect { [weak self] in
                 guard let self else { return }
@@ -100,6 +102,7 @@ final class RoomModel {
             let (d, p) = try await (detail, page)
             state.hydrate(d, messages: p)
             load = .ready
+            await fetchHandoffs()
         } catch {
             let failure = HubFailure(error)
             if failure.status == 404 { gone = true }
@@ -222,6 +225,124 @@ final class RoomModel {
         guard let code = state.inviteCode, let hub = app?.credentials?.hubURL else { return nil }
         return RoomLinks.join(hub: hub, code: code)
     }
+
+    // MARK: - Managing the room (the web's room menu, members panel and settings)
+
+    /// The room's handoff chains, newest first: the strip offers one more round on a stopped one.
+    func fetchHandoffs() async {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        if let page = try? await app.api.call({
+            try await RoomsAPI.roomsListHandoffs(xHubProfile: profile, roomId: roomID, apiConfiguration: $0)
+        }) {
+            state.handoffs = page.items
+        }
+    }
+
+    /// A change to the room itself (name, settings, lead, archived); throws the hub's refusal so a
+    /// form can show it.
+    func update(_ patch: RoomPatch) async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        let room = try await app.api.call {
+            try await RoomsAPI.roomsUpdate(xHubProfile: profile, roomId: roomID, roomPatch: patch, apiConfiguration: $0)
+        }
+        state.name = room.name
+        state.canMentionAll = room.canMentionAll
+        state.leadSeatID = room.leadSeatId
+        state.archived = room.archivedAt != nil
+        state.handoff = room.handoff
+        state.seats = room.seats
+    }
+
+    /// The same, from a menu: a refusal shows over the composer.
+    func change(_ patch: RoomPatch) async {
+        actionError = nil
+        do { try await update(patch) } catch { actionError = HubFailure(error).describe(l10n) }
+    }
+
+    func makeLead(_ seat: Seat) async { await change(RoomPatch(leadSeatId: seat.id)) }
+
+    func delete() async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        try await app.api.call { try await RoomsAPI.roomsDelete(xHubProfile: profile, roomId: roomID, apiConfiguration: $0) }
+        gone = true
+    }
+
+    /// The agents forget the room (its messages stay); the summary and token count start over.
+    func clearContext() async {
+        await act { profile, roomID, config in
+            try await RoomsAPI.roomsClearContext(xHubProfile: profile, roomId: roomID, apiConfiguration: config)
+        }
+        if actionError == nil { await fetch() }
+    }
+
+    func addSeat(_ seat: SeatConfig) async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        let added = try await app.api.call {
+            try await RoomsAPI.roomsAddSeat(xHubProfile: profile, roomId: roomID, body: seat, apiConfiguration: $0)
+        }
+        if !state.seats.contains(where: { $0.id == added.id }) { state.seats.append(added) }
+        if state.leadSeatID == nil { await fetch() }
+    }
+
+    func updateSeat(_ seat: Seat, _ patch: SeatPatch) async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        let updated = try await app.api.call {
+            try await RoomsAPI.roomsUpdateSeat(xHubProfile: profile, roomId: roomID, seatId: seat.id, seatPatch: patch, apiConfiguration: $0)
+        }
+        if let index = state.seats.firstIndex(where: { $0.id == updated.id }) { state.seats[index] = updated }
+    }
+
+    /// The seat leaves the room; what it said stays. When it led, the hub names the next lead.
+    func removeSeat(_ seat: Seat) async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        try await app.api.call {
+            try await RoomsAPI.roomsRemoveSeat(xHubProfile: profile, roomId: roomID, seatId: seat.id, apiConfiguration: $0)
+        }
+        state.seats.removeAll { $0.id == seat.id }
+        await fetch()
+    }
+
+    /// Rewrite the summary now (a job; `memory.updated` brings the result).
+    func refreshMemory() async {
+        await act { profile, roomID, config in
+            _ = try await RoomsAPI.roomsRefreshMemory(xHubProfile: profile, roomId: roomID, apiConfiguration: config)
+        }
+        if actionError == nil, let memory = state.memory {
+            state.memory = RoomMemory(summary: memory.summary, status: .summarizing, summarizedTurnCount: memory.summarizedTurnCount, updatedAt: memory.updatedAt)
+        }
+    }
+
+    func putMemory(_ summary: String) async throws {
+        guard let app else { return }
+        let profile = profile
+        let roomID = roomID
+        state.memory = try await app.api.call {
+            try await RoomsAPI.roomsPutMemory(xHubProfile: profile, roomId: roomID, roomsPutMemoryRequest: RoomsPutMemoryRequest(summary: summary), apiConfiguration: $0)
+        }
+    }
+
+    /// One more round for a chain the guard stopped.
+    func continueHandoff(_ chainID: String) async {
+        await act { profile, roomID, config in
+            _ = try await RoomsAPI.roomsContinueHandoff(xHubProfile: profile, roomId: roomID, chainId: chainID, apiConfiguration: config)
+        }
+        if actionError == nil { await fetchHandoffs() }
+    }
+
+    /// Whether you made the room (the maker cannot leave it).
+    var isOwner: Bool { state.members.contains { $0.userId == me && $0.role == .owner } }
 
     private func act(_ call: @escaping (String, String, CoreHubClientAPIConfiguration) async throws -> Void) async {
         guard let app else { return }
