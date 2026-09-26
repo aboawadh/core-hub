@@ -17,6 +17,10 @@ const LOCALE_SETS = [
 ];
 
 const OLD_WORD = { en: /\bworkspaces?\b/i, ar: /مساح(?:ة|ات) (?:ال)?عمل/ };
+// Latin digits (123) everywhere, also in the Arabic UI (owner, 2026-09-26, DECISIONS §113):
+// Arabic-Indic digits and their percent/thousands/decimal signs never appear in a catalogue.
+const EASTERN_DIGITS = /[\u0660-\u066C\u06F0-\u06F9]/;
+const ANDROID_AR = 'apps/android/app/src/main/res/values-ar';
 
 let failures = 0;
 const fail = (msg) => {
@@ -104,7 +108,25 @@ for (const set of LOCALE_SETS) {
   for (const [key, value] of ar)
     if (typeof value === 'string' && OLD_WORD.ar.test(value))
       fail(`${set.name}: ar "${key}" says «مساحة العمل» — the product word is «بروفايل»`);
+  for (const [key, value] of ar)
+    if (typeof value === 'string' && EASTERN_DIGITS.test(value))
+      fail(`${set.name}: ar "${key}" has Arabic-Indic digits — digits are Latin (123) everywhere`);
   console.log(`i18n:check  ${set.name}: ${en.size} keys, ar/en in parity`);
+}
+
+// The Android app keeps its strings in resource XML (its own parity test checks the keys).
+if (existsSync(path.join(repoRoot, ANDROID_AR))) {
+  for (const name of readdirSync(path.join(repoRoot, ANDROID_AR))) {
+    if (!name.endsWith('.xml')) continue;
+    const text = readFileSync(path.join(repoRoot, ANDROID_AR, name), 'utf8');
+    text.split('\n').forEach((line, index) => {
+      if (EASTERN_DIGITS.test(line))
+        fail(
+          `android: ${ANDROID_AR}/${name}:${index + 1} has Arabic-Indic digits — digits are Latin (123) everywhere`,
+        );
+    });
+  }
+  console.log('i18n:check  android: Arabic resources use Latin digits');
 }
 
 if (failures > 0) {
