@@ -73,6 +73,8 @@ Executed 214 tests, with 0 failures (0 unexpected)
 صور الأندرويد: `apps/android/app/build/shots/own-settings/android-{account,account-channels,display,privacy,inbox}-{light-en,dark-ar}.png`
 (نظرتُ فيها؛ صف أدوات الوارد كان يضيق فيكسر «2 unread» حرفًا حرفًا، فصار سطرين).
 
+CI على #181 بعد الدمج (الالتزام `3ff3218e`): كل الفحوص نجحت — Android build, unit tests, lint (7m22s)، Build and test on the iOS simulator (4m32s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Change record، Docker، Desktop، Installers ×3، db:generate + db:migrate.
+
 ## المخاطر والرجوع
 - التواريخ في الأندرويد بالعربية تظهر بأسماء أشهر إنجليزية (`localTime` يستعمل لغة الهاتف لا لغة التطبيق) — موجود قبل هذه المهمة،
   يخص مهمة الأرقام/التواريخ.
