@@ -1,5 +1,5 @@
 # أساس صفحات الجوال: سجلّ الصفحات وتقسيم الملفات والقطع المشتركة
-المسؤول: twuijri · الفرع: night/apps-foundation · الحالة: review
+المسؤول: twuijri · الفرع: night/apps-foundation · الحالة: done
 
 ## المشكلة والهدف
 ليلة التطبيقات (`2026-09-27-twuijri-night-apps.md`) فيها نحو ١٤ دفعة، وكيلان في وقت واحد، كل دفعة تضيف صفحات أصلية في
@@ -67,7 +67,7 @@ $ pnpm contracts:check-clients → check-clients  OK — 865 client file(s) scan
 $ node scripts/icons/lucide-mobile.mjs --check → lucide: 96 shared + 22 Android icon(s) from lucide-static 1.48.0 up to date
 ```
 صور القطع في الأندرويد: `apps/android/app/build/shots/page-kit/android-{form-problems,form-filled,list,list-empty,confirm-delete,editor-edit,editor-preview,trigger-cron,trigger-every,trigger-once}.png`.
-نتيجة CI على #181 تُضاف بعد الدمج في فرع الليلة.
+CI على #181 بعد الدمج (الالتزام `4b6a1765`): كل الفحوص نجحت — Android build, unit tests, lint (6m45s)، Build and test on the iOS simulator (4m8s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Change record، Docker، Desktop، Installers.
 
 ## المخاطر والرجوع
 - نقل ملفات كثيرة: خطر تعارض مع دفعات فتحت قبل هذا الدمج؛ الحل دمج فرع الليلة في فرعها قبل البدء.
