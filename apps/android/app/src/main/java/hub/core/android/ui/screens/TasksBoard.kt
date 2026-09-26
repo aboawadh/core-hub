@@ -226,7 +226,7 @@ private fun columnTitle(id: BoardRules.ColumnId): String = stringResource(
 )
 
 @Composable
-private fun actionLabel(action: BoardRules.Action): String = stringResource(
+internal fun actionLabel(action: BoardRules.Action): String = stringResource(
     when (action) {
         BoardRules.Action.QUEUE -> R.string.board_action_queue
         BoardRules.Action.PROMOTE -> R.string.board_action_promote

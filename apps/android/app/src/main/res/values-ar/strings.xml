@@ -149,9 +149,6 @@
     <string name="priority_urgent">عاجلة</string>
     <string name="tasks_empty_column">لا مهام هنا.</string>
     <string name="tasks_move">انقل إلى…</string>
-    <string name="tasks_assign">أسند</string>
-    <string name="tasks_start">ابدأ</string>
-    <string name="tasks_start_now">ابدأ العمل الآن</string>
     <string name="tasks_open_chat">افتح محادثتها</string>
     <string name="schedules_empty">لا جداول بعد.</string>
     <string name="schedules_next">التالي %1$s</string>

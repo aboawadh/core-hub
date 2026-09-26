@@ -48,6 +48,7 @@ import hub.core.android.ui.screens.SchedulesScreen
 import hub.core.android.ui.screens.SearchScreen
 import hub.core.android.ui.screens.SettingsPageScreen
 import hub.core.android.ui.screens.SettingsScreen
+import hub.core.android.ui.screens.NewTaskButton
 import hub.core.android.ui.screens.TasksScreen
 import hub.core.android.phone.PushPayload
 import hub.core.android.phone.Share
@@ -248,7 +249,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 }
             }
             Route.Tasks -> {
-                TopBar(term("tasks"), onMenu = openDrawer)
+                TopBar(term("tasks"), onMenu = openDrawer) { NewTaskButton() }
                 TasksScreen(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             Route.Schedules -> {

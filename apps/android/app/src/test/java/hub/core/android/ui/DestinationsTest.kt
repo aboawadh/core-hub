@@ -3,6 +3,7 @@ package hub.core.android.ui
 import hub.core.android.nav.Route
 import hub.core.android.ui.screens.Board
 import hub.core.android.ui.screens.NoticeLinks
+import hub.core.android.ui.screens.TaskRules
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.ResourceRef
 import hub.core.client.model.TaskColumns
@@ -35,15 +36,9 @@ class DestinationsTest {
         assertEquals(listOf(TaskStatus.TODO, TaskStatus.RUNNING), Board.columns(b).map { it.first })
     }
 
-    @Test fun `moves, starts and profile badges`() {
-        val todo = board("todo" to listOf(task("01J8QK3ZR2W7M5N4P6T8V9X0T1", "todo"))).columns.single().tasks.single()
-        assertFalse(TaskStatus.TODO in Board.moveTargets(todo))
-        assertEquals(TaskStatus.entries.size - 1, Board.moveTargets(todo).size)
-        assertTrue(Board.canStart(todo))
-        val running = board("running" to listOf(task("01J8QK3ZR2W7M5N4P6T8V9X0T1", "running"))).columns.single().tasks.single()
-        assertFalse(Board.canStart(running))
-        val unassigned = board("todo" to listOf(task("01J8QK3ZR2W7M5N4P6T8V9X0T1", "todo", assignee = false))).columns.single().tasks.single()
-        assertFalse(Board.canStart(unassigned))
+    @Test fun `the moves the hub accepts, and profile badges`() {
+        // Not every other column any more: only the moves the transition table allows (batch 2).
+        assertEquals(listOf(TaskStatus.READY, TaskStatus.SCHEDULED, TaskStatus.BLOCKED), TaskRules.moves(TaskStatus.TODO).map { it.to })
         assertTrue(Board.showsProfiles(board("todo" to listOf(task("01J8QK3ZR2W7M5N4P6T8V9X0T1", "todo", "a"), task("01J8QK3ZR2W7M5N4P6T8V9X0T2", "todo", "b")))))
         assertFalse(Board.showsProfiles(board("todo" to listOf(task("01J8QK3ZR2W7M5N4P6T8V9X0T1", "todo", "a")))))
     }

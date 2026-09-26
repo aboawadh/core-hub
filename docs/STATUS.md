@@ -555,6 +555,22 @@ its approval.
   same. Not possible through the generated clients yet: going back to the default model or clearing a
   title (they drop `null` from `SessionPatch`). Android: JVM tests against a stand-in hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Tasks on the phones, part I (both apps)** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-tasks-1.md`): a tap on a board card opens **the task on its
+  own** (iOS sheet, Android sheet): title, status, priority, project, who has it (agent or person),
+  due date, the description drawn as Markdown, what it depends on (the ones still waited for by
+  name, the rest counted), its latest run with its state and start and a way into its conversation;
+  and from there **move** (only the moves the hub's transition table allows, a reason for a block, a
+  yes for the archive — the same list in the iOS card's long-press menu), **assign** to an agent of
+  the task's profile with instructions and "start now", **unassign**, **stop** a running task,
+  **edit** (title, description, priority, project) and **delete** (asked first). A **+** in the
+  Tasks top bar makes a new task in the selector's profile (title, Markdown description, project or
+  the profile's own list, priority, optionally an agent and "start now" — the create then
+  `tasks.assignTask(start)`, with an `Idempotency-Key` so a retried Save makes no second task).
+  A description cleared on the phone is sent as empty text (the generated clients cannot send
+  `null`). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
+  detail); **iOS verified only on the CI simulator, neither tried on the owner's phones**.
+  Comments, checklist, history, projects and bulk actions are part II.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
