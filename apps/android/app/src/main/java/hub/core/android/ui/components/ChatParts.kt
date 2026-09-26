@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -141,14 +143,25 @@ fun TurnView(turn: Turn, youLabel: String, profile: String = "", mine: Boolean =
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: String) {
     val t = LocalTokens.current
     // The corner nearest the person's own side (the right, always) is the tightened one.
     val shape = AbsoluteRoundedCornerShape(topLeft = big, topRight = small, bottomRight = big, bottomLeft = big)
+    // In a chat, a long press on your message offers copy, reply and fork (apps batch 1).
+    val actions = LocalMessageActions.current
+    val clipboard = LocalClipboardManager.current
+    var menu by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+      Box {
         Column(
             modifier.background(t.userBubble, shape).border(1.dp, t.userBubbleBorder, shape)
+                .then(
+                    if (actions != null && message.text.isNotEmpty()) {
+                        Modifier.clip(shape).combinedClickable(onClick = {}, onLongClick = { menu = true })
+                    } else Modifier,
+                )
                 .padding(horizontal = 12.dp, vertical = 8.dp).testTag("message.user"),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -159,6 +172,12 @@ private fun PersonBubble(message: ChatMessage, modifier: Modifier, profile: Stri
             }
             MessageFiles(message.attachments, profile)
         }
+        if (actions != null) {
+            hub.core.android.ui.kit.HubMenu(menu, { menu = false }) {
+                MessageActionItems(message, actions, copy = { clipboard.setText(AnnotatedString(message.text)) }) { menu = false }
+            }
+        }
+      }
     }
 }
 
@@ -179,11 +198,25 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
             if (message.text.isNotBlank()) FileLinkHandler(message.attachments, profile) { MarkdownView(message.text) }
             MessageFiles(message.attachments, profile)
             if (!message.streaming && message.text.isNotBlank()) {
+                val actions = LocalMessageActions.current
+                var menu by remember { mutableStateOf(false) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     HubIconButton(
                         Lucide.Copy, stringResource(R.string.chat_copy), { clipboard.setText(AnnotatedString(message.text)) },
                         size = ControlTokens.heightSm.dp, iconSize = 14.dp, tint = t.textFaint,
                     )
+                    // In a chat: «…» for read aloud, reply and fork from here (apps batch 1).
+                    if (actions != null) {
+                        Box {
+                            HubIconButton(
+                                Lucide.Ellipsis, stringResource(R.string.chat_controls_message_actions), { menu = true },
+                                size = ControlTokens.heightSm.dp, iconSize = 14.dp, tint = t.textFaint, modifier = Modifier.testTag("message.more"),
+                            )
+                            hub.core.android.ui.kit.HubMenu(menu, { menu = false }) {
+                                MessageActionItems(message, actions, copy = null) { menu = false }
+                            }
+                        }
+                    }
                 }
             }
         }

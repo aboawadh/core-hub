@@ -38,6 +38,8 @@ final class SessionListModel {
     private(set) var selected: Set<String> = []
     private(set) var batchBusy = false
     var batchError: String?
+    /// The last one-chat action (rename, pin, archive, delete) that failed.
+    var actionError: String?
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var listener: UUID?
@@ -122,6 +124,25 @@ final class SessionListModel {
         reload()
     }
 
+    /// One chat's rename, pin or archive, in its own profile; the list follows from the hub.
+    func change(_ session: Session, _ patch: SessionPatch) async {
+        guard let app else { return }
+        do {
+            _ = try await ChatActions.update(app, id: session.id, profile: session.profile, patch)
+            actionError = nil
+        } catch {
+            actionError = HubFailure(error).describe(app.l10n)
+        }
+        reload()
+    }
+
+    func delete(_ session: Session) async throws {
+        guard let app else { return }
+        try await ChatActions.delete(app, id: session.id, profile: session.profile)
+        sessions.removeAll { $0.id == session.id }
+        selected.remove(session.id)
+    }
+
     /// Hub-side changes arrive in bursts (a title, then the status…); one refetch covers them.
     func scheduleReload() {
         reloadTask?.cancel()
@@ -175,11 +196,17 @@ struct SessionListView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var confirmingDelete = false
+    @State private var renaming: RenameTarget?
+    @State private var deleting: Session?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
             controls
             if model.selecting { batchBar }
+            if let failure = model.actionError {
+                NoticeView(text: failure, tone: .danger)
+                    .onTapGesture { model.actionError = nil }
+            }
             if let error = model.error {
                 NoticeView(text: error.describe(l10n), tone: .danger)
                 Button(l10n("common.retry")) { model.reload() }
@@ -199,6 +226,14 @@ struct SessionListView: View {
         }
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+        .renameChat($renaming) { target, typed in
+            guard let title = ChatControls.renameTitle(typed),
+                  let session = model.sessions.first(where: { $0.id == target.id }) else { return }
+            await model.change(session, SessionPatch(title: title))
+        }
+        .confirmDelete($deleting, name: { $0.title ?? l10n("sessions.untitled") }) { session in
+            try await model.delete(session)
+        }
     }
 
     private var controls: some View {
@@ -351,10 +386,34 @@ struct SessionListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // A long press offers Select, which starts batch mode with this conversation in it.
+        // A long press offers the chat's own actions, and Select, which starts batch mode with it.
         .contextMenu {
             Button { model.toggle(session.id) } label: {
                 Label { Text(l10n("sessions.batch_select")) } icon: { Image(lucide: .circleCheck) }
+            }
+            if session.source != .globalAgent {
+                Button {
+                    renaming = RenameTarget(id: session.id, profile: session.profile, title: session.title ?? "")
+                } label: {
+                    Label { Text(l10n("chat_controls.rename")) } icon: { Image(lucide: .pencil) }
+                }
+                Button {
+                    Task { await model.change(session, SessionPatch(pinned: !session.pinned)) }
+                } label: {
+                    Label { Text(l10n(session.pinned ? "chat_controls.unpin" : "chat_controls.pin")) } icon: {
+                        Image(lucide: session.pinned ? .pinOff : .pin)
+                    }
+                }
+                Button {
+                    Task { await model.change(session, SessionPatch(archived: !session.archived)) }
+                } label: {
+                    Label { Text(l10n(session.archived ? "chat_controls.unarchive" : "chat_controls.archive")) } icon: {
+                        Image(lucide: session.archived ? .archiveRestore : .archive)
+                    }
+                }
+                Button(role: .destructive) { deleting = session } label: {
+                    Label { Text(l10n("chat_controls.delete")) } icon: { Image(lucide: .trash) }
+                }
             }
         }
         .accessibilityIdentifier("session.\(session.id)")

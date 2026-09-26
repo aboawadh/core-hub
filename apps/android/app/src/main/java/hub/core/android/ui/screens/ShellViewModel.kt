@@ -99,6 +99,9 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val batchError: StateFlow<String?> = _batchError.asStateFlow()
     private val _batchBusy = MutableStateFlow(false)
     val batchBusy: StateFlow<Boolean> = _batchBusy.asStateFlow()
+    /** The last one-chat action from the list (rename, pin, archive) that failed. */
+    private val _chatError = MutableStateFlow<HubError?>(null)
+    val chatError: StateFlow<HubError?> = _chatError.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -235,6 +238,24 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
             schedulePending()
         }
     }
+
+    /** One chat's rename, pin or archive from the list, in its own profile; the row follows the hub's answer. */
+    fun changeChat(session: Session, patch: hub.core.client.model.SessionPatch) {
+        val s = graph.store.current ?: return
+        viewModelScope.launch {
+            hubCall { hub.core.android.chat.ChatActions(graph.apis(s)).update(session.id, session.profile, patch) }
+                .onSuccess { updated -> _chatError.value = null; _chats.update { ChatsList.upsert(it, updated) } }
+                .onFailure { _chatError.value = it as HubError }
+        }
+    }
+
+    suspend fun deleteChat(session: Session): Result<Unit> {
+        val s = graph.store.current ?: return Result.failure(HubError(401, "unauthorized", null))
+        return hubCall { hub.core.android.chat.ChatActions(graph.apis(s)).delete(session.id, session.profile) }
+            .onSuccess { _chats.update { ChatsList.remove(it, session.id) }; _selected.update { it - session.id } }
+    }
+
+    fun dismissChatError() { _chatError.value = null }
 
     fun toggleSelected(id: String) = _selected.update { ChatsBatch.toggle(it, id) }
 

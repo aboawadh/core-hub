@@ -12,6 +12,12 @@ struct ChatState {
     var title: String?
     var agentID: String?
     var status: SessionStatus = .idle
+    /// What the chat's controls read (apps batch 1): its model, place in the list, and folder.
+    var model: String?
+    var pinned = false
+    var archived = false
+    var source: SessionSource = .chat
+    var workingDir: String?
     var messages: [Message] = []
     var runs: [String: Run] = [:]
     /// Pending approvals and questions by id.
@@ -32,6 +38,11 @@ struct ChatState {
         agentID = detail.agentId
         status = detail.status
         context = detail.context
+        model = detail.model
+        pinned = detail.pinned
+        archived = detail.archived
+        source = detail.source
+        workingDir = detail.workingDir
         runs = Dictionary(detail.runs.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         approvals = Dictionary(
             detail.pendingApprovals.filter { $0.status == .pending }.map { ($0.id, $0) },
@@ -71,9 +82,7 @@ struct ChatState {
         guard event.sessionID == sessionID else { return }
         switch event {
         case .sessionCreated(let session), .sessionUpdated(let session):
-            title = session.title
-            status = session.status
-            profile = session.profile
+            absorb(session)
         case .sessionDeleted:
             deleted = true
         case .messageCreated(let message):
@@ -107,6 +116,19 @@ struct ChatState {
         case .contextUpdated(_, let context):
             self.context = context
         }
+    }
+
+    /// The session as the hub has it now (an event, or the answer to a change made here).
+    mutating func absorb(_ session: Session) {
+        guard session.id == sessionID else { return }
+        title = session.title
+        status = session.status
+        profile = session.profile
+        model = session.model
+        pinned = session.pinned
+        archived = session.archived
+        source = session.source
+        workingDir = session.workingDir
     }
 
     private mutating func upsert(_ message: Message) {

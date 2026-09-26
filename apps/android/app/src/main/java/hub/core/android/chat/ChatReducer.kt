@@ -76,8 +76,25 @@ data class ChatMessage(
     }
 }
 
-/** The session's header facts the chat screen needs. */
-data class ChatSessionInfo(val id: String, val profile: String, val title: String?, val agentId: String)
+/** The session's header facts the chat screen needs, and what its controls read (apps batch 1). */
+data class ChatSessionInfo(
+    val id: String,
+    val profile: String,
+    val title: String?,
+    val agentId: String,
+    val model: String? = null,
+    val pinned: Boolean = false,
+    val archived: Boolean = false,
+    val globalAgent: Boolean = false,
+    val workingDir: String? = null,
+) {
+    companion object {
+        fun of(session: Session) = ChatSessionInfo(
+            session.id, session.profile, session.title, session.agentId, session.model, session.pinned, session.archived,
+            session.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, session.workingDir,
+        )
+    }
+}
 
 /**
  * The whole state of one open conversation. [lastSeq] is the highest `seq` seen on
@@ -118,12 +135,21 @@ object ChatReducer {
             state.messages.filter { m -> messages.none { it.id == m.id } && m.seq > (messages.maxOfOrNull { it.seq } ?: 0) }
                 .associateBy { it.id }).values.sortedBy { it.seq }
         return state.copy(
-            session = ChatSessionInfo(detail.id, detail.profile, detail.title, detail.agentId),
+            session = ChatSessionInfo(
+                detail.id, detail.profile, detail.title, detail.agentId, detail.model, detail.pinned, detail.archived,
+                detail.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, detail.workingDir,
+            ),
             messages = merged,
             approvals = detail.pendingApprovals.filter { it.status == ApprovalStatus.PENDING }.associateBy { it.id },
             activeRun = active,
             runStartedAt = if (active == null) null else state.runStartedAt ?: active.startedAt?.toInstant()?.toEpochMilli() ?: now,
         )
+    }
+
+    /** The session as the hub has it now (an event, or the answer to a change made here). */
+    fun absorb(state: ChatState, session: Session): ChatState {
+        if (state.session != null && state.session.id != session.id) return state
+        return state.copy(session = ChatSessionInfo.of(session))
     }
 
     /** Older messages read while scrolling back; they go before what is shown. */
@@ -173,9 +199,7 @@ object ChatReducer {
                 if (it.status == ApprovalStatus.PENDING) seen.copy(approvals = seen.approvals + (it.id to it)) else seen
             } ?: seen
             "approval.resolved" -> p.decode("approval", Approval.serializer())?.let { seen.copy(approvals = seen.approvals - it.id) } ?: seen
-            "session.updated" -> p.decode("session", Session.serializer())?.let {
-                seen.copy(session = session.copy(title = it.title, agentId = it.agentId))
-            } ?: seen
+            "session.updated" -> p.decode("session", Session.serializer())?.let { absorb(seen, it) } ?: seen
             else -> seen
         }
     }

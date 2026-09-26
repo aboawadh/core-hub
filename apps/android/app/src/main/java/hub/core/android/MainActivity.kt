@@ -1,15 +1,6 @@
 package hub.core.android
 
 import hub.core.android.ui.kit.ConfirmDialog
-import hub.core.android.ui.kit.ControlSize
-import hub.core.android.ui.kit.HubButton
-import hub.core.android.ui.kit.HubDialog
-import hub.core.android.ui.kit.HubIconButton
-import hub.core.android.ui.kit.HubMenu
-import hub.core.android.ui.kit.IconKind
-import hub.core.android.ui.kit.Lucide
-import hub.core.android.ui.kit.MenuItem
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import android.content.Context
@@ -27,7 +18,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -212,7 +202,9 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             is Route.Chat -> {
                 val chats by shell.chats.collectAsState()
                 val chat = chats.items.firstOrNull { it.id == route.sessionId }
-                val title = chat?.title ?: term("new_chat")
+                // The open chat's own title first: a rename shows even when the list filters it out.
+                val live by hub.core.android.ui.screens.rememberChatViewModel(route.sessionId, route.profile).ui.collectAsState()
+                val title = live.chat.session?.title ?: chat?.title ?: term("new_chat")
                 // The top bar names the conversation and wears its agent's face (as the web's header).
                 val agents = hub.core.android.ui.components.rememberAgents(route.profile)
                 val agent = agents.firstOrNull { it.id == chat?.agentId }
@@ -222,9 +214,16 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                         .joinToString(" · ").ifEmpty { null },
                 ) {
                     PendingButton(shell, nav)
-                    ExportButton(shell, route.sessionId, route.profile, title)
+                    hub.core.android.ui.screens.ChatMenuButton(
+                        shell, route.sessionId, route.profile, title,
+                        onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                        onGone = { nav.go(Route.NewChat) },
+                    )
                 }
-                ChatScreen(route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> })
+                ChatScreen(
+                    route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> },
+                    onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                )
             }
             is Route.Room -> {
                 RoomScreen(
@@ -286,39 +285,3 @@ fun titleOf(route: Route): String = when (route) {
     else -> route.destination
 }
 
-/**
- * The conversation's «⋮»: Export, which asks the hub for the chat's Markdown transcript
- * (`sessions.export`) and hands it to the share sheet.
- */
-@Composable
-private fun ExportButton(shell: ShellViewModel, sessionId: String, profile: String, title: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var failed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.foundation.layout.Box {
-        HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("chat.more"))
-        HubMenu(open, { open = false }) {
-            MenuItem(
-                stringResource(R.string.chat_export), {
-                    open = false
-                    scope.launch {
-                        val file = shell.exportChat(context, sessionId, profile, title)
-                        if (file == null) failed = true
-                        else hub.core.android.ui.components.AttachmentFiles.share(context, file, "text/markdown")
-                    }
-                },
-                icon = Lucide.Share2,
-                modifier = Modifier.testTag("chat.export"),
-            )
-        }
-    }
-    if (failed) {
-        HubDialog({ failed = false }) {
-            Text(stringResource(R.string.chat_export_failed))
-            androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
-                HubButton(stringResource(R.string.ok), { failed = false }, size = ControlSize.Md)
-            }
-        }
-    }
-}

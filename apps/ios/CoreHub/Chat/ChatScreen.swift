@@ -9,6 +9,10 @@ struct ChatScreen: View {
     @State var model: ChatModel
     /// A conversation that is a destination of its own (the global agent) keeps that title.
     var fixedTitle: String? = nil
+    /// Opens another chat (a fork); `nil` offers no fork.
+    var openChat: ((Session) -> Void)? = nil
+    /// Leaves this chat once it is archived or deleted (to a new chat).
+    var leave: (() -> Void)? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var draft = ""
@@ -19,6 +23,11 @@ struct ChatScreen: View {
     @State private var keepBottom = false
     /// The transcript the hub exported, waiting in the share sheet.
     @State private var exported: SharedFile?
+    /// The composer's chips (model, approvals) and the chat's own actions (apps batch 1).
+    @State private var controls: ChatControlsModel?
+    @State private var replyTo: Message?
+    @State private var renaming: RenameTarget?
+    @State private var deleting: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,12 +53,7 @@ struct ChatScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
-                    } label: {
-                        Label { Text(l10n("chat.export")) } icon: { Image(lucide: .share) }
-                    }
-                    .accessibilityIdentifier("chat.export")
+                    chatMenu
                 } label: {
                     LucideIcon(.ellipsis, size: 20)
                 }
@@ -57,9 +61,16 @@ struct ChatScreen: View {
                 .accessibilityIdentifier("chat.more")
             }
         }
+        .renameChat($renaming) { _, title in await model.rename(title) }
+        .confirmDelete($deleting, name: { $0 }) { _ in
+            try await ChatActions.delete(app, id: model.sessionID, profile: model.profile)
+        } deleted: { _ in
+            leave?()
+        }
         .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
         .onAppear {
             if tray == nil { tray = AttachmentTray(app: app) }
+            if controls == nil { controls = ChatControlsModel(app: app) }
             model.start()
             LocalNotices.shared.openSessionID = model.sessionID
         }
@@ -95,7 +106,8 @@ struct ChatScreen: View {
                             run: message.runId.flatMap { model.state.runs[$0] },
                             profile: model.profile,
                             sessionID: model.sessionID,
-                            agent: message.role == .assistant ? identity(of: message) : nil
+                            agent: message.role == .assistant ? identity(of: message) : nil,
+                            actions: messageActions
                         )
                         .id(message.id)
                     }
@@ -145,6 +157,34 @@ struct ChatScreen: View {
                 NoticeView(text: error, tone: .danger)
                     .onTapGesture { model.actionError = nil }
             }
+            if let notice = model.notice {
+                NoticeView(text: notice, tone: .info)
+                    .onTapGesture { model.notice = nil }
+                    .accessibilityIdentifier("chat.notice")
+            }
+            if let failure = controls?.error {
+                NoticeView(text: failure, tone: .danger)
+                    .onTapGesture { controls?.error = nil }
+            }
+            if let replyTo {
+                ReplyStrip(message: replyTo) { self.replyTo = nil }
+            }
+            if let controls {
+                ComposerChips(
+                    controls: controls,
+                    profile: model.profile,
+                    agentID: model.state.agentID,
+                    model: model.state.model,
+                    onModel: { value in
+                        guard let value else { return }
+                        Task { await model.setModel(value) }
+                    },
+                    onSteer: canSteerAtAll ? steer : nil,
+                    steerReady: ChatControls.canSteer(running: model.state.isBusy, text: draft, capabilities: agent?.capabilities ?? [])
+                )
+                .onAppear { controls.load(profile: model.profile, agentID: model.state.agentID) }
+                .onChange(of: model.state.agentID) { _, id in controls.load(profile: model.profile, agentID: id) }
+            }
             Composer(
                 text: $draft,
                 placeholder: l10n("chat.placeholder", ["agent": agentName]),
@@ -152,9 +192,11 @@ struct ChatScreen: View {
                 sending: model.sending,
                 onSend: {
                     let message = tray?.message(draft) ?? OutgoingMessage(text: draft)
+                    let reply = replyTo?.id
                     draft = ""
+                    replyTo = nil
                     tray?.clear()
-                    Task { await model.send(message) }
+                    Task { await model.send(message, replyTo: reply) }
                 },
                 onStop: { Task { await model.stopRun() } },
                 attachments: tray,
@@ -164,6 +206,109 @@ struct ChatScreen: View {
         }
         .padding(.horizontal, Space.s3)
         .padding(.bottom, Space.s2)
+    }
+
+    /// The chat's agent, for what it can do (steer, compress).
+    private var agent: Agent? {
+        guard let id = model.state.agentID else { return nil }
+        return app.agentDirectory.agents(model.profile).first { $0.id == id } ?? app.agents.first { $0.id == id }
+    }
+
+    private var isGlobalAgent: Bool { fixedTitle != nil || model.state.source == .globalAgent }
+
+    /// Steer is offered while a reply runs, to an agent that can take it.
+    private var canSteerAtAll: Bool {
+        model.state.isBusy && (agent?.capabilities.contains(.steer) ?? false)
+    }
+
+    private func steer() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        draft = ""
+        Task { await model.steer(text) }
+    }
+
+    /// Copy, read aloud, reply and fork, under each message of this chat.
+    private var messageActions: MessageActions {
+        let profile = model.profile
+        return MessageActions(
+            speak: { [app] message in Speaker.shared.speak(message.text, app: app, profile: profile) },
+            reply: { message in replyTo = message },
+            fork: openChat == nil || isGlobalAgent ? nil : { message in
+                Task { if let session = await model.fork(at: message.id) { openChat?(session) } }
+            }
+        )
+    }
+
+    /// The «…» in the top bar: the chat's own actions, in the web's order.
+    @ViewBuilder
+    private var chatMenu: some View {
+        let actions = ChatControls.actions(
+            pinned: model.state.pinned,
+            archived: model.state.archived,
+            globalAgent: isGlobalAgent,
+            canCompress: agent?.capabilities.contains(.compress) ?? false
+        ).filter { $0 != .fork || openChat != nil }
+        ForEach(actions, id: \.self) { action in
+            switch action {
+            case .rename:
+                menuItem(action, "chat_controls.rename", .pencil) {
+                    renaming = RenameTarget(id: model.sessionID, profile: model.profile, title: model.state.title ?? "")
+                }
+            case .pin, .unpin, .archive, .unarchive:
+                menuItem(action, "chat_controls.\(action.rawValue)", icon(for: action)) {
+                    guard let patch = ChatControls.patch(action) else { return }
+                    Task {
+                        let done = await model.change(patch)
+                        if done && action == .archive { leave?() }
+                    }
+                }
+            case .fork:
+                menuItem(action, "chat_controls.fork", .gitFork) {
+                    Task { if let session = await model.fork() { openChat?(session) } }
+                }
+            case .compress:
+                Button {
+                    Task { await model.compress() }
+                } label: {
+                    Label {
+                        Text(l10n("chat_controls.compress"))
+                        if model.state.isBusy { Text(l10n("chat_controls.compress_wait")) }
+                    } icon: { Image(lucide: .shrink) }
+                }
+                .disabled(model.state.isBusy || model.compressing)
+                .accessibilityIdentifier("chat.compress")
+            case .export:
+                menuItem(action, "chat.export", .share) {
+                    Task { if let url = await model.exportMarkdown() { exported = SharedFile(url: url) } }
+                }
+            case .delete:
+                Divider()
+                Button(role: .destructive) {
+                    deleting = model.state.title ?? l10n("sessions.untitled")
+                } label: {
+                    Label { Text(l10n("chat_controls.delete")) } icon: { Image(lucide: .trash) }
+                }
+                .accessibilityIdentifier("chat.delete")
+            }
+        }
+    }
+
+    private func menuItem(_ action: ChatControls.Action, _ key: String, _ icon: Lucide, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            Label { Text(l10n(key)) } icon: { Image(lucide: icon) }
+        }
+        .accessibilityIdentifier("chat.\(action.rawValue)")
+    }
+
+    private func icon(for action: ChatControls.Action) -> Lucide {
+        switch action {
+        case .pin: return .pin
+        case .unpin: return .pinOff
+        case .archive: return .archive
+        case .unarchive: return .archiveRestore
+        default: return .ellipsis
+        }
     }
 
     /// A reply's agent: the registry's name and face, never the placeholder «agent».
@@ -216,6 +361,8 @@ struct MessageRow: View {
     var mine: Bool? = nil
     /// Who the agent is (its registry name and face); `nil` draws the author's name and initial.
     var agent: AgentIdentity? = nil
+    /// What the message offers in a chat (copy, read aloud, reply, fork); `nil` in a room.
+    var actions: MessageActions? = nil
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
 
@@ -262,6 +409,7 @@ struct MessageRow: View {
                 if !message.text.isEmpty { personText }
                 MessageAttachments(content: message.content, profile: profile)
             }
+            .modifier(MessageMenu(message: message, actions: message.text.isEmpty ? nil : actions))
         }
         .accessibilityIdentifier("message.user")
     }
@@ -294,6 +442,9 @@ struct MessageRow: View {
                     .modifier(FileLinkOpener(own: MessageAttachments.files(message.content), profile: profile, sessionID: sessionID))
             }
             MessageAttachments(content: message.content, profile: profile)
+            if let actions, message.status != .streaming, !message.text.isEmpty {
+                MessageActionsRow(message: message, actions: actions)
+            }
             switch message.status {
             case .failed:
                 NoticeView(text: l10n("chat.failed", ["message": run?.error?.error ?? "—"]), tone: .danger)

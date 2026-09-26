@@ -17,6 +17,10 @@ struct NewChatScreen: View {
     @State private var agentID: String?
     @State private var creating = false
     @State private var error: String?
+    /// The composer's chips (apps batch 1): the chat's model and folder, chosen before it exists.
+    @State private var controls: ChatControlsModel?
+    @State private var model: String?
+    @State private var folder: String?
 
     private var usable: [Agent] {
         app.agents.filter { $0.enabled && ($0.status == .available || $0.status == .limited) }
@@ -53,6 +57,27 @@ struct NewChatScreen: View {
             if let error {
                 NoticeView(text: error, tone: .danger)
             }
+            if let controls, let agent = chosen {
+                if let failure = controls.error {
+                    NoticeView(text: failure, tone: .danger).onTapGesture { controls.error = nil }
+                }
+                ComposerChips(
+                    controls: controls,
+                    profile: app.currentProfile,
+                    agentID: agent.id,
+                    model: model,
+                    onModel: { model = $0 },
+                    allowDefault: true,
+                    folder: $folder
+                )
+                .onAppear { controls.load(profile: app.currentProfile, agentID: agent.id, folders: true) }
+                .onChange(of: agent.id) { _, id in controls.load(profile: app.currentProfile, agentID: id, folders: true) }
+                .onChange(of: app.currentProfile) { _, profile in
+                    model = nil
+                    folder = nil
+                    controls.load(profile: profile, agentID: agent.id, folders: true)
+                }
+            }
             Composer(
                 text: $draft,
                 placeholder: l10n("chat.placeholder", ["agent": chosen?.name ?? l10n("chat.agent")]),
@@ -69,6 +94,7 @@ struct NewChatScreen: View {
         .background(Tone.bg)
         .onAppear {
             if tray == nil { tray = AttachmentTray(app: app) }
+            if controls == nil { controls = ChatControlsModel(app: app) }
             if let seed, draft.isEmpty { draft = seed }
             if !seedFiles.isEmpty, let tray, tray.items.isEmpty {
                 for file in seedFiles {
@@ -114,6 +140,7 @@ struct NewChatScreen: View {
         let message = tray?.message(draft) ?? OutgoingMessage(text: draft)
         let profile = app.currentProfile
         let key = ULID.make()
+        let create = SessionCreate(agentId: agent.id, model: model, workingDir: folder)
         creating = true
         error = nil
         Task {
@@ -122,7 +149,7 @@ struct NewChatScreen: View {
                 let session = try await app.api.call {
                     try await SessionsAPI.sessionsCreate(
                         xHubProfile: profile,
-                        sessionCreate: SessionCreate(agentId: agent.id),
+                        sessionCreate: create,
                         idempotencyKey: key,
                         apiConfiguration: $0
                     )

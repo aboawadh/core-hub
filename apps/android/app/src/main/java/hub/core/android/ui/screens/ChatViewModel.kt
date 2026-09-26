@@ -4,6 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import hub.core.android.AppGraph
 import hub.core.android.chat.AttachmentTray
+import hub.core.android.chat.ChatActions
+import hub.core.android.chat.ChatControls
+import hub.core.client.model.Session
+import hub.core.client.model.SessionPatch
+import hub.core.client.model.WorkingDirs
 import hub.core.android.chat.AttachmentUploader
 import hub.core.android.chat.HubAttachmentBackend
 import hub.core.android.chat.mimeOf
@@ -52,7 +57,27 @@ data class ChatUi(
     val agentId: String? = null,
     /** The draft's agents have been read: «no agent» is said only then, never while they load. */
     val agentsLoaded: Boolean = false,
+    /** The composer's chips (apps batch 1): the profile's chat models and the agent's approval mode. */
+    val models: List<ChatControls.ModelOption> = emptyList(),
+    val modelsLoaded: Boolean = false,
+    val approval: ChatControls.ApprovalField? = null,
+    /** A new chat's model and working folder, chosen before it exists; `null` is the default / automatic. */
+    val draftModel: String? = null,
+    val draftFolder: String? = null,
+    val dirs: WorkingDirs? = null,
+    val dirsError: HubError? = null,
+    /** What the last compress or steer did (not an error). */
+    val notice: ChatNotice? = null,
+    val compressing: Boolean = false,
 )
+
+/** The outcome lines of the chat's own actions, turned into words by the screen. */
+sealed interface ChatNotice {
+    data object Compressing : ChatNotice
+    data class Compressed(val outcome: ChatControls.Compression) : ChatNotice
+    data object Steered : ChatNotice
+    data object SteerQueued : ChatNotice
+}
 
 /**
  * One conversation, or the new-chat draft when [sessionId] is null. The draft creates the
@@ -168,16 +193,16 @@ class ChatViewModel(
      * Sends a message. In the draft this creates the session and calls [onCreated] with it; the
      * conversation screen then subscribes and sends the message itself.
      */
-    fun send(text: String, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }) {
+    fun send(text: String, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }, replyTo: String? = null) {
         if (tray.uploading) return
         val outgoing = tray.message(text)
         if (outgoing.isEmpty) return
         tray.clear()
-        send(outgoing, onCreated)
+        send(outgoing, onCreated, replyTo)
     }
 
-    /** The person's words and the files they attached, as one run (web: `blocksFor`). */
-    fun send(outgoing: Outgoing, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }) {
+    /** The person's words and the files they attached, as one run (web: `blocksFor`); [replyTo] names the message answered. */
+    fun send(outgoing: Outgoing, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }, replyTo: String? = null) {
         if (outgoing.isEmpty) return
         val body = outgoing.text.trim()
         val api = apis ?: return
@@ -185,7 +210,8 @@ class ChatViewModel(
         viewModelScope.launch {
             if (sessionId == null) {
                 val agentId = _ui.value.agentId ?: run { _ui.update { it.copy(sending = false) }; return@launch }
-                hubCall { api.sessions.sessionsCreate(profile, SessionCreate(agentId = agentId), UUID.randomUUID().toString()) }
+                val create = SessionCreate(agentId = agentId, model = _ui.value.draftModel, workingDir = _ui.value.draftFolder)
+                hubCall { api.sessions.sessionsCreate(profile, create, UUID.randomUUID().toString()) }
                     .onSuccess { session ->
                         graph.outbox[session.id] = outgoing
                         _ui.update { it.copy(sending = false) }
@@ -197,7 +223,7 @@ class ChatViewModel(
             hubCall {
                 api.sessions.sessionsCreateRun(
                     profile, sessionId,
-                    RunCreate(content = outgoing.blocks()),
+                    RunCreate(content = outgoing.blocks(), replyToMessageId = replyTo),
                     UUID.randomUUID().toString(),
                 )
             }.onSuccess { accepted ->
@@ -241,6 +267,135 @@ class ChatViewModel(
     }
 
     fun dismissError() = _ui.update { it.copy(error = null) }
+
+    // ---------------------------------------------------------------- chat controls (apps batch 1)
+
+    private val actions get() = apis?.let(::ChatActions)
+    private var controlsKey: String? = null
+
+    /** Fills the chips once per agent: the catalogue, the agent's approval mode, and a new chat's folders. */
+    fun loadControls(agentId: String?) {
+        val act = actions ?: return
+        val key = agentId.orEmpty()
+        if (key == controlsKey) return
+        controlsKey = key
+        viewModelScope.launch {
+            val models = runCatching { act.catalogue(profile) }.getOrNull()
+            _ui.update { it.copy(models = models ?: it.models, modelsLoaded = true) }
+        }
+        viewModelScope.launch {
+            val field = agentId?.let { id -> runCatching { act.approval(profile, id) }.getOrNull() }
+            _ui.update { it.copy(approval = field) }
+        }
+        if (sessionId == null && _ui.value.dirs == null) {
+            viewModelScope.launch {
+                hubCall { act.workingDirs(profile) }
+                    .onSuccess { dirs -> _ui.update { it.copy(dirs = dirs, dirsError = null) } }
+                    .onFailure { e -> _ui.update { it.copy(dirsError = e as HubError) } }
+            }
+        }
+    }
+
+    /** The chat's model; in the draft it is kept for `sessions.create` (null = the agent's default). */
+    fun setModel(value: String?) {
+        if (sessionId == null) {
+            _ui.update { it.copy(draftModel = value) }
+            return
+        }
+        if (value == null || value == _ui.value.chat.session?.model) return
+        change(SessionPatch(model = value))
+    }
+
+    fun setFolder(value: String?) = _ui.update { it.copy(draftFolder = value) }
+
+    /** The agent's approval mode (admin); it applies to every chat with the agent in this profile. */
+    fun setApproval(agentId: String, value: String) {
+        val act = actions ?: return
+        val field = _ui.value.approval ?: return
+        if (value == field.value) return
+        viewModelScope.launch {
+            hubCall { act.setApproval(profile, agentId, field, value) }
+                .onSuccess { _ui.update { it.copy(approval = field.copy(value = value)) } }
+                .onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
+        }
+    }
+
+    /** Rename, pin, archive and their undo; the hub's answer replaces what the screen shows. */
+    fun change(patch: SessionPatch, onDone: () -> Unit = {}) {
+        val id = sessionId ?: return
+        val act = actions ?: return
+        viewModelScope.launch {
+            hubCall { act.update(id, profile, patch) }
+                .onSuccess { session -> _ui.update { it.copy(chat = ChatReducer.absorb(it.chat, session)) }; onDone() }
+                .onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
+        }
+    }
+
+    fun rename(typed: String) {
+        val title = ChatControls.renameTitle(typed) ?: return
+        change(SessionPatch(title = title))
+    }
+
+    suspend fun delete(): Result<Unit> {
+        val id = sessionId ?: return Result.success(Unit)
+        val act = actions ?: return Result.failure(HubError(401, "unauthorized", null))
+        return hubCall { act.delete(id, profile) }
+    }
+
+    /** A new chat with this one's transcript up to [messageId] (all of it when null). */
+    fun fork(messageId: String? = null, onForked: (Session) -> Unit) {
+        val id = sessionId ?: return
+        val act = actions ?: return
+        viewModelScope.launch {
+            hubCall { act.fork(id, profile, messageId) }
+                .onSuccess(onForked)
+                .onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
+        }
+    }
+
+    fun compress() {
+        val id = sessionId ?: return
+        val act = actions ?: return
+        if (_ui.value.compressing) return
+        _ui.update { it.copy(compressing = true, notice = ChatNotice.Compressing) }
+        viewModelScope.launch {
+            hubCall { act.compress(id, profile) }
+                .onSuccess { result -> _ui.update { it.copy(compressing = false, notice = ChatNotice.Compressed(ChatControls.compression(result))) } }
+                .onFailure { e -> _ui.update { it.copy(compressing = false, notice = null, error = e as HubError) } }
+        }
+    }
+
+    /**
+     * Guides the running reply with [text]; when it cannot take it, the words go as the next
+     * message instead (what Hermes itself does with a steer that has no turn to join).
+     */
+    fun steer(text: String) {
+        val id = sessionId ?: return
+        val act = actions ?: return
+        val run = _ui.value.chat.activeRun ?: return send(Outgoing(text))
+        viewModelScope.launch {
+            hubCall { act.steer(id, profile, run.id, text) }
+                .onSuccess { result ->
+                    if (result.status == hub.core.client.model.RunSteerResult.Status.QUEUED) {
+                        _ui.update { it.copy(notice = ChatNotice.Steered) }
+                    } else {
+                        _ui.update { it.copy(notice = ChatNotice.SteerQueued) }
+                        send(Outgoing(text))
+                    }
+                }
+                .onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
+        }
+    }
+
+    fun dismissNotice() = _ui.update { it.copy(notice = null) }
+
+    /** Reads a reply aloud, through the hub's voice when this phone chose it (as spoken replies do). */
+    fun speak(text: String) {
+        val hub = graph.store.current?.let {
+            hub.core.android.phone.HubVoice(graph.apis(it), it.hub, profile, graph.device.choices.value.voiceSource)
+        }
+        graph.speaker.speak(text, hub)
+    }
 
     override fun onCleared() {
         sessionId?.let(graph.realtime::unsubscribe)

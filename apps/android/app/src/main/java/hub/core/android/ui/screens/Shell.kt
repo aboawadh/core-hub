@@ -305,6 +305,7 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
     val profiles by shell.profiles.collectAsState()
     val badges = ChatsList.showsProfiles(chats, profiles.size)
     val selected by shell.selected.collectAsState()
+    val chatError by shell.chatError.collectAsState()
     LaunchedEffect(Unit) { if (chats.items.isEmpty()) shell.reloadChats() }
     val pinned = chats.items.filter { it.pinned }
     val recent = chats.items.filter { !it.pinned }
@@ -313,6 +314,11 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
         item(key = "search") { ChatsSearch(shell) }
         if (selected.isNotEmpty()) item(key = "batch") { BatchBar(shell, selected.size) }
         chats.error?.let { error -> item(key = "error") { ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
+        chatError?.let { error ->
+            item(key = "chat-error") {
+                ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable(onClick = shell::dismissChatError))
+            }
+        }
         if (pinned.isNotEmpty()) {
             item(key = "pinned") { SectionLabel(stringResource(R.string.chats_pinned)) }
             items(pinned, key = { "p" + it.id }) { ChatRow(it, badges, shell, nav, onOpen) }
@@ -442,6 +448,11 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
     val selecting = picked.isNotEmpty()
     val chosen = session.id in picked
     val selected = chosen || (!selecting && (nav.current as? Route.Chat)?.sessionId == session.id)
+    // A long press offers the chat's own actions, and Select, which starts batch mode (apps batch 1).
+    var menu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    val deleting = hub.core.android.ui.components.rememberConfirmDelete<Session>()
+    Box {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(ItemShape)
             .background(if (selected) t.surface2 else Color.Transparent, ItemShape)
@@ -450,7 +461,7 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
                     if (selecting) shell.toggleSelected(session.id)
                     else { nav.go(Route.Chat(session.id, session.profile)); onOpen() }
                 },
-                onLongClick = { shell.toggleSelected(session.id) },
+                onLongClick = { if (selecting) shell.toggleSelected(session.id) else menu = true },
             )
             .padding(horizontal = 8.dp, vertical = 7.dp)
             .testTag("chat.row.${session.id}"),
@@ -478,6 +489,40 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
         if (session.pinned) LucideIcon(Lucide.Pin, stringResource(R.string.chats_pinned), size = 12.dp, tint = t.textFaint)
         if (badge) Badge(shell.profileName(session.profile), tone = BadgeTone.Accent)
     }
+    HubMenu(menu, { menu = false }) {
+        MenuItem(stringResource(R.string.chat_controls_select), { menu = false; shell.toggleSelected(session.id) }, Modifier.testTag("chat.row.select"), icon = Lucide.CircleCheck)
+        if (session.source != hub.core.client.model.SessionSource.GLOBAL_AGENT) {
+            MenuItem(stringResource(R.string.chat_controls_rename), { menu = false; renaming = true }, Modifier.testTag("chat.row.rename"), icon = Lucide.Pencil)
+            MenuItem(
+                stringResource(if (session.pinned) R.string.chat_controls_unpin else R.string.chat_controls_pin),
+                { menu = false; shell.changeChat(session, hub.core.client.model.SessionPatch(pinned = !session.pinned)) },
+                Modifier.testTag("chat.row.pin"), icon = if (session.pinned) Lucide.PinOff else Lucide.Pin,
+            )
+            MenuItem(
+                stringResource(if (session.archived) R.string.chat_controls_unarchive else R.string.chat_controls_archive),
+                { menu = false; shell.changeChat(session, hub.core.client.model.SessionPatch(archived = !session.archived)) },
+                Modifier.testTag("chat.row.archive"), icon = if (session.archived) Lucide.ArchiveRestore else Lucide.Archive,
+            )
+            MenuDivider()
+            MenuItem(
+                stringResource(R.string.chat_controls_delete), { menu = false; deleting.ask(session) },
+                Modifier.testTag("chat.row.delete"), icon = Lucide.Trash, danger = true,
+            )
+        }
+    }
+    }
+    if (renaming) {
+        hub.core.android.ui.components.RenameDialog(session.title.orEmpty(), onDismiss = { renaming = false }) { title ->
+            renaming = false
+            shell.changeChat(session, hub.core.client.model.SessionPatch(title = title))
+        }
+    }
+    hub.core.android.ui.components.ConfirmDeleteDialog(
+        deleting, { hub.core.android.ui.components.deleteTitle(it.title ?: stringResource(R.string.term_new_chat)) },
+        onDelete = { shell.deleteChat(it) },
+        onDeleted = { gone -> if ((nav.current as? Route.Chat)?.sessionId == gone.id) nav.go(Route.NewChat) },
+        body = stringResource(R.string.chat_controls_delete_body),
+    )
 }
 
 /**

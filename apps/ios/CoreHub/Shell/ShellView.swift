@@ -170,7 +170,11 @@ struct ShellView: View {
                 sessionID: sessionID,
                 profile: profile,
                 firstMessage: firstMessages.take(sessionID)
-            ))
+            ), openChat: { session in
+                navigate(.chat(sessionID: session.id, profile: session.profile))
+            }, leave: {
+                navigate(.newChat)
+            })
             .id(sessionID)
         case .room(let roomID, let profile):
             RoomScreen(

@@ -40,6 +40,7 @@ object Lucide {
     val ClockArrowUp = R.drawable.lucide_clock_arrow_up
     val Contrast = R.drawable.lucide_contrast
     val Copy = R.drawable.lucide_copy
+    val CornerDownRight = R.drawable.lucide_corner_down_right
     val Cpu = R.drawable.lucide_cpu
     val Download = R.drawable.lucide_download
     val Ellipsis = R.drawable.lucide_ellipsis
@@ -54,6 +55,7 @@ object Lucide {
     val Film = R.drawable.lucide_film
     val Folder = R.drawable.lucide_folder
     val Gauge = R.drawable.lucide_gauge
+    val GitFork = R.drawable.lucide_git_fork
     val Globe = R.drawable.lucide_globe
     val GripVertical = R.drawable.lucide_grip_vertical
     val Hammer = R.drawable.lucide_hammer
@@ -84,6 +86,7 @@ object Lucide {
     val Pause = R.drawable.lucide_pause
     val Pencil = R.drawable.lucide_pencil
     val Pin = R.drawable.lucide_pin
+    val PinOff = R.drawable.lucide_pin_off
     val Play = R.drawable.lucide_play
     val Plug = R.drawable.lucide_plug
     val Plus = R.drawable.lucide_plus
@@ -92,6 +95,7 @@ object Lucide {
     val QrCode = R.drawable.lucide_qr_code
     val Radio = R.drawable.lucide_radio
     val RefreshCw = R.drawable.lucide_refresh_cw
+    val Reply = R.drawable.lucide_reply
     val RotateCcw = R.drawable.lucide_rotate_ccw
     val RotateCcwClock = R.drawable.lucide_rotate_ccw_clock
     val RotateCw = R.drawable.lucide_rotate_cw
@@ -104,6 +108,7 @@ object Lucide {
     val Share2 = R.drawable.lucide_share_2
     val Shield = R.drawable.lucide_shield
     val ShieldCheck = R.drawable.lucide_shield_check
+    val Shrink = R.drawable.lucide_shrink
     val SlidersHorizontal = R.drawable.lucide_sliders_horizontal
     val Smartphone = R.drawable.lucide_smartphone
     val Sparkles = R.drawable.lucide_sparkles
