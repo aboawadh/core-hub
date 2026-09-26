@@ -29,8 +29,6 @@
     <string name="own_settings_channels_unlink_body">Its next message gets none of Core Hub\'s tools. The agent still answers it.</string>
     <string name="own_settings_platform_telegram">Telegram</string>
     <string name="own_settings_platform_whatsapp">WhatsApp</string>
-    <string name="own_settings_inbox">Inbox</string>
-    <string name="own_settings_inbox_settings">Settings</string>
     <string name="own_settings_inbox_all">All</string>
     <string name="own_settings_inbox_unread">Unread</string>
     <string name="own_settings_inbox_unread_count">%1$s unread</string>
@@ -41,7 +39,6 @@
     <string name="own_settings_inbox_none_unread">Everything is read</string>
     <string name="own_settings_inbox_none_body">What happens in the hub appears here: a reply that finished, or an approval waiting for you.</string>
     <string name="own_settings_inbox_is_unread">Unread</string>
-    <string name="own_settings_inbox_is_read">Read</string>
     <string name="own_settings_privacy_access">Apps and devices with access</string>
     <string name="own_settings_privacy_access_hint">Paired phones and integrations each hold a token that acts as you. Revoke one and it stops working at once; a paired device is unlinked.</string>
     <string name="own_settings_privacy_kind_device">Paired device</string>

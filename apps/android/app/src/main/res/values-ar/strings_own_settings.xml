@@ -29,8 +29,6 @@
     <string name="own_settings_channels_unlink_body">رسالته التالية لا تحصل على أدوات كور هب. يبقى الوكيل يردّ عليها.</string>
     <string name="own_settings_platform_telegram">تيليجرام</string>
     <string name="own_settings_platform_whatsapp">واتساب</string>
-    <string name="own_settings_inbox">الوارد</string>
-    <string name="own_settings_inbox_settings">الإعدادات</string>
     <string name="own_settings_inbox_all">الكل</string>
     <string name="own_settings_inbox_unread">غير المقروء</string>
     <string name="own_settings_inbox_unread_count">%1$s غير مقروء</string>
@@ -41,7 +39,6 @@
     <string name="own_settings_inbox_none_unread">كل شيء مقروء</string>
     <string name="own_settings_inbox_none_body">ما يحدث في الهب يظهر هنا: ردّ انتهى، أو إذن ينتظرك.</string>
     <string name="own_settings_inbox_is_unread">غير مقروء</string>
-    <string name="own_settings_inbox_is_read">مقروء</string>
     <string name="own_settings_privacy_access">التطبيقات والأجهزة التي لها وصول</string>
     <string name="own_settings_privacy_access_hint">كل هاتف مقترن وكل تكامل يحمل رمزًا يعمل باسمك. ألغِ أحدها فيتوقف فورًا، ويُفصل الجهاز المقترن.</string>
     <string name="own_settings_privacy_kind_device">جهاز مقترن</string>

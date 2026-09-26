@@ -116,7 +116,6 @@
     <string name="about_address">Hub address</string>
     <string name="about_license">%1$s is free software under the Apache License 2.0.</string>
     <string name="profiles_counts">%1$s · %2$d agents · %3$d chats</string>
-    <string name="privacy_tokens">Apps and devices that can act as you. Revoke them on the web.</string>
     <string name="privacy_none">None.</string>
     <string name="device_connection">Hub connection</string>
     <string name="device_paired">Paired by code</string>

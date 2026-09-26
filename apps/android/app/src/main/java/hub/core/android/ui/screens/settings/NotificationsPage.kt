@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,7 +67,7 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
     var next by remember { mutableStateOf<String?>(null) }
     var loadingMore by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    var tick by remember { mutableStateOf(0) }
+    var tick by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(unreadOnly, tick) {
         ops.notices(unreadOnly)
@@ -96,14 +97,16 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
             return@LazyColumn
         }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Segmented(
-                    listOf(
-                        Segment(false, stringResource(R.string.own_settings_inbox_all), tag = "notices.filter.all"),
-                        Segment(true, stringResource(R.string.own_settings_inbox_unread), tag = "notices.filter.unread"),
-                    ),
-                    unreadOnly, { unreadOnly = it }, size = ControlSize.Sm,
-                )
+            Segmented(
+                listOf(
+                    Segment(false, stringResource(R.string.own_settings_inbox_all), tag = "notices.filter.all"),
+                    Segment(true, stringResource(R.string.own_settings_inbox_unread), tag = "notices.filter.unread"),
+                ),
+                unreadOnly, { unreadOnly = it }, Modifier.fillMaxWidth(), size = ControlSize.Sm,
+            )
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val unread = inbox?.unread ?: 0
                 if (unread > 0) {
                     Text(

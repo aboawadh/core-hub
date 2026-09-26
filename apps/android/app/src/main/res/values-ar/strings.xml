@@ -115,7 +115,6 @@
     <string name="about_address">عنوان المركز</string>
     <string name="about_license">%1$s برنامج حر برخصة Apache 2.0.</string>
     <string name="profiles_counts">%1$s · %2$d وكلاء · %3$d محادثات</string>
-    <string name="privacy_tokens">التطبيقات والأجهزة التي تعمل باسمك. تُلغى من الويب.</string>
     <string name="privacy_none">لا شيء.</string>
     <string name="device_connection">الاتصال بالمركز</string>
     <string name="device_paired">مقرون برمز</string>
