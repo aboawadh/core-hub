@@ -1,5 +1,5 @@
 # العميلان المولَّدان (Kotlin وSwift) يرسلان `null` حين يطلبه العقد
-المسؤول: twuijri · الفرع: night/client-nulls · الحالة: review
+المسؤول: twuijri · الفرع: night/client-nulls · الحالة: done
 
 ## المشكلة والهدف
 العميلان المولَّدان للجوال كانا يحذفان كل حقل فارغ من جسم الطلب: Kotlin بـ`explicitNulls = false` (حتى لا يمسح
@@ -86,6 +86,10 @@ ChatControlsTests testDefaultModelAndAutomaticNamingSendAnExplicitNullAndNothing
 SchedulesTests testATriggerAndATargetGoOutWithTheirNullFields]' passed
 TaskDetailTests testAnEditSendsOnlyWhatChanged]' passed
 ```
+CI على #181 بعد الدمج (الالتزام `f98f4792`): 17 فحصًا كلها نجحت — منها Android build, unit tests, lint، Build and test
+on the iOS simulator، Generate the Swift client، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke
+journeys، Desktop، Docker، Installers ×3، db:generate + db:migrate، Change record.
+
 الاختبارات الجديدة تفشل على الشيفرة القديمة: لا `sendNull`/`Clearable`/`modelPatch`/`AUTO_TITLE` فيها، وأجسام
 `{"model":null}` و`{"title":null}` و`"expression":null` لا تخرج من العميل القديم بلا `ScheduleBodies`.
 
