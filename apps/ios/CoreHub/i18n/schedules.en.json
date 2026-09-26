@@ -1,0 +1,94 @@
+{
+  "schedules": {
+    "new": "New schedule",
+    "edit_title": "Edit schedule",
+    "pause": "Pause",
+    "resume": "Resume",
+    "fired": "“{name}” started.",
+    "open_chat": "Open the conversation",
+    "profile_note": "New schedules are made in {name}. To make one in another profile, switch the profile in the menu.",
+    "form": {
+      "name": "Name",
+      "when": "When",
+      "templates": "Common schedules",
+      "agent": "Agent",
+      "no_agents": "No agent in this profile can take a prompt.",
+      "prompt": "What should the agent be asked?",
+      "need_name": "Give it a name.",
+      "need_agent": "Choose an agent.",
+      "need_trigger": "Set when it runs first.",
+      "use_zone": "Use {zone}"
+    },
+    "templates": {
+      "every_hour": "Every hour",
+      "daily_8": "Every day at 8:00",
+      "weekdays_9": "Weekdays at 9:00",
+      "monday_9": "Every Monday at 9:00",
+      "monthly_1": "First of the month at 9:00",
+      "every_15": "Every 15 minutes"
+    },
+    "options": {
+      "title": "Run options",
+      "missed": "Run if missed (within 24 hours)",
+      "missed_hint": "If the hub was not running at its time, it runs once when the hub is back within 24 hours. Off, it never runs late, and the history says so.",
+      "overlap": "If the previous run is still going",
+      "overlap_hint": "“Run now” always starts at once and stops nothing.",
+      "skip": "Skip",
+      "skip_hint": "This time does not run, and the history says so.",
+      "wait": "Wait, then run",
+      "wait_hint": "Runs as soon as the previous run ends. Only one time waits.",
+      "parallel": "Run alongside",
+      "parallel_hint": "Runs in a new conversation next to the previous one.",
+      "replace": "Stop the previous",
+      "replace_hint": "Stops the previous run, then starts.",
+      "hermes": "Hermes decides these two for its own jobs, so they are not set here."
+    },
+    "hermes": {
+      "origin": "In Hermes's scheduler",
+      "refused": "Hermes said no: {message}",
+      "unreachable": "Hermes is not answering right now, so nothing was changed.",
+      "timezone": "Hermes runs every cron in {zone}. Use that zone, or change Hermes's timezone.",
+      "delivery": "Hermes posts to messaging platforms itself — ask for it in the prompt.",
+      "prompt_required": "A schedule for Hermes needs a prompt.",
+      "fired": "Hermes will run it on its next tick.",
+      "run_options": "Hermes decides the run options for its own jobs, so they are not set here.",
+      "target_unavailable": "It could not start: {message}"
+    },
+    "detail": {
+      "when": "When",
+      "next": "Next run",
+      "never": "No next time",
+      "last": "Last run",
+      "agent": "Agent",
+      "prompt": "Prompt",
+      "profile": "Profile",
+      "enabled": "Enabled",
+      "delivers_to": "Posts to {channel}",
+      "last_error": "Last run failed: {error}",
+      "workflow": "A workflow"
+    },
+    "history": {
+      "title": "History",
+      "empty": "It has not run yet.",
+      "waiting": "Waiting for the previous run to end",
+      "on_time": "On its time",
+      "manual": "Run now",
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Not run",
+      "took": "took {time}",
+      "not_delivered": "Not delivered: {error}",
+      "seconds": "{s}s",
+      "minutes": "{m}m {s}s",
+      "hours": "{h}h {m}m"
+    },
+    "jobs": {
+      "note": "What runs on its own for this agent in this profile. For Hermes these are the jobs in its own scheduler. Make or edit one on the Schedules page.",
+      "none": "No jobs",
+      "none_body": "Nothing is scheduled for this agent in this profile. Make a schedule on the Schedules page and it shows here.",
+      "delete_body": "It is deleted from Hermes's scheduler too."
+    }
+  }
+}
