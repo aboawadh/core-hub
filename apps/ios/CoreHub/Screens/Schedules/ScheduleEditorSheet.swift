@@ -133,6 +133,10 @@ struct ScheduleEditorSheet: View {
             draft = schedule.map(ScheduleRules.draft) ?? ScheduleRules.newDraft(agents: agents)
             ready = true
         }
+        // The agent is chosen once the profile's agents arrive.
+        .onChange(of: agents.map(\.id)) { _, _ in
+            if schedule == nil, draft.agentID == nil { draft.agentID = ScheduleRules.defaultAgent(agents) }
+        }
         .accessibilityIdentifier("schedule.form")
     }
 
