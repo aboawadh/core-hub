@@ -8,7 +8,6 @@
     "model_no_match": "لا شيء مطابق.",
     "model_default_hint": "افتراضي الوكيل في هذا البروفايل.",
     "approval": "وضع الصلاحيات",
-    "approval_unsupported": "هذا الوكيل لا يعلن وضع صلاحيات.",
     "approval_admin": "وضع الصلاحيات يغيّره المدير فقط.",
     "approval_applies": "يسري على كل محادثات هذا الوكيل في هذا البروفايل.",
     "approval_mode": {

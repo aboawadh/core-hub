@@ -9,7 +9,6 @@
     <string name="chat_controls_model_no_match">لا شيء مطابق.</string>
     <string name="chat_controls_model_default_hint">افتراضي الوكيل في هذا البروفايل.</string>
     <string name="chat_controls_approval">وضع الصلاحيات</string>
-    <string name="chat_controls_approval_unsupported">هذا الوكيل لا يعلن وضع صلاحيات.</string>
     <string name="chat_controls_approval_admin">وضع الصلاحيات يغيّره المدير فقط.</string>
     <string name="chat_controls_approval_applies">يسري على كل محادثات هذا الوكيل في هذا البروفايل.</string>
     <string name="chat_controls_approval_mode_ask">افتراضي: يسأل</string>

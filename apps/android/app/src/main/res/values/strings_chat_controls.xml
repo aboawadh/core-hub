@@ -9,7 +9,6 @@
     <string name="chat_controls_model_no_match">Nothing matches.</string>
     <string name="chat_controls_model_default_hint">The agent\'s own default for this profile.</string>
     <string name="chat_controls_approval">Approvals</string>
-    <string name="chat_controls_approval_unsupported">This agent declares no approval mode.</string>
     <string name="chat_controls_approval_admin">Only an admin changes the approval mode.</string>
     <string name="chat_controls_approval_applies">Applies to every chat with this agent in this profile.</string>
     <string name="chat_controls_approval_mode_ask">Default: ask</string>

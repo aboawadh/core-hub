@@ -197,7 +197,7 @@ fun ModelPickerSheet(
     HubSheet(onDismiss, Modifier.testTag("sheet.model"), title = stringResource(R.string.chat_controls_model_title)) {
         HubTextField(
             query, { query = it }, placeholder = stringResource(R.string.chat_controls_model_search), leadingIcon = Lucide.Search,
-            size = ControlSize.Md, modifier = Modifier.fillMaxWidth().testTag("model.search"),
+            size = ControlSize.Md, modifier = Modifier.fillMaxWidth(), fieldTag = "model.search",
         )
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
             if (allowDefault && query.isBlank()) {
@@ -309,7 +309,7 @@ fun WorkingDirSheet(dirs: WorkingDirs?, error: String?, current: String?, onChoo
         val valid = ChatControls.newFolder(name)
         HubTextField(
             name, { name = it }, placeholder = stringResource(R.string.chat_controls_folder_new_placeholder), mono = true,
-            size = ControlSize.Md, modifier = Modifier.fillMaxWidth().testTag("folder.new"),
+            size = ControlSize.Md, modifier = Modifier.fillMaxWidth(), fieldTag = "folder.new",
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
             error = if (name.isNotBlank() && valid == null) stringResource(R.string.chat_controls_folder_bad_name) else null,
         )
@@ -325,7 +325,7 @@ fun WorkingDirSheet(dirs: WorkingDirs?, error: String?, current: String?, onChoo
 fun RenameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var typed by remember(initial) { mutableStateOf(initial) }
     HubDialog(onDismiss, stringResource(R.string.chat_controls_rename_title)) {
-        HubTextField(typed, { typed = it }, modifier = Modifier.fillMaxWidth().testTag("rename.field"), size = ControlSize.Md)
+        HubTextField(typed, { typed = it }, modifier = Modifier.fillMaxWidth(), size = ControlSize.Md, fieldTag = "rename.field")
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
             HubButton(stringResource(R.string.cancel), onDismiss, kind = ButtonKind.Secondary, size = ControlSize.Md)
             HubButton(

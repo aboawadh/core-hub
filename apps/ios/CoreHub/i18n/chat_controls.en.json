@@ -8,7 +8,6 @@
     "model_no_match": "Nothing matches.",
     "model_default_hint": "The agent's own default for this profile.",
     "approval": "Approvals",
-    "approval_unsupported": "This agent declares no approval mode.",
     "approval_admin": "Only an admin changes the approval mode.",
     "approval_applies": "Applies to every chat with this agent in this profile.",
     "approval_mode": {
