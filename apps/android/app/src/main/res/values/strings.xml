@@ -150,9 +150,6 @@
     <string name="priority_urgent">Urgent</string>
     <string name="tasks_empty_column">No tasks here.</string>
     <string name="tasks_move">Move to…</string>
-    <string name="tasks_assign">Assign</string>
-    <string name="tasks_start">Start</string>
-    <string name="tasks_start_now">Start the work now</string>
     <string name="tasks_open_chat">Open its conversation</string>
     <string name="schedules_empty">No schedules yet.</string>
     <string name="schedules_next">next %1$s</string>

@@ -88,7 +88,6 @@ class TaskDetailShots {
         compose.onNodeWithText("2 of them done").assertExists()
         save("detail")
         compose.onNodeWithTag("task.move").performClick()
-        save("detail-move")
         compose.onNodeWithTag("task.move.review").performClick()
         compose.waitForIdle()
         assertEquals(TaskStatus.REVIEW, moved?.to)
