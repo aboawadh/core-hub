@@ -704,3 +704,5 @@ private fun ImagesTab(ops: ModelOps, providers: List<Provider>, isAdmin: Boolean
         }, onDismiss = { picking = false })
     }
 }
+
+internal val modelsPage = SettingsPageEntry("models") { ModelsPage(it.session.profile, it.shell.profileName(it.session.profile), it.session.user.isAdmin) }

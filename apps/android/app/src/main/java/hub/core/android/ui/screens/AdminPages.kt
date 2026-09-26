@@ -515,3 +515,7 @@ fun UsagePage(profile: String, isAdmin: Boolean) {
         }
     }
 }
+
+internal val usersPage = SettingsPageEntry("users") { PeoplePage(it.session.profile, it.session.user.id) }
+internal val deviceConnectionsPage = SettingsPageEntry("device_connections") { DevicesPage(it.session.profile) }
+internal val usagePage = SettingsPageEntry("usage") { UsagePage(it.session.profile, it.session.user.isAdmin) }

@@ -16,6 +16,7 @@ object Lucide {
     val Bot = R.drawable.lucide_bot
     val Box = R.drawable.lucide_box
     val Brain = R.drawable.lucide_brain
+    val Calendar = R.drawable.lucide_calendar
     val CalendarClock = R.drawable.lucide_calendar_clock
     val Camera = R.drawable.lucide_camera
     val ChartColumn = R.drawable.lucide_chart_column
@@ -45,6 +46,7 @@ object Lucide {
     val EllipsisVertical = R.drawable.lucide_ellipsis_vertical
     val ExternalLink = R.drawable.lucide_external_link
     val Eye = R.drawable.lucide_eye
+    val EyeOff = R.drawable.lucide_eye_off
     val File = R.drawable.lucide_file
     val FileCog = R.drawable.lucide_file_cog
     val FileSearch = R.drawable.lucide_file_search

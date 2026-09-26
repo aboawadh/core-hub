@@ -38,6 +38,31 @@ class StringsParityTest {
         }
     }
 
+    /**
+     * A batch keeps its strings in a file of its own (`strings_<area>.xml`, docs/clients/phone-pages.md):
+     * every English file has its Arabic twin with the same keys, and no key is in two files.
+     */
+    @Test fun `every strings file has its arabic twin and no key is in two files`() {
+        fun names(file: File): List<String> {
+            val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).getElementsByTagName("string")
+            return (0 until nodes.length).map { nodes.item(it).attributes.getNamedItem("name").nodeValue }
+        }
+        val files = File(res, "values").listFiles { f -> f.name.startsWith("strings") && f.name.endsWith(".xml") }!!.sorted()
+        assertTrue(files.size > 1)
+        val seen = mutableMapOf<String, String>()
+        for (en in files) {
+            val ar = File(res, "values-ar/${en.name}")
+            assertTrue("values-ar/${en.name} is missing", ar.exists())
+            assertEquals("the keys of ${en.name}", names(en).sorted(), names(ar).sorted())
+            for (key in names(en)) {
+                assertTrue("$key is in ${seen[key]} and ${en.name}", key !in seen)
+                seen[key] = en.name
+            }
+        }
+        val arOnly = File(res, "values-ar").listFiles { f -> f.name.startsWith("strings") }!!.map { it.name } - files.map { it.name }.toSet()
+        assertTrue("Arabic files without an English twin: $arOnly", arOnly.isEmpty())
+    }
+
     @Test fun `the ui says profile, never workspace`() {
         val all = strings("values") + strings("values-ar").mapKeys { "ar:" + it.key }
         for ((key, value) in all) {

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shared page pieces (docs/clients/phone-pages.md): form sheet, list scaffold, confirm delete, text editor, trigger editor. -->
+<resources>
+    <string name="kit_search_hint">Search</string>
+    <string name="kit_filter_all">All</string>
+    <string name="kit_load_more">Load more</string>
+    <string name="kit_empty">Nothing here yet</string>
+    <string name="kit_no_matches">Nothing matches</string>
+    <string name="kit_more_actions">More actions</string>
+    <string name="kit_delete">Delete</string>
+    <string name="kit_delete_confirm">Delete %1$s?</string>
+    <string name="kit_delete_body">This cannot be undone.</string>
+    <string name="kit_show_secret">Show</string>
+    <string name="kit_hide_secret">Hide</string>
+    <string name="kit_required">Required</string>
+    <string name="kit_not_number">Enter a number</string>
+    <string name="kit_not_whole">Enter a whole number</string>
+    <string name="kit_too_small">At least %1$s</string>
+    <string name="kit_too_large">At most %1$s</string>
+    <string name="kit_not_option">Choose one of the options</string>
+    <string name="kit_choose">Choose</string>
+    <string name="kit_edit">Edit</string>
+    <string name="kit_preview">Preview</string>
+    <string name="kit_revert">Revert</string>
+    <string name="kit_reload">Reload</string>
+    <string name="kit_saved">Saved</string>
+    <string name="kit_changed_elsewhere">This changed somewhere else since you opened it. Reload to see the new version.</string>
+    <string name="kit_trigger_cron">Cron</string>
+    <string name="kit_trigger_every">Every</string>
+    <string name="kit_trigger_once">Once</string>
+    <string name="kit_trigger_expression">Cron expression</string>
+    <string name="kit_trigger_expression_help">Five fields: minute, hour, day of month, month, day of week.</string>
+    <string name="kit_trigger_minutes">Minutes</string>
+    <string name="kit_trigger_hours">Hours</string>
+    <string name="kit_trigger_days">Days</string>
+    <string name="kit_trigger_date">Date (YYYY-MM-DD)</string>
+    <string name="kit_trigger_time">Time (HH:MM)</string>
+    <string name="kit_trigger_timezone">Time zone</string>
+    <string name="kit_trigger_zone_search">Search time zones</string>
+    <string name="kit_trigger_next">Next runs</string>
+    <string name="kit_trigger_never">With this trigger it would not run.</string>
+    <string name="kit_trigger_bad_cron">A cron expression has five fields.</string>
+    <string name="kit_trigger_bad_every">Enter a whole number, 1 or more.</string>
+    <string name="kit_trigger_bad_when">Enter a date and a time.</string>
+    <string name="kit_trigger_bad_zone">Unknown time zone.</string>
+    <string name="kit_trigger_hourly">Every hour</string>
+    <string name="kit_trigger_daily">Daily at 09:00</string>
+    <string name="kit_trigger_weekdays">Weekdays at 09:00</string>
+    <string name="kit_trigger_weekly">Mondays at 09:00</string>
+    <string name="kit_trigger_in_hour">In an hour</string>
+    <string name="kit_trigger_tomorrow">Tomorrow at 09:00</string>
+</resources>

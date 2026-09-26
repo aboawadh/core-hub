@@ -2,6 +2,8 @@ package hub.core.android.nav
 
 import hub.core.android.generated.SurfaceRoutes
 import hub.core.android.generated.Terms
+import hub.core.android.repoRoot
+import hub.core.android.ui.screens.PageRegistry
 import hub.core.android.ui.screens.SearchHits
 import hub.core.android.ui.screens.SettingsList
 import java.io.File
@@ -112,6 +114,36 @@ class NavigationParityTest {
             listOf("agent_skills", "agent_mcp", "agent_memory", "agent_jobs", "agent_channels", "agent_plugins", "agent_settings"),
             Screens.agentPages(listOf("plugins", "channels", "jobs", "memory", "mcp", "skills"), configurable = true),
         )
+    }
+
+    @Test fun `the page registry names every Settings and agent page once, in the manifest's order`() {
+        assertEquals(Screens.settingsTabs + Screens.settingsManagement + Screens.settingsTools, PageRegistry.settings.map { it.id })
+        assertEquals(list("agentLevel").filter { it in ids }, PageRegistry.agent.map { it.id })
+        assertEquals(PageRegistry.settings.filter { it.native }.map { it.id }.toSet(), SettingsList.native)
+    }
+
+    /**
+     * docs/clients/phone-pages.md: a page's entry lives in its page's file; `native = false` and the
+     * web fallback go together, so a batch that draws a page cannot forget to flip it (or the other way).
+     */
+    @Test fun `a page is native exactly when its entry does not draw the web fallback`() {
+        val screens = File(repoRoot, "apps/android/app/src/main/java/hub/core/android/ui/screens")
+        val entry = Regex("""(SettingsPageEntry|AgentPageEntry)\("([a-z_]+)"""")
+        val found = mutableMapOf<String, Boolean>()
+        screens.walkTopDown().filter { it.extension == "kt" }.forEach { file ->
+            val text = file.readText()
+            entry.findAll(text).filter { !text.substring(0, it.range.first).trimEnd().endsWith("class") }.forEach { m ->
+                val end = text.indexOf("\n\n", m.range.last).let { if (it < 0) text.length else it }
+                val declaration = text.substring(m.range.first, end)
+                val id = m.groupValues[2]
+                val native = !declaration.contains("native = false")
+                assertFalse("$id is declared twice", id in found)
+                found[id] = native
+                assertEquals("${file.name}: $id native=$native but ${if (native) "draws" else "does not draw"} OnTheWebPage", native, !declaration.contains("OnTheWebPage("))
+            }
+        }
+        val registry = (PageRegistry.settings.map { it.id to it.native } + PageRegistry.agent.map { it.id to it.native }).toMap()
+        assertEquals(registry, found)
     }
 
     @Test fun `every Android path resolves to its destination`() {

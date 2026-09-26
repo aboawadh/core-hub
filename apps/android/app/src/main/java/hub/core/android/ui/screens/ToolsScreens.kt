@@ -282,3 +282,6 @@ private fun decimal(value: BigDecimal): String = value.setScale(1, RoundingMode.
 
 /** A share the hub measured, or a dash when it could not: never a zero it did not see. */
 private fun percent(value: BigDecimal?): String = value?.let { "${decimal(it)}%" } ?: "—"
+
+internal val logsPage = SettingsPageEntry("logs") { LogsPage() }
+internal val performancePage = SettingsPageEntry("performance") { PerformancePage() }
