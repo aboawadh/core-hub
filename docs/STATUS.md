@@ -604,6 +604,23 @@ its approval.
   Hermes's hide-ids switch for admins as on the web. The contract has no delete for a notice and no
   list of browser sign-ins, so neither is offered. Android: JVM tests against a scripted hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Rooms management on both phones** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-rooms.md`, apps night batch 7), as the web's Rooms page has
+  it: the rooms list has **Active | Archived** and a **long press** on a room renames, archives or
+  brings back, or deletes it (its manager; delete after a question) or leaves it (anyone else, after a
+  question). The room's **«⋯»** in the top bar: rename, **room settings** (@all, agents passing the
+  turn and the most passes in a row), **clear the context** (after a question), archive, delete — or
+  leave. The members sheet **adds an agent** (agent, name in the room, role, instructions, model),
+  **edits a seat, makes it lead, removes it** (after a question), and shows the room's **summary**
+  (summarise now, edit by hand). Over the composer a strip says an agent passed the turn, or that the
+  guard stopped a pass, with **One more round**. A `room.updated` no longer takes the manager's
+  controls and the invite code away on the phones (the event is the same for every member). Not on
+  the phones: the web's "project reporting here" (it needs `report_room_id: null` to unlink) and
+  clearing a seat's model back to the agent's own (needs an explicit `null`, contract §114 — role and
+  instructions clear already); "no limit" on passes is refused by the hub until the phones' clients
+  send `max_depth: null` (§114, in progress the same night); seats have no order in the contract, so there is no reorder on any
+  client. Android: JVM tests (rules, reducer, requests against a scripted hub) and a Robolectric
+  picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
