@@ -1,5 +1,5 @@
 # أدوات المحادثة في تطبيقَي الجوال (الدفعة 1)
-المسؤول: twuijri · الفرع: night/apps-chat-controls · الحالة: review
+المسؤول: twuijri · الفرع: night/apps-chat-controls · الحالة: done
 
 ## المشكلة والهدف
 قائمة الفجوات (`apps-gap-list.md` §1، الدفعة 1): المحادثة الجديدة والمحادثة في الآيفون والأندرويد ينقصها ما يقدّمه الويب:
@@ -80,6 +80,10 @@ Test Case '-[CoreHubTests.ChatControlsTests testTheApprovalsChipReadsTheAgentsOw
 Test Case '-[CoreHubTests.ChatControlsTests testTheChatsMenuOffersWhatThisChatCanDo]' passed
 Test Case '-[CoreHubTests.ChatControlsTests testTheModelChipOffersTheVisibleChatModelsByTheirKey]' passed
 ```
+
+CI على #181 بعد الدمج (الالتزام `ccab6b74`، مع دمج المهام I): كل الفحوص نجحت — Android build, unit tests, lint (4m19s)، Build and
+test on the iOS simulator (6m50s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys،
+Change record، Docker، Desktop، Installers ×3، db:generate + db:migrate.
 
 ## المخاطر والرجوع
 - الكتالوج يُقرأ كاملًا (حتى 10 صفحات × 200) عند فتح المحادثة، ويُحفظ لكل بروفايل في الآيفون حتى لا تتأخر الشريحة.
