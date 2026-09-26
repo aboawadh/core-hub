@@ -100,15 +100,21 @@ object ChatControls {
     /** What a rename sends: the trimmed title, at most 200 characters; empty is not a title. */
     fun renameTitle(typed: String): String? = typed.trim().takeIf { it.isNotEmpty() }?.take(200)
 
-    enum class Action { RENAME, PIN, UNPIN, ARCHIVE, UNARCHIVE, FORK, COMPRESS, EXPORT, DELETE }
+    /** What «Default model» sends: `model: null` (contract decision §114); a model is sent by its key. */
+    fun modelPatch(value: String?): SessionPatch =
+        if (value == null) SessionPatch(sendNull = setOf(SessionPatch.Clearable.MODEL)) else SessionPatch(model = value)
+
+    enum class Action { RENAME, AUTO_TITLE, PIN, UNPIN, ARCHIVE, UNARCHIVE, FORK, COMPRESS, EXPORT, DELETE }
 
     /**
      * The chat's own menu, in order. The global agent's conversation is not a chat of the list
-     * (DECISIONS §46): it is never renamed, pinned, archived, forked or deleted from here.
+     * (DECISIONS §46): it is never renamed, pinned, archived, forked or deleted from here. A chat
+     * with a title can give the naming back to the hub ([Action.AUTO_TITLE]).
      */
-    fun actions(pinned: Boolean, archived: Boolean, globalAgent: Boolean, canCompress: Boolean, canExport: Boolean = true): List<Action> = buildList {
+    fun actions(pinned: Boolean, archived: Boolean, globalAgent: Boolean, canCompress: Boolean, canExport: Boolean = true, titled: Boolean = false): List<Action> = buildList {
         if (!globalAgent) {
             add(Action.RENAME)
+            if (titled) add(Action.AUTO_TITLE)
             add(if (pinned) Action.UNPIN else Action.PIN)
             add(if (archived) Action.UNARCHIVE else Action.ARCHIVE)
             add(Action.FORK)
@@ -118,8 +124,12 @@ object ChatControls {
         if (!globalAgent) add(Action.DELETE)
     }
 
-    /** The patch an action sends; the other fields stay out (a merge-patch changes only what it names). */
+    /**
+     * The patch an action sends; the other fields stay out (a merge-patch changes only what it names).
+     * «Name it automatically» sends `title: null`: the hub renames the chat from its first turn (§26).
+     */
     fun patch(action: Action): SessionPatch? = when (action) {
+        Action.AUTO_TITLE -> SessionPatch(sendNull = setOf(SessionPatch.Clearable.TITLE))
         Action.PIN -> SessionPatch(pinned = true)
         Action.UNPIN -> SessionPatch(pinned = false)
         Action.ARCHIVE -> SessionPatch(archived = true)

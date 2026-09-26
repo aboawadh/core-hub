@@ -3,7 +3,6 @@ package hub.core.android.parity
 import hub.core.android.R
 import hub.core.android.data.HubApis
 import hub.core.android.data.HubError
-import hub.core.android.data.ScheduleBodies
 import hub.core.android.ui.components.TriggerRules
 import hub.core.android.ui.screens.ScheduleOps
 import hub.core.android.ui.screens.ScheduleProblem
@@ -170,27 +169,6 @@ class SchedulesTest {
         assertEquals(JobStatus.QUEUED, run("queued", waiting = true, finished = null).status)
     }
 
-    @Test fun `a trigger and a target get their null fields and other bodies pass untouched`() {
-        val write = ScheduleWrite(
-            name = "Every 15",
-            trigger = ScheduleTrigger(kind = ScheduleTrigger.Kind.INTERVAL, timezone = "UTC", everyMinutes = 15),
-            target = ScheduleTarget(kind = ScheduleTarget.Kind.AGENT_PROMPT, skills = emptyList(), agentId = claudeId, prompt = "Ping"),
-        )
-        val plain = json.encodeToString(ScheduleWrite.serializer(), write)
-        assertFalse("the generated body leaves it out", plain.contains("expression"))
-        val filled = kotlinx.serialization.json.Json.parseToJsonElement(ScheduleBodies.complete(plain)!!).jsonObject
-        val trigger = filled["trigger"]!!.jsonObject
-        assertEquals(JsonNull, trigger["expression"])
-        assertEquals(JsonNull, trigger["run_at"])
-        assertEquals("15", trigger["every_minutes"]!!.jsonPrimitive.content)
-        val target = filled["target"]!!.jsonObject
-        listOf("model", "provider", "workflow_id", "input").forEach { assertEquals(it, JsonNull, target[it]) }
-        assertEquals("Ping", target["prompt"]!!.jsonPrimitive.content)
-        assertNull(ScheduleBodies.complete("""{"enabled":false}"""))
-        assertNull(ScheduleBodies.complete("""{"trigger":{"kind":"task","id":"T1"}}"""))
-        assertNull(ScheduleBodies.complete("not json"))
-    }
-
     // ------------------------------------------------------------------ the calls, against a scripted hub
 
     private val server = MockWebServer()
@@ -257,6 +235,31 @@ class SchedulesTest {
         val next = ops().preview("work", TriggerRules.build(TriggerRules.draft(null, "UTC"))!!)
         assertEquals(2, next.size)
         assertTrue(bodies.last(), bodies.last().contains("\"every_minutes\":null"))
+    }
+
+    @Test fun `an edit carries its trigger and target whole, and a plain patch gains no nulls`() = runTest {
+        // Contract decision §114: the generated client writes a required nullable field as
+        // `null` (no per-app interceptor any more), and leaves out what a patch did not name.
+        val write = ScheduleWrite(
+            name = "Every 15",
+            trigger = ScheduleTrigger(kind = ScheduleTrigger.Kind.INTERVAL, timezone = "UTC", everyMinutes = 15),
+            target = ScheduleTarget(kind = ScheduleTarget.Kind.AGENT_PROMPT, skills = emptyList(), agentId = claudeId, prompt = "Ping"),
+        )
+        ops().update(schedule(), write).getOrThrow()
+        assertEquals("PATCH", requests.last().method)
+        val sent = kotlinx.serialization.json.Json.parseToJsonElement(bodies.last()).jsonObject
+        assertEquals(setOf("name", "trigger", "target"), sent.keys)
+        val trigger = sent["trigger"]!!.jsonObject
+        assertEquals(JsonNull, trigger["expression"])
+        assertEquals(JsonNull, trigger["run_at"])
+        assertEquals("15", trigger["every_minutes"]!!.jsonPrimitive.content)
+        assertFalse("read-only and optional: left out", "display" in trigger)
+        val target = sent["target"]!!.jsonObject
+        listOf("model", "provider", "workflow_id", "input").forEach { assertEquals(it, JsonNull, target[it]) }
+        assertEquals("Ping", target["prompt"]!!.jsonPrimitive.content)
+
+        ops().setEnabled(schedule(), false).getOrThrow()
+        assertEquals("""{"enabled":false}""", bodies.last())
     }
 
     @Test fun `the list, the history, run now, pause, edit and delete each go to the schedule's profile`() = runTest {

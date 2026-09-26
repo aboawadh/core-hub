@@ -126,8 +126,8 @@ object TaskRules {
         mapOf("title" to title, "description" to description.orEmpty(), "priority" to priority.value, "project" to projectId)
 
     /**
-     * Only what changed, or null when nothing did. A cleared description is sent as empty text:
-     * the generated client leaves a null field out, so it cannot send `null`.
+     * Only what changed, or null when nothing did. A cleared description is sent as `null`
+     * (contract decision §114), which the hub stores as no description.
      */
     fun patch(original: Map<String, String>, values: Map<String, String>): TaskPatch? {
         val title = values["title"].orEmpty().trim().takeIf { it.isNotEmpty() && it != original["title"] }
@@ -135,7 +135,11 @@ object TaskRules {
         val priority = values["priority"]?.takeIf { it != original["priority"] }?.let { raw -> TaskPriority.entries.firstOrNull { it.value == raw } }
         val project = values["project"]?.takeIf { it.isNotEmpty() && it != original["project"] }
         if (title == null && description == null && priority == null && project == null) return null
-        return TaskPatch(title = title, description = description, priority = priority, projectId = project)
+        val cleared = description != null && description.isBlank()
+        return TaskPatch(
+            title = title, description = description?.takeUnless { cleared }, priority = priority, projectId = project,
+            sendNull = if (cleared) setOf(TaskPatch.Clearable.DESCRIPTION) else emptySet(),
+        )
     }
 
     /**

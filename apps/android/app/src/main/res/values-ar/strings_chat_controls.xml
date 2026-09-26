@@ -35,6 +35,7 @@
     <string name="chat_controls_folder_bad_name">اسم مجلد فقط، لا مسار.</string>
     <string name="chat_controls_rename">إعادة التسمية</string>
     <string name="chat_controls_rename_title">اسم المحادثة</string>
+    <string name="chat_controls_auto_title">تسمية تلقائية</string>
     <string name="chat_controls_pin">تثبيت</string>
     <string name="chat_controls_unpin">إلغاء التثبيت</string>
     <string name="chat_controls_archive">أرشفة</string>

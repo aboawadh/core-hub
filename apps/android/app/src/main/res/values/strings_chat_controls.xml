@@ -35,6 +35,7 @@
     <string name="chat_controls_folder_bad_name">A folder name, not a path.</string>
     <string name="chat_controls_rename">Rename</string>
     <string name="chat_controls_rename_title">Chat name</string>
+    <string name="chat_controls_auto_title">Name it automatically</string>
     <string name="chat_controls_pin">Pin</string>
     <string name="chat_controls_unpin">Unpin</string>
     <string name="chat_controls_archive">Archive</string>

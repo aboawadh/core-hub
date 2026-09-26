@@ -51,12 +51,19 @@ final class TaskDetailTests: XCTestCase {
         XCTAssertEqual(patch?.priority, .urgent)
         XCTAssertNil(patch?.description)
         XCTAssertNil(patch?.projectId)
-        // A cleared description is sent as empty text; another project by its id.
+        XCTAssertEqual(patch?.sendNull, [], "an untouched description stays out")
+        // A cleared description is sent as `null` (§114); another project by its id.
         values = original
         values["description"] = ""
         values["project"] = "P2"
-        XCTAssertEqual(TaskRules.patch(from: original, to: values)?.description, "")
-        XCTAssertEqual(TaskRules.patch(from: original, to: values)?.projectId, "P2")
+        let cleared = TaskRules.patch(from: original, to: values)
+        XCTAssertNil(cleared?.description)
+        XCTAssertEqual(cleared?.sendNull, [.description])
+        XCTAssertEqual(cleared?.projectId, "P2")
+        let body = try? JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(XCTUnwrap(cleared))) as? [String: Any]
+        XCTAssertTrue(body?["description"] is NSNull)
+        XCTAssertEqual(body?["project_id"] as? String, "P2")
+        XCTAssertNil(body?["title"])
         // A title emptied is not sent (the form refuses it first).
         values = original
         values["title"] = "   "

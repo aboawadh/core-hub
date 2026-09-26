@@ -58,15 +58,22 @@ enum TaskRules {
         ["title": title, "description": description ?? "", "priority": priority.rawValue, "project": projectID]
     }
 
-    /// Only what changed, or nil when nothing did. A cleared description is sent as empty text:
-    /// the generated client leaves a nil field out, so it cannot send `null`.
+    /// Only what changed, or nil when nothing did. A cleared description is sent as `null`
+    /// (contract decision §114), which the hub stores as no description.
     static func patch(from original: [String: String], to values: [String: String]) -> TaskPatch? {
         var patch = TaskPatch()
         var changed = false
         let title = (values["title"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !title.isEmpty, title != original["title"] { patch.title = title; changed = true }
         let description = values["description"] ?? ""
-        if description != (original["description"] ?? "") { patch.description = description; changed = true }
+        if description != (original["description"] ?? "") {
+            if description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                patch.sendNull.insert(.description)
+            } else {
+                patch.description = description
+            }
+            changed = true
+        }
         if let raw = values["priority"], raw != original["priority"], let priority = TaskPriority(rawValue: raw) {
             patch.priority = priority
             changed = true

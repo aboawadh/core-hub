@@ -38,6 +38,7 @@
     "folder_bad_name": "A folder name, not a path.",
     "rename": "Rename",
     "rename_title": "Chat name",
+    "auto_title": "Name it automatically",
     "pin": "Pin",
     "unpin": "Unpin",
     "archive": "Archive",
