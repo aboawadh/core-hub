@@ -44,7 +44,8 @@ class HubApis(hub: String, client: OkHttpClient) {
     val sessions = SessionsApi(base, client)
     val agents = AgentsApi(base, client)
     val tasks = TasksApi(base, client)
-    val schedules = SchedulesApi(base, client)
+    /** A schedule's trigger and target go with their `null` fields ([ScheduleBodies]). */
+    val schedules = SchedulesApi(base, client.newBuilder().addInterceptor(ScheduleBodies).build())
     val notify = NotifyApi(base, client)
     val rooms = RoomsApi(base, client)
     val updates = UpdatesApi(base, client)
@@ -63,6 +64,8 @@ data class HubError(
     val reason: String? = null,
     /** `details.max_bytes` of a `413`: the most the hub takes. */
     val maxBytes: Long? = null,
+    /** `details.timezone`, where the hub names the zone it needs (a Hermes schedule's cron). */
+    val timezone: String? = null,
 ) : Exception(text ?: code) {
     val offline: Boolean get() = status == 0
 
@@ -85,12 +88,17 @@ data class HubError(
             return ((obj?.get("details") as? JsonObject)?.get("max_bytes") as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
         }
 
+        fun timezoneOf(body: String?): String? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("timezone") as? JsonPrimitive)?.contentOrNull
+        }
+
         fun from(error: Throwable): HubError = when (error) {
             is HubError -> error
             is ClientException -> {
                 val body = (error.response as? ClientError<*>)?.body as? String
                 val (code, text) = bodyFields(body)
-                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body))
+                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body), timezoneOf(body))
             }
             is ServerException -> {
                 val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)

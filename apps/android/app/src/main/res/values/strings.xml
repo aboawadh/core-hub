@@ -158,7 +158,6 @@
     <string name="schedules_resume">Resume</string>
     <string name="schedules_history">History</string>
     <string name="schedules_no_runs">It has not run yet.</string>
-    <string name="schedules_started">Started.</string>
     <string name="schedule_scheduled">Scheduled</string>
     <string name="schedule_running">Running</string>
     <string name="schedule_paused">Paused</string>
