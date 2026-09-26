@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tasks I (batch 2): a task opened on its own, the new-task form, edit, assign, stop, delete. iOS: i18n/tasks.*.json. -->
+<resources>
+    <string name="taskd_new_task">مهمة جديدة</string>
+    <string name="taskd_new_task_in">مهمة جديدة في %1$s</string>
+    <string name="taskd_edit">تعديل</string>
+    <string name="taskd_edit_title">تعديل المهمة</string>
+    <string name="taskd_stop">إيقاف</string>
+    <string name="taskd_assign">إسناد</string>
+    <string name="taskd_reassign">إعادة الإسناد</string>
+    <string name="taskd_unassign">إلغاء الإسناد</string>
+    <string name="taskd_assign_title">أسندها إلى وكيل</string>
+    <string name="taskd_assign_agent">الوكيل</string>
+    <string name="taskd_assign_instructions">تعليمات</string>
+    <string name="taskd_assign_instructions_help">اختيارية، لهذا التشغيل فقط.</string>
+    <string name="taskd_assign_waiting">ما زالت تنتظر: %1$s. البدء الآن لا ينتظرها.</string>
+    <string name="taskd_assign_not_started">أُسندت. لهذا الوكيل لوحته الخاصة، ويبدأ المهمة هناك.</string>
+    <string name="taskd_assign_no_agents">لا يوجد وكيل في هذا البروفايل يستطيع أخذ مهمة.</string>
+    <string name="taskd_run_queued">في الانتظار</string>
+    <string name="taskd_run_running">يعمل</string>
+    <string name="taskd_run_waiting">بانتظارك</string>
+    <string name="taskd_run_succeeded">انتهى</string>
+    <string name="taskd_run_failed">فشل</string>
+    <string name="taskd_run_cancelled">أُوقف</string>
+    <string name="taskd_form_title">العنوان</string>
+    <string name="taskd_form_description">الوصف</string>
+    <string name="taskd_form_description_help">يمكنك استخدام Markdown هنا.</string>
+    <string name="taskd_form_project">المشروع</string>
+    <string name="taskd_form_project_own">قائمة البروفايل نفسه</string>
+    <string name="taskd_form_priority">الأولوية</string>
+    <string name="taskd_form_agent">أسندها إلى</string>
+    <string name="taskd_form_agent_none">لا أحد الآن</string>
+    <string name="taskd_form_start">ابدأ الآن</string>
+    <string name="taskd_form_start_help">يبدأ الوكيل فورًا، في محادثة المهمة نفسها.</string>
+    <string name="taskd_form_create">إنشاء</string>
+    <string name="taskd_assignee">مسندة إلى</string>
+    <string name="taskd_nobody">لا أحد بعد</string>
+    <string name="taskd_agent">وكيل</string>
+    <string name="taskd_person">شخص</string>
+    <string name="taskd_due">الاستحقاق</string>
+    <string name="taskd_no_due">بلا موعد</string>
+    <string name="taskd_no_description">لا وصف.</string>
+    <string name="taskd_depends_on">تعتمد على</string>
+    <string name="taskd_dependencies_done">%1$d منها منجزة</string>
+    <string name="taskd_run">تشغيلها</string>
+    <string name="taskd_run_status">الحالة</string>
+    <string name="taskd_run_started">بدأ</string>
+    <string name="taskd_no_run">لم تُشغَّل بعد.</string>
+    <string name="taskd_hermes">هذه البطاقة من لوحة Hermes: تُجرى التغييرات هناك أولًا.</string>
+</resources>

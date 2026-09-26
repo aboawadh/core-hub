@@ -148,6 +148,10 @@ struct TaskBoardView: View {
     @State private var blocking: (task: HubTask, drop: BoardLogic.Drop)?
     @State private var reason = ""
     @State private var focused: BoardLogic.ColumnID?
+    @State private var archiving: (task: HubTask, drop: BoardLogic.Drop)?
+    /// The task open on its own (TaskDetailView), and whether a new one is being written.
+    @State private var opened: OpenedTask?
+    @State private var creating = false
 
     var body: some View {
         Group {
@@ -163,6 +167,29 @@ struct TaskBoardView: View {
         }
         .task { await load() }
         .refreshable { await load() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { creating = true } label: { LucideIcon(.plus, size: 20) }
+                    .accessibilityLabel(l10n("tasks.new_task"))
+                    .accessibilityIdentifier("tasks.new")
+            }
+        }
+        .sheet(item: $opened) { which in
+            TaskDetailView(task: which.task, openChat: openChat, changed: { Task { await load() } })
+        }
+        .sheet(isPresented: $creating) {
+            NewTaskSheet(created: { _ in Task { await load() } })
+        }
+        .alert(archiving.map { l10n("tasks.archive_confirm", ["title": $0.task.title]) } ?? "", isPresented: Binding(get: { archiving != nil }, set: { if !$0 { archiving = nil } })) {
+            Button(l10n("board.action_archive")) {
+                if let archiving {
+                    self.archiving = nil
+                    Task { await move(archiving.task, to: archiving.drop.to, reason: nil) }
+                }
+            }
+            .accessibilityIdentifier("dialog.confirm")
+            Button(l10n("common.cancel"), role: .cancel) { archiving = nil }
+        }
         .confirmationDialog(l10n("board.which"), isPresented: Binding(get: { choosing != nil }, set: { if !$0 { choosing = nil } }), titleVisibility: .visible) {
             if let choosing {
                 ForEach(choosing.options) { option in
@@ -261,7 +288,7 @@ struct TaskBoardView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(Space.s2)
                         }
                         ForEach(tasks, id: \.id) { task in
-                            BoardCard(task: task, showProfile: badges, openChat: openChat, move: { status in Task { await move(task, to: status, reason: nil) } })
+                            BoardCard(task: task, showProfile: badges, openChat: openChat, open: { opened = OpenedTask(task: task) }, choose: { drop in start(drop, task: task) })
                                 .background(GeometryReader { g in
                                     Color.clear.preference(key: CardFrames.self, value: [task.id: g.frame(in: .named(space))])
                                 })
@@ -328,6 +355,8 @@ struct TaskBoardView: View {
     private func start(_ option: BoardLogic.Drop, task: HubTask) {
         if option.transition.requiresReason {
             blocking = (task, option)
+        } else if option.transition.confirm {
+            archiving = (task, option)
         } else {
             Task { await move(task, to: option.to, reason: nil) }
         }
@@ -368,7 +397,10 @@ struct BoardCard: View {
     let task: HubTask
     let showProfile: Bool
     let openChat: (_ sessionID: String, _ profile: String) -> Void
-    let move: (TaskStatus) -> Void
+    /// Opens the task on its own (TaskDetailView).
+    let open: () -> Void
+    /// A move from the card's menu means what the same drop would: a reason for a block, a yes to archive.
+    let choose: (BoardLogic.Drop) -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
 
@@ -415,16 +447,28 @@ struct BoardCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Tone.border, lineWidth: 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .onTapGesture(perform: open)
         .contextMenu {
+            Button(l10n("tasks.detail.open"), action: open)
             if let sessionID = task.sessionId {
                 Button(l10n("tasks.open_chat")) { openChat(sessionID, task.profile) }
             }
-            Menu(l10n("tasks.move")) {
-                ForEach(TaskColumns.order.filter { $0 != task.status }, id: \.self) { status in
-                    Button(l10n("tasks.status_\(status.rawValue)")) { move(status) }
+            let moves = TaskRules.moves(from: task.status)
+            if !moves.isEmpty {
+                Menu(l10n("tasks.move")) {
+                    ForEach(moves) { drop in
+                        Button(l10n("board.action_\(drop.transition.action.rawValue)")) { choose(drop) }
+                    }
                 }
             }
         }
         .accessibilityIdentifier("task.card.\(task.id)")
     }
+}
+
+/// A task the board opened on its own (a sheet needs an identity; the generated task has none).
+struct OpenedTask: Identifiable {
+    let task: HubTask
+    var id: String { task.id }
 }

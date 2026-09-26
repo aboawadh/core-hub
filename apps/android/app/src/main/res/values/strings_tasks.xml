@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tasks I (batch 2): a task opened on its own, the new-task form, edit, assign, stop, delete. iOS: i18n/tasks.*.json. -->
+<resources>
+    <string name="taskd_new_task">New task</string>
+    <string name="taskd_new_task_in">New task in %1$s</string>
+    <string name="taskd_edit">Edit</string>
+    <string name="taskd_edit_title">Edit task</string>
+    <string name="taskd_stop">Stop</string>
+    <string name="taskd_assign">Assign</string>
+    <string name="taskd_reassign">Reassign</string>
+    <string name="taskd_unassign">Unassign</string>
+    <string name="taskd_assign_title">Give it to an agent</string>
+    <string name="taskd_assign_agent">Agent</string>
+    <string name="taskd_assign_instructions">Instructions</string>
+    <string name="taskd_assign_instructions_help">Optional, for this run only.</string>
+    <string name="taskd_assign_waiting">It still waits for: %1$s. Starting now does not wait for them.</string>
+    <string name="taskd_assign_not_started">Assigned. That agent keeps its own board and starts the task there.</string>
+    <string name="taskd_assign_no_agents">No agent in this profile can take a task.</string>
+    <string name="taskd_run_queued">Queued</string>
+    <string name="taskd_run_running">Running</string>
+    <string name="taskd_run_waiting">Waiting for you</string>
+    <string name="taskd_run_succeeded">Finished</string>
+    <string name="taskd_run_failed">Failed</string>
+    <string name="taskd_run_cancelled">Stopped</string>
+    <string name="taskd_form_title">Title</string>
+    <string name="taskd_form_description">Description</string>
+    <string name="taskd_form_description_help">Markdown works here.</string>
+    <string name="taskd_form_project">Project</string>
+    <string name="taskd_form_project_own">The profile\'s own list</string>
+    <string name="taskd_form_priority">Priority</string>
+    <string name="taskd_form_agent">Give it to</string>
+    <string name="taskd_form_agent_none">Nobody for now</string>
+    <string name="taskd_form_start">Start now</string>
+    <string name="taskd_form_start_help">The agent starts at once, in the task\'s own conversation.</string>
+    <string name="taskd_form_create">Create</string>
+    <string name="taskd_assignee">Assigned to</string>
+    <string name="taskd_nobody">Nobody yet</string>
+    <string name="taskd_agent">agent</string>
+    <string name="taskd_person">person</string>
+    <string name="taskd_due">Due</string>
+    <string name="taskd_no_due">No due date</string>
+    <string name="taskd_no_description">No description.</string>
+    <string name="taskd_depends_on">Depends on</string>
+    <string name="taskd_dependencies_done">%1$d of them done</string>
+    <string name="taskd_run">Its run</string>
+    <string name="taskd_run_status">Status</string>
+    <string name="taskd_run_started">Started</string>
+    <string name="taskd_no_run">It has not run yet.</string>
+    <string name="taskd_hermes">This card lives on Hermes\'s board: changes are made there first.</string>
+</resources>

@@ -1,45 +1,8 @@
 package hub.core.android.ui.screens
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import hub.core.android.generated.FontTokens
-import hub.core.android.ui.kit.Badge
-import hub.core.android.ui.kit.BadgeTone
-import hub.core.android.ui.kit.ButtonKind
-import hub.core.android.ui.kit.ControlSize
-import hub.core.android.ui.kit.EmptyState
-import hub.core.android.ui.kit.GroupedList
-import hub.core.android.ui.kit.HubButton
-import hub.core.android.ui.kit.HubCard
-import hub.core.android.ui.kit.HubDialog
-import hub.core.android.ui.kit.HubMenu
-import hub.core.android.ui.kit.HubRadio
-import hub.core.android.ui.kit.HubSheet
-import hub.core.android.ui.kit.Item
-import hub.core.android.ui.kit.Lucide
-import hub.core.android.ui.kit.MenuItem
-import hub.core.android.ui.kit.NoticeBox
-import hub.core.android.ui.kit.SectionTitle
-import hub.core.android.ui.kit.Spinner
-import hub.core.android.ui.kit.StatusDot
-import hub.core.android.ui.kit.ToggleRow
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,9 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -62,16 +25,18 @@ import hub.core.android.data.hubCall
 import hub.core.android.graph
 import hub.core.android.realtime.TASKS_NAMESPACE
 import hub.core.android.ui.components.ErrorNotice
-import hub.core.android.ui.components.InContentDirection
 import hub.core.android.ui.components.Loading
+import hub.core.android.ui.kit.BadgeTone
+import hub.core.android.ui.kit.EmptyState
+import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.IconKind
+import hub.core.android.ui.kit.Lucide
+import hub.core.android.ui.kit.NoticeBox
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.api.TasksApi
-import hub.core.client.model.Agent
 import hub.core.client.model.Task
-import hub.core.client.model.TaskAssign
 import hub.core.client.model.TaskColumns
 import hub.core.client.model.TaskMove
-import hub.core.client.model.TaskPriority
 import hub.core.client.model.TaskStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -87,12 +52,6 @@ object Board {
     fun columns(board: TaskColumns): List<Pair<TaskStatus, List<Task>>> =
         board.columns.filter { it.status != TaskStatus.ARCHIVED }.map { it.status to it.tasks }
 
-    /** Where a card can be moved by hand: every other column (the hub refuses what it must). */
-    fun moveTargets(task: Task): List<TaskStatus> = TaskStatus.entries.filter { it != task.status }
-
-    /** A task with an assignee that is not running can be started. */
-    fun canStart(task: Task): Boolean = task.assignee != null && task.status != TaskStatus.RUNNING && task.status != TaskStatus.DONE
-
     /** Several profiles on the board: every card carries its profile's badge (ADR 0016). */
     fun showsProfiles(board: TaskColumns): Boolean =
         board.columns.flatMap { it.tasks }.map { it.profile }.distinct().size > 1
@@ -105,6 +64,8 @@ data class TasksUi(
     val acting: Boolean = false,
     /** A short word after a drop the board refused. */
     val notice: Int? = null,
+    /** The new-task sheet is open (the top bar's + opens it). */
+    val creating: Boolean = false,
 )
 
 /**
@@ -115,6 +76,12 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
     private val _ui = MutableStateFlow(TasksUi())
     val ui: StateFlow<TasksUi> = _ui.asStateFlow()
     private var pending: Job? = null
+
+    /** A task's own calls (its detail, forms, stop, delete…), in its own profile. */
+    val ops = TaskOps { graph.store.current?.let(graph::apis) }
+
+    /** The profile a new task is made in: the one the selector is on, as on the web. */
+    val homeProfile: String? get() = graph.store.current?.profile
 
     init {
         graph.realtime.subscribeAll(TASKS_NAMESPACE)
@@ -161,16 +128,15 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun say(message: Int?) = _ui.update { it.copy(notice = message) }
 
-    fun assign(task: Task, agentId: String, start: Boolean) {
-        val s = graph.store.current ?: return
-        act { graph.apis(s).tasks.tasksAssignTask(task.profile, task.id, TaskAssign(agentId = agentId, start = start)) }
-    }
+    fun creating(open: Boolean) = _ui.update { it.copy(creating = open) }
+}
 
-    /** The agents that can take a task in its own profile. */
-    suspend fun agentsFor(task: Task): List<Agent> {
-        val s = graph.store.current ?: return emptyList()
-        return hubCall { graph.apis(s).agents.agentsList(task.profile).items }.getOrDefault(emptyList()).let(ChatAgents::startable)
-    }
+/** The top bar's +: a new task in the profile the selector is on. */
+@Composable
+fun NewTaskButton() {
+    val context = LocalContext.current
+    val vm: TasksViewModel = viewModel { TasksViewModel(context.graph) }
+    HubIconButton(Lucide.Plus, stringResource(R.string.taskd_new_task), { vm.creating(true) }, kind = IconKind.Glass, modifier = Modifier.testTag("tasks.new"))
 }
 
 @Composable
@@ -185,16 +151,6 @@ fun statusLabel(status: TaskStatus): String = stringResource(
         TaskStatus.REVIEW -> R.string.task_review
         TaskStatus.DONE -> R.string.task_done
         TaskStatus.ARCHIVED -> R.string.task_archived
-    },
-)
-
-@Composable
-private fun priorityLabel(priority: TaskPriority): String = stringResource(
-    when (priority) {
-        TaskPriority.LOW -> R.string.priority_low
-        TaskPriority.HIGH -> R.string.priority_high
-        TaskPriority.URGENT -> R.string.priority_urgent
-        else -> R.string.priority_normal
     },
 )
 
@@ -213,12 +169,6 @@ fun statusColor(status: TaskStatus): androidx.compose.ui.graphics.Color {
     }
 }
 
-private fun priorityTone(priority: TaskPriority): BadgeTone = when (priority) {
-    TaskPriority.URGENT -> BadgeTone.Danger
-    TaskPriority.HIGH -> BadgeTone.Warning
-    else -> BadgeTone.Neutral
-}
-
 /**
  * Tasks on the phone, as on iOS: the board's columns one under another — each titled with its
  * colour and count — and a card per task (title, profile, priority, who has it, the latest line).
@@ -230,7 +180,6 @@ fun TasksScreen(shell: ShellViewModel, onOpenChat: (sessionId: String, profile: 
     val vm: TasksViewModel = viewModel { TasksViewModel(context.graph) }
     val ui by vm.ui.collectAsState()
     val board = ui.board
-    val t = LocalTokens.current
     var opened by remember { mutableStateOf<Task?>(null) }
     Column(Modifier.fillMaxSize()) {
         ui.error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
@@ -248,77 +197,22 @@ fun TasksScreen(shell: ShellViewModel, onOpenChat: (sessionId: String, profile: 
         TaskBoard(board, Board.showsProfiles(board), shell::profileName, vm, onOpen = { opened = it })
     }
     opened?.let { task ->
-        HubSheet(onDismiss = { opened = null }) {
-            TaskSheet(task, vm, ui.acting, onOpenChat = { id -> opened = null; onOpenChat(id, task.profile) }, onDone = { opened = null })
-        }
+        TaskDetailSheet(
+            task, vm.ops, board?.let(Board::showsProfiles) == true, shell::profileName,
+            onOpenChat = { id, profile -> opened = null; onOpenChat(id, profile) },
+            onChanged = vm::reload,
+            onDismiss = { opened = null },
+        )
     }
-}
-
-/** A task's sheet: what it is and where it stands, then one primary action and the others beside it. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TaskSheet(task: Task, vm: TasksViewModel, acting: Boolean, onOpenChat: (String) -> Unit, onDone: () -> Unit) {
-    val t = LocalTokens.current
-    var moveOpen by remember { mutableStateOf(false) }
-    var assigning by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("task.sheet"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        InContentDirection(task.title) { Text(task.title, fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.SemiBold) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Badge(
-                statusLabel(task.status), dot = true,
-                tone = when (task.status) { TaskStatus.BLOCKED -> BadgeTone.Danger; TaskStatus.RUNNING -> BadgeTone.Success; TaskStatus.REVIEW -> BadgeTone.Review; else -> BadgeTone.Neutral },
-            )
-            Badge(priorityLabel(task.priority), tone = priorityTone(task.priority))
-            task.assignee?.let { Badge(it.name, tone = BadgeTone.Info) }
-        }
-        task.description?.takeIf { it.isNotBlank() }?.let { d -> InContentDirection(d) { Text(d, fontSize = FontTokens.sizeSm.sp) } }
-        (task.blockedReason ?: task.statusReason)?.let { NoticeBox(it, BadgeTone.Danger) }
-        // What it waits for and whether it went quiet (contract decision §93).
-        BoardRules.waitingOn(task).takeIf { it.isNotEmpty() }?.let { titles ->
-            NoticeBox(stringResource(R.string.board_waiting_on_titles, titles.joinToString("، ".takeIf { LocalContext.current.graph.prefs.effectiveLanguage == hub.core.android.AppLanguage.AR } ?: ", ")), BadgeTone.Warning)
-        }
-        if (BoardRules.stuck(task)) NoticeBox(stringResource(R.string.board_stuck_body, localTime(task.stuckSince!!)), BadgeTone.Danger)
-        task.latestSummary?.let { s -> InContentDirection(s) { Text(s, color = t.textMuted, fontSize = FontTokens.sizeSm.sp) } }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-            if (Board.canStart(task)) {
-                HubButton(stringResource(R.string.tasks_start), { vm.assign(task, task.assignee!!.id, start = true); onDone() }, size = ControlSize.Md, icon = Lucide.Play, enabled = !acting)
-            }
-            Box {
-                HubButton(stringResource(R.string.tasks_move), { moveOpen = true }, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.ChevronsUpDown, enabled = !acting)
-                HubMenu(moveOpen, { moveOpen = false }) {
-                    Board.moveTargets(task).forEach { status ->
-                        MenuItem(statusLabel(status), { moveOpen = false; vm.move(task, status); onDone() })
-                    }
-                }
-            }
-            HubButton(stringResource(R.string.tasks_assign), { assigning = true }, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.UserPlus, enabled = !acting)
-            task.sessionId?.let { id ->
-                HubButton(stringResource(R.string.tasks_open_chat), { onOpenChat(id) }, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.MessagesSquare)
-            }
-        }
-    }
-    if (assigning) AssignDialog(task, vm, onDismiss = { assigning = false }, onAssigned = { assigning = false; onDone() })
-}
-
-@Composable
-private fun AssignDialog(task: Task, vm: TasksViewModel, onDismiss: () -> Unit, onAssigned: () -> Unit) {
-    var agents by remember { mutableStateOf<List<Agent>?>(null) }
-    var chosen by remember { mutableStateOf(task.assignee?.id) }
-    var start by remember { mutableStateOf(true) }
-    LaunchedEffect(task.id) { agents = vm.agentsFor(task) }
-    HubDialog(onDismiss, stringResource(R.string.tasks_assign)) {
-        when (val list = agents) {
-            null -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { Spinner(20.dp) }
-            else -> GroupedList {
-                list.forEach { a ->
-                    Item(a.name, onClick = { chosen = a.id }, trailing = { HubRadio(a.id == chosen) })
-                }
-            }
-        }
-        ToggleRow(stringResource(R.string.tasks_start_now), start, { start = it })
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-            HubButton(stringResource(R.string.cancel), onDismiss, kind = ButtonKind.Secondary, size = ControlSize.Md)
-            HubButton(stringResource(R.string.tasks_assign), { chosen?.let { vm.assign(task, it, start); onAssigned() } }, size = ControlSize.Md, enabled = chosen != null)
-        }
+    val home = vm.homeProfile
+    if (ui.creating && home != null) {
+        val many by shell.profiles.collectAsState()
+        NewTaskSheet(
+            home,
+            if (many.size > 1) stringResource(R.string.taskd_new_task_in, shell.profileName(home)) else stringResource(R.string.taskd_new_task),
+            vm.ops,
+            onDismiss = { vm.creating(false) },
+            onCreated = { vm.creating(false); vm.reload() },
+        )
     }
 }
