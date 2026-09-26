@@ -84,6 +84,9 @@ $ pnpm nav:check          → nav:check  OK — 39 destinations …
 ```
 صور الأندرويد: `apps/android/app/build/shots/schedules/android-{schedule-new,schedule-new-options,schedule-detail,schedule-detail-dark}.png`.
 
+CI على #181 بعد الدمج (الالتزام `38452413`): كل الفحوص نجحت — Android build, unit tests, lint (7m4s)، Build and test on the iOS simulator (6m3s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Desktop، Docker، Installers ×3، db:generate + db:migrate، Change record.
+بعده التزام صغير في الآيفون (اختيار الوكيل الافتراضي حين تصل قائمة الوكلاء بعد فتح النموذج)، ونتيجته في CI الـPR نفسه.
+
 الاختبارات الجديدة تفشل على الشيفرة القديمة: لا `ScheduleRules`/`ScheduleOps`/`ScheduleBodies` فيها، وجسم الإنشاء
 والمعاينة فيها يخلو من `"every_minutes":null` الذي يتحقق منه الاختبار.
 
