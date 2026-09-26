@@ -11,6 +11,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +48,7 @@ import hub.core.android.ui.kit.MenuItem
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.HandoffChain
 import hub.core.client.model.HandoffPolicy
+import hub.core.client.model.Project
 import hub.core.client.model.RoomMemory
 import hub.core.client.model.RoomPatch
 import hub.core.client.model.Seat
@@ -90,6 +93,7 @@ fun RoomMenuButton(vm: RoomViewModel, ui: RoomUi) {
     if (actions.isEmpty()) return
     var open by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<RoomManage.Action?>(null) }
+    val scope = rememberCoroutineScope()
     Box {
         HubIconButton(Lucide.Ellipsis, stringResource(R.string.rooms_manage_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("room.menu"))
         HubMenu(open, { open = false }) {
@@ -100,6 +104,10 @@ fun RoomMenuButton(vm: RoomViewModel, ui: RoomUi) {
                         when (action) {
                             RoomManage.Action.ARCHIVE -> vm.change(RoomPatch(archived = true))
                             RoomManage.Action.UNARCHIVE -> vm.change(RoomPatch(archived = false))
+                            RoomManage.Action.SETTINGS -> scope.launch {
+                                vm.loadProjects()
+                                pending = action
+                            }
                             else -> pending = action
                         }
                     },
@@ -111,7 +119,7 @@ fun RoomMenuButton(vm: RoomViewModel, ui: RoomUi) {
     val done = { pending = null }
     when (pending) {
         RoomManage.Action.RENAME -> RoomRenameSheet(room.name, done) { vm.update(it) }
-        RoomManage.Action.SETTINGS -> RoomSettingsSheet(room.canMentionAll, room.handoff, done) { vm.update(it) }
+        RoomManage.Action.SETTINGS -> RoomSettingsSheet(room.canMentionAll, room.handoff, vm.projects, vm.linkedProject, done, vm::saveSettings)
         RoomManage.Action.CLEAR_CONTEXT -> RoomQuestion(
             stringResource(R.string.rooms_manage_clear_title), stringResource(R.string.rooms_manage_clear_body),
             stringResource(R.string.rooms_manage_clear_confirm), done,
@@ -149,17 +157,25 @@ fun RoomRenameSheet(current: String, onDismiss: () -> Unit, onSave: suspend (Roo
 
 /** How the room behaves: `@all`, and whether and how far agents pass the turn. */
 @Composable
-private fun RoomSettingsSheet(canMentionAll: Boolean, handoff: HandoffPolicy?, onDismiss: () -> Unit, onSave: suspend (RoomPatch) -> Result<*>) {
+private fun RoomSettingsSheet(
+    canMentionAll: Boolean, handoff: HandoffPolicy?, projects: List<Project>?, linkedProject: String?,
+    onDismiss: () -> Unit, onSave: suspend (Map<String, String>) -> Result<*>,
+) {
     FormSheet(
         stringResource(R.string.rooms_manage_settings),
         RoomManage.settingsFields(
             stringResource(R.string.rooms_manage_settings_mention_all), stringResource(R.string.rooms_manage_settings_handoff),
             stringResource(R.string.rooms_manage_settings_handoff_hint), stringResource(R.string.rooms_manage_settings_max_depth),
             stringResource(R.string.rooms_manage_settings_max_depth_hint),
+            projects,
+            RoomManage.ProjectLabels(
+                stringResource(R.string.rooms_manage_settings_project), stringResource(R.string.rooms_manage_settings_project_none),
+                stringResource(R.string.rooms_manage_settings_project_hint),
+            ),
         ),
-        RoomManage.settingsValues(canMentionAll, handoff),
+        RoomManage.settingsValues(canMentionAll, handoff, linkedProject),
         onDismiss,
-        { values -> RoomManage.settingsPatch(values, canMentionAll, handoff)?.let { onSave(it) } ?: Result.success(Unit) },
+        onSave,
         tag = "room.settings",
     )
 }

@@ -7,6 +7,8 @@ import hub.core.android.ui.screens.ChatAgents
 import hub.core.client.model.Agent
 import hub.core.client.model.HandoffChain
 import hub.core.client.model.HandoffPolicy
+import hub.core.client.model.Project
+import hub.core.client.model.ProjectWrite
 import hub.core.client.model.RoomPatch
 import hub.core.client.model.Seat
 import hub.core.client.model.SeatConfig
@@ -114,15 +116,25 @@ object RoomManage {
     }
 
     /**
-     * An edited seat, every field sent: an emptied role or instructions goes as "" (the hub keeps no
-     * text then); an emptied model is left out, since "" is not a model.
+     * An edited seat, every field sent: an emptied role, instructions or model goes as `null`, so the
+     * seat has none (and answers with the agent's own model), as on the web.
      */
-    fun seatPatch(values: Map<String, String>): SeatPatch = SeatPatch(
-        name = values.trimmed(SeatKey.NAME).ifEmpty { null },
-        description = values.trimmed(SeatKey.ROLE),
-        model = values.trimmed(SeatKey.MODEL).ifEmpty { null },
-        instructions = values.trimmed(SeatKey.INSTRUCTIONS),
-    )
+    fun seatPatch(values: Map<String, String>): SeatPatch {
+        val role = values.trimmed(SeatKey.ROLE).ifEmpty { null }
+        val instructions = values.trimmed(SeatKey.INSTRUCTIONS).ifEmpty { null }
+        val model = values.trimmed(SeatKey.MODEL).ifEmpty { null }
+        return SeatPatch(
+            name = values.trimmed(SeatKey.NAME).ifEmpty { null },
+            description = role,
+            model = model,
+            instructions = instructions,
+            sendNull = buildSet {
+                if (role == null) add(SeatPatch.Clearable.DESCRIPTION)
+                if (instructions == null) add(SeatPatch.Clearable.INSTRUCTIONS)
+                if (model == null) add(SeatPatch.Clearable.MODEL)
+            },
+        )
+    }
 
     /** The seat's second line: its role and its model (or «the agent's own model»). */
     fun seatLine(seat: Seat, defaultModel: String): String =
@@ -134,22 +146,64 @@ object RoomManage {
         const val MENTION_ALL = "mention_all"
         const val HANDOFF = "handoff"
         const val MAX_DEPTH = "max_depth"
+        const val PROJECT = "project"
     }
 
-    fun settingsFields(mentionAll: String, handoff: String, handoffHint: String, maxDepth: String, maxDepthHint: String): List<FormField> = listOf(
+    /** The project choice's «no project». */
+    const val NO_PROJECT = "none"
+
+    /** The words of the project choice, read by the screen from its strings. */
+    data class ProjectLabels(val label: String, val none: String, val hint: String)
+
+    /**
+     * The room's settings; with [projects] (when they could be read), which project reports its
+     * tasks' progress into the room.
+     */
+    fun settingsFields(
+        mentionAll: String, handoff: String, handoffHint: String, maxDepth: String, maxDepthHint: String,
+        projects: List<Project>? = null, projectLabels: ProjectLabels? = null,
+    ): List<FormField> = listOf(
         FormField(SettingsKey.MENTION_ALL, mentionAll, FormKind.Toggle),
         FormField(SettingsKey.HANDOFF, handoff, FormKind.Toggle, help = handoffHint),
         FormField(
             SettingsKey.MAX_DEPTH, maxDepth, FormKind.Number, help = maxDepthHint,
             min = BigDecimal.ONE, max = BigDecimal(20), integer = true, mono = true,
         ),
+    ) + listOfNotNull(
+        if (projects != null && projectLabels != null) {
+            FormField(
+                SettingsKey.PROJECT, projectLabels.label, FormKind.Choice, help = projectLabels.hint,
+                options = listOf(FormOption(NO_PROJECT, projectLabels.none)) + projects.map { FormOption(it.id, it.name) },
+            )
+        } else null,
     )
 
-    fun settingsValues(canMentionAll: Boolean, handoff: HandoffPolicy?): Map<String, String> = mapOf(
+    fun settingsValues(canMentionAll: Boolean, handoff: HandoffPolicy?, linkedProject: String? = null): Map<String, String> = mapOf(
         SettingsKey.MENTION_ALL to canMentionAll.toString(),
         SettingsKey.HANDOFF to (handoff?.enabled ?: true).toString(),
         SettingsKey.MAX_DEPTH to (handoff?.maxDepth?.toString() ?: ""),
+        SettingsKey.PROJECT to (linkedProject ?: NO_PROJECT),
     )
+
+    /** The project that reports into this room (one at a time, as the web links it). */
+    fun linkedProject(projects: List<Project>, roomId: String): String? = projects.firstOrNull { it.reportRoomId == roomId }?.id
+
+    /** One project write: which project, and what it is told. */
+    data class ProjectLink(val projectId: String, val write: ProjectWrite)
+
+    /**
+     * Changing the project that reports here: the one linked before stops (`report_room_id: null`),
+     * then the chosen one starts. Nothing when the choice did not change.
+     */
+    fun projectLinks(values: Map<String, String>, linked: String?, roomId: String): List<ProjectLink> {
+        val chosen = values[SettingsKey.PROJECT] ?: return emptyList()
+        val next = chosen.takeUnless { it == NO_PROJECT || it.isEmpty() }
+        if (next == linked) return emptyList()
+        return listOfNotNull(
+            linked?.let { ProjectLink(it, ProjectWrite(sendNull = setOf(ProjectWrite.Clearable.REPORT_ROOM_ID))) },
+            next?.let { ProjectLink(it, ProjectWrite(reportRoomId = roomId)) },
+        )
+    }
 
     /**
      * The settings to send. The passing-the-turn policy goes only when it changed, whole (`enabled`

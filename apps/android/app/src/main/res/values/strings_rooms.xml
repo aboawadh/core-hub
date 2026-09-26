@@ -58,4 +58,7 @@
     <string name="rooms_manage_settings_max_depth_hint">1 to 20; empty for no limit. A pass repeated in the same run always stops.</string>
     <string name="rooms_manage_settings_mention_all">Allow @all (every agent at once)</string>
     <string name="rooms_manage_unarchive">Bring back</string>
+    <string name="rooms_manage_settings_project">Project reporting here</string>
+    <string name="rooms_manage_settings_project_none">No project</string>
+    <string name="rooms_manage_settings_project_hint">When a task of this project starts or ends, the room is told.</string>
 </resources>

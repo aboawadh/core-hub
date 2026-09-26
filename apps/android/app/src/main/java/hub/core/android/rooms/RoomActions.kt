@@ -3,6 +3,7 @@ package hub.core.android.rooms
 import hub.core.android.data.HubApis
 import hub.core.android.data.HubError
 import hub.core.client.model.HandoffChain
+import hub.core.client.model.Project
 import hub.core.client.model.Room
 import hub.core.client.model.RoomMemory
 import hub.core.client.model.RoomPatch
@@ -46,6 +47,14 @@ class RoomActions(private val api: HubApis) {
 
     /** The room's handoff chains, newest first. */
     suspend fun handoffs(profile: String, roomId: String): List<HandoffChain> = api.rooms.roomsListHandoffs(profile, roomId).items
+
+    /** The profile's projects (one of them may report into the room). */
+    suspend fun projects(profile: String): List<Project> = api.tasks.tasksListProjects(profile, limit = 100).items
+
+    /** The project that reports here moves: the old one unlinked first, then the new one linked. */
+    suspend fun link(profile: String, links: List<RoomManage.ProjectLink>) {
+        for (link in links) api.tasks.tasksUpdateProject(profile, link.projectId, link.write)
+    }
 
     /** One more round for a chain the guard stopped. */
     suspend fun continueHandoff(profile: String, roomId: String, chainId: String) = api.rooms.roomsContinueHandoff(profile, roomId, chainId)

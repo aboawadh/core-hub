@@ -10,6 +10,7 @@ import hub.core.android.chat.mimeOf
 import hub.core.android.data.HubError
 import hub.core.android.data.hubCall
 import hub.core.android.rooms.RoomActions
+import hub.core.android.rooms.RoomManage
 import hub.core.android.rooms.RoomMentions
 import hub.core.android.rooms.RoomReducer
 import hub.core.android.rooms.RoomState
@@ -122,6 +123,29 @@ class RoomViewModel(
             hubCall { RoomActions(api).handoffs(profile, roomId) }
                 .onSuccess { chains -> _ui.update { it.copy(state = it.state.copy(handoffs = chains)) } }
         }
+    }
+
+    /** The profile's projects, read when the room's settings open (one of them may report here). */
+    var projects: List<hub.core.client.model.Project>? = null
+        private set
+
+    suspend fun loadProjects() {
+        val api = apis ?: return
+        projects = hubCall { RoomActions(api).projects(profile) }.getOrNull()
+    }
+
+    val linkedProject: String? get() = projects?.let { RoomManage.linkedProject(it, roomId) }
+
+    /** The room's settings form: the room's own patch, then the project that reports here. */
+    suspend fun saveSettings(values: Map<String, String>): Result<*> {
+        val api = apis ?: return Result.failure<Unit>(HubError(401, "unauthorized", null))
+        val room = _ui.value.state.room
+        RoomManage.settingsPatch(values, room?.canMentionAll == true, room?.handoff)?.let { patch ->
+            update(patch).onFailure { return Result.failure<Unit>(it) }
+        }
+        val links = RoomManage.projectLinks(values, linkedProject, roomId)
+        if (links.isEmpty()) return Result.success(Unit)
+        return hubCall { RoomActions(api).link(profile, links) }.also { loadProjects() }
     }
 
     /** Whether you made the room (the maker cannot leave it). */

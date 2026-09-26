@@ -71,12 +71,17 @@ final class RoomManageTests: XCTestCase {
         XCTAssertNil(RoomManage.seatConfig(["agent": "9"], agents: agents))
     }
 
-    func testAnEditedSeatSendsEveryFieldAndAnEmptiedRoleClearsIt() {
+    func testAnEditedSeatSendsEveryFieldAndAnEmptiedOneAsNull() throws {
         let patch = RoomManage.seatPatch(["name": " Critic ", "role": "", "instructions": " Be brief ", "model": ""])
         XCTAssertEqual(patch.name, "Critic")
-        XCTAssertEqual(patch.description, "")
+        XCTAssertNil(patch.description)
         XCTAssertEqual(patch.instructions, "Be brief")
         XCTAssertNil(patch.model)
+        XCTAssertEqual(patch.sendNull, [.description, .model])
+        let sent = try JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(patch)) as! [String: Any]
+        XCTAssertTrue(sent["model"] is NSNull)
+        XCTAssertTrue(sent["description"] is NSNull)
+        XCTAssertEqual(sent["instructions"] as? String, "Be brief")
         XCTAssertEqual(RoomManage.seatValues(seat(planner, "Planner", description: "Plans", model: "m1"), agents: [])["model"], "m1")
     }
 
@@ -90,7 +95,7 @@ final class RoomManageTests: XCTestCase {
     func testSettingsSendOnlyWhatChangedAndThePolicyWhole() {
         let policy = HandoffPolicy(enabled: true, maxDepth: 3)
         let values = RoomManage.settingsValues(canMentionAll: true, handoff: policy)
-        XCTAssertEqual(values, ["mention_all": "true", "handoff": "true", "max_depth": "3"])
+        XCTAssertEqual(values, ["mention_all": "true", "handoff": "true", "max_depth": "3", "project": "none"])
         XCTAssertNil(RoomManage.settingsPatch(values, canMentionAll: true, handoff: policy))
 
         var all = values
@@ -107,7 +112,27 @@ final class RoomManageTests: XCTestCase {
         var unlimited = values
         unlimited["max_depth"] = ""
         unlimited["handoff"] = "false"
-        XCTAssertEqual(RoomManage.settingsPatch(unlimited, canMentionAll: true, handoff: policy)?.handoff, HandoffPolicy(enabled: false, maxDepth: nil))
+        let off = RoomManage.settingsPatch(unlimited, canMentionAll: true, handoff: policy)
+        XCTAssertEqual(off?.handoff, HandoffPolicy(enabled: false, maxDepth: nil))
+        let sent = try! JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(off!)) as! [String: Any]
+        XCTAssertTrue((sent["handoff"] as? [String: Any])?["max_depth"] is NSNull)
+    }
+
+    func testTheProjectReportingHereMovesByUnlinkingTheOldOneFirst() {
+        let values = RoomManage.settingsValues(canMentionAll: true, handoff: nil, linkedProject: "p1")
+        XCTAssertEqual(values["project"], "p1")
+        XCTAssertEqual(RoomManage.projectLinks(values, linked: "p1", roomID: room), [])
+        var moved = values
+        moved["project"] = "p2"
+        XCTAssertEqual(RoomManage.projectLinks(moved, linked: "p1", roomID: room), [
+            .init(projectID: "p1", write: ProjectWrite(sendNull: [.reportRoomId])),
+            .init(projectID: "p2", write: ProjectWrite(reportRoomId: room)),
+        ])
+        moved["project"] = RoomManage.noProject
+        XCTAssertEqual(RoomManage.projectLinks(moved, linked: "p1", roomID: room), [.init(projectID: "p1", write: ProjectWrite(sendNull: [.reportRoomId]))])
+        XCTAssertEqual(RoomManage.projectLinks(moved, linked: nil, roomID: room), [])
+        XCTAssertNil(RoomManage.settingsFields(L10n(.en)).first { $0.key == "project" })
+        XCTAssertEqual(RoomManage.settingsFields(L10n(.en), projects: []).first { $0.key == "project" }?.options.map(\.value), ["none"])
     }
 
     func testTheDepthIsAWholeNumberFromOneToTwentyOrEmpty() {

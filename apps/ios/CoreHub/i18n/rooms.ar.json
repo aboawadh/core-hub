@@ -56,7 +56,10 @@
       "memory_refresh": "لخّص الآن",
       "memory_edit": "تعديل الملخّص",
       "memory_working": "يُلخِّص…",
-      "memory_failed": "تعذّر التلخيص"
+      "memory_failed": "تعذّر التلخيص",
+      "settings_project": "المشروع الذي يرسل تقاريره هنا",
+      "settings_project_none": "لا مشروع",
+      "settings_project_hint": "حين تبدأ مهمة من هذا المشروع أو تنتهي، تُبلَّغ الغرفة."
     }
   }
 }

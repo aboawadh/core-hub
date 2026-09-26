@@ -10,6 +10,7 @@ import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.Agent
 import hub.core.client.model.HandoffChain
 import hub.core.client.model.HandoffPolicy
+import hub.core.client.model.ProjectWrite
 import hub.core.client.model.RoomDetail
 import hub.core.client.model.Seat
 import hub.core.client.model.SeatConfig
@@ -158,7 +159,7 @@ class RoomManageTest {
     @Test fun `settings send only what changed, and the policy whole`() {
         val policy = HandoffPolicy(enabled = true, maxDepth = 3)
         val values = RoomManage.settingsValues(true, policy)
-        assertEquals(mapOf("mention_all" to "true", "handoff" to "true", "max_depth" to "3"), values)
+        assertEquals(mapOf("mention_all" to "true", "handoff" to "true", "max_depth" to "3", "project" to "none"), values)
         assertNull(RoomManage.settingsPatch(values, true, policy))
         val onlyAll = RoomManage.settingsPatch(values + ("mention_all" to "false"), true, policy)!!
         assertEquals(false, onlyAll.canMentionAll)
@@ -170,6 +171,13 @@ class RoomManageTest {
             HandoffPolicy(enabled = false, maxDepth = null),
             RoomManage.settingsPatch(values + ("handoff" to "false") + ("max_depth" to ""), true, policy)!!.handoff,
         )
+    }
+
+    @Test fun `no limit on passes goes as max_depth null`() = runTest {
+        server.enqueue(ok(roomJson("R", true, "AB12CD34", true, null) + "}"))
+        val patch = RoomManage.settingsPatch(mapOf("mention_all" to "true", "handoff" to "true", "max_depth" to ""), true, HandoffPolicy(true, 3))!!
+        actions().update("work", room, patch)
+        assertEquals(kotlinx.serialization.json.JsonNull, body()["handoff"]!!.jsonObject["max_depth"])
     }
 
     @Test fun `the depth is a whole number from 1 to 20, or empty`() {
@@ -266,14 +274,36 @@ class RoomManageTest {
         assertEquals(pathOf(RoomsApi("").roomsRemoveMemberRequestConfig("work", room, "m2").path), remove.requestUrl!!.encodedPath)
     }
 
-    @Test fun `an edited seat sends every field, an emptied role as empty text`() = runTest {
+    @Test fun `the project reporting here moves by unlinking the old one first`() {
+        val values = RoomManage.settingsValues(true, null, linkedProject = "p1")
+        assertEquals("p1", values["project"])
+        assertEquals(emptyList<RoomManage.ProjectLink>(), RoomManage.projectLinks(values, "p1", room))
+        val unlink = RoomManage.ProjectLink("p1", ProjectWrite(sendNull = setOf(ProjectWrite.Clearable.REPORT_ROOM_ID)))
+        assertEquals(listOf(unlink, RoomManage.ProjectLink("p2", ProjectWrite(reportRoomId = room))), RoomManage.projectLinks(values + ("project" to "p2"), "p1", room))
+        assertEquals(listOf(unlink), RoomManage.projectLinks(values + ("project" to "none"), "p1", room))
+        assertEquals(emptyList<RoomManage.ProjectLink>(), RoomManage.projectLinks(values + ("project" to "none"), null, room))
+        assertNull(RoomManage.settingsFields("a", "h", "hh", "d", "dh").firstOrNull { it.key == "project" })
+        val labels = RoomManage.ProjectLabels("Project", "No project", "hint")
+        assertEquals(listOf("none"), RoomManage.settingsFields("a", "h", "hh", "d", "dh", emptyList(), labels).first { it.key == "project" }.options.map { it.value })
+    }
+
+    @Test fun `unlinking a project sends report_room_id as null`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(500))
+        runCatching { actions().link("work", RoomManage.projectLinks(mapOf("project" to "none"), "01J8QK3ZR2W7M5N4P6T8V9X0PR", room)) }
+        val payload = body()
+        assertTrue(payload.containsKey("report_room_id"))
+        assertEquals(kotlinx.serialization.json.JsonNull, payload["report_room_id"])
+    }
+
+    @Test fun `an edited seat sends every field, an emptied one as null`() = runTest {
         server.enqueue(ok(seatJson(planner, "Critic")))
         actions().updateSeat("work", room, planner, RoomManage.seatPatch(mapOf("name" to " Critic ", "role" to "", "instructions" to "Be brief", "model" to "")))
         val sent = server.takeRequest()
         assertEquals("PATCH", sent.method)
         val payload = Json.parseToJsonElement(sent.body.readUtf8()).jsonObject
         assertEquals("Critic", payload["name"]!!.jsonPrimitive.content)
-        assertEquals("", payload["description"]!!.jsonPrimitive.content)
+        assertEquals(kotlinx.serialization.json.JsonNull, payload["description"])
+        assertEquals(kotlinx.serialization.json.JsonNull, payload["model"])
         assertEquals("Be brief", payload["instructions"]!!.jsonPrimitive.content)
     }
 

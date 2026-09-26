@@ -341,6 +341,35 @@ final class RoomModel {
         if actionError == nil { await fetchHandoffs() }
     }
 
+    /// The profile's projects, read when the room's settings open (one of them may report here).
+    private(set) var projects: [Project]?
+
+    func loadProjects() async {
+        guard let app else { return }
+        let profile = profile
+        projects = try? await app.api.call {
+            try await TasksAPI.tasksListProjects(xHubProfile: profile, limit: 100, apiConfiguration: $0)
+        }.items
+    }
+
+    var linkedProject: String? { projects.flatMap { RoomManage.linkedProject($0, roomID: roomID) } }
+
+    /// The room's settings form: the room's own patch, then the project that reports here.
+    func saveSettings(_ values: [String: String]) async throws {
+        if let patch = RoomManage.settingsPatch(values, canMentionAll: state.canMentionAll, handoff: state.handoff) {
+            try await update(patch)
+        }
+        let links = RoomManage.projectLinks(values, linked: linkedProject, roomID: roomID)
+        guard let app, !links.isEmpty else { return }
+        let profile = profile
+        for link in links {
+            _ = try await app.api.call {
+                try await TasksAPI.tasksUpdateProject(xHubProfile: profile, projectId: link.projectID, projectWrite: link.write, apiConfiguration: $0)
+            }
+        }
+        await loadProjects()
+    }
+
     /// Whether you made the room (the maker cannot leave it).
     var isOwner: Bool { state.members.contains { $0.userId == me && $0.role == .owner } }
 

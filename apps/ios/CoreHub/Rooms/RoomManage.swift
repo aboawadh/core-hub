@@ -106,16 +106,23 @@ enum RoomManage {
         )
     }
 
-    /// An edited seat, every field sent: an emptied role or instructions goes as "" (the hub keeps
-    /// no text then); an emptied model is left out, since "" is not a model.
+    /// An edited seat, every field sent: an emptied role, instructions or model goes as `null`, so
+    /// the seat has none (and answers with the agent's own model), as on the web.
     static func seatPatch(_ values: [String: String]) -> SeatPatch {
         let name = trimmed(values, SeatKey.name)
+        let role = trimmed(values, SeatKey.role)
+        let instructions = trimmed(values, SeatKey.instructions)
         let model = trimmed(values, SeatKey.model)
+        var cleared: Set<SeatPatch.Clearable> = []
+        if role.isEmpty { cleared.insert(.description) }
+        if instructions.isEmpty { cleared.insert(.instructions) }
+        if model.isEmpty { cleared.insert(.model) }
         return SeatPatch(
             name: name.isEmpty ? nil : name,
-            description: trimmed(values, SeatKey.role),
+            description: role.isEmpty ? nil : role,
             model: model.isEmpty ? nil : model,
-            instructions: trimmed(values, SeatKey.instructions)
+            instructions: instructions.isEmpty ? nil : instructions,
+            sendNull: cleared
         )
     }
 
@@ -133,10 +140,16 @@ enum RoomManage {
         static let mentionAll = "mention_all"
         static let handoff = "handoff"
         static let maxDepth = "max_depth"
+        static let project = "project"
     }
 
-    static func settingsFields(_ l10n: L10n) -> [FormField] {
-        [
+    /// The project choice's «no project».
+    static let noProject = "none"
+
+    /// The room's settings; with `projects` (when they could be read), which project reports its
+    /// tasks' progress into the room.
+    static func settingsFields(_ l10n: L10n, projects: [Project]? = nil) -> [FormField] {
+        var fields = [
             FormField(key: SettingsKey.mentionAll, label: l10n("rooms.manage.settings_mention_all"), kind: .toggle),
             FormField(key: SettingsKey.handoff, label: l10n("rooms.manage.settings_handoff"), kind: .toggle, help: l10n("rooms.manage.settings_handoff_hint")),
             FormField(
@@ -144,14 +157,47 @@ enum RoomManage {
                 help: l10n("rooms.manage.settings_max_depth_hint"), min: 1, max: 20, integer: true, mono: true
             ),
         ]
+        if let projects {
+            fields.append(FormField(
+                key: SettingsKey.project, label: l10n("rooms.manage.settings_project"), kind: .choice,
+                help: l10n("rooms.manage.settings_project_hint"),
+                options: [FormOption(value: noProject, label: l10n("rooms.manage.settings_project_none"))]
+                    + projects.map { FormOption(value: $0.id, label: $0.name) }
+            ))
+        }
+        return fields
     }
 
-    static func settingsValues(canMentionAll: Bool, handoff: HandoffPolicy?) -> [String: String] {
+    static func settingsValues(canMentionAll: Bool, handoff: HandoffPolicy?, linkedProject: String? = nil) -> [String: String] {
         [
             SettingsKey.mentionAll: canMentionAll ? "true" : "false",
             SettingsKey.handoff: (handoff?.enabled ?? true) ? "true" : "false",
             SettingsKey.maxDepth: handoff?.maxDepth.map(String.init) ?? "",
+            SettingsKey.project: linkedProject ?? noProject,
         ]
+    }
+
+    /// The project that reports into this room (one at a time, as the web links it).
+    static func linkedProject(_ projects: [Project], roomID: String) -> String? {
+        projects.first { $0.reportRoomId == roomID }?.id
+    }
+
+    /// One project write: which project, and what it is told.
+    struct ProjectLink: Equatable {
+        let projectID: String
+        let write: ProjectWrite
+    }
+
+    /// Changing the project that reports here: the one linked before stops (`report_room_id: null`),
+    /// then the chosen one starts. Nothing when the choice did not change.
+    static func projectLinks(_ values: [String: String], linked: String?, roomID: String) -> [ProjectLink] {
+        guard let chosen = values[SettingsKey.project] else { return [] }
+        let next = chosen == noProject || chosen.isEmpty ? nil : chosen
+        guard next != linked else { return [] }
+        var links: [ProjectLink] = []
+        if let linked { links.append(ProjectLink(projectID: linked, write: ProjectWrite(sendNull: [.reportRoomId]))) }
+        if let next { links.append(ProjectLink(projectID: next, write: ProjectWrite(reportRoomId: roomID))) }
+        return links
     }
 
     /// The settings to send. The passing-the-turn policy goes only when it changed, whole (`enabled`

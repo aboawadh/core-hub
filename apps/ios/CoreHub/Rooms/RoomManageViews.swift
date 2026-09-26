@@ -58,6 +58,11 @@ struct RoomMenu: View {
                         switch action {
                         case .archive: Task { await model.change(RoomPatch(archived: true)) }
                         case .unarchive: Task { await model.change(RoomPatch(archived: false)) }
+                        case .settings:
+                            Task {
+                                await model.loadProjects()
+                                pending = .settings
+                            }
                         default: pending = action
                         }
                     } label: {
@@ -98,13 +103,13 @@ private struct RoomManagement: ViewModifier {
             .sheet(isPresented: showing(.settings)) {
                 FormSheet(
                     title: l10n("rooms.manage.settings"),
-                    fields: RoomManage.settingsFields(l10n),
-                    initial: RoomManage.settingsValues(canMentionAll: model.state.canMentionAll, handoff: model.state.handoff),
+                    fields: RoomManage.settingsFields(l10n, projects: model.projects),
+                    initial: RoomManage.settingsValues(
+                        canMentionAll: model.state.canMentionAll, handoff: model.state.handoff, linkedProject: model.linkedProject
+                    ),
                     tag: "room.settings"
                 ) { values in
-                    if let patch = RoomManage.settingsPatch(values, canMentionAll: model.state.canMentionAll, handoff: model.state.handoff) {
-                        try await model.update(patch)
-                    }
+                    try await model.saveSettings(values)
                 }
             }
             .alert(l10n("rooms.manage.clear_title"), isPresented: showing(.clearContext)) {

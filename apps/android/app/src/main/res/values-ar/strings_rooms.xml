@@ -58,4 +58,7 @@
     <string name="rooms_manage_settings_max_depth_hint">من 1 إلى 20؛ فارغ بلا حدّ. تكرار تمريرة في السلسلة نفسها يوقفها دائمًا.</string>
     <string name="rooms_manage_settings_mention_all">السماح بـ@all (كل الوكلاء معًا)</string>
     <string name="rooms_manage_unarchive">إعادة من الأرشيف</string>
+    <string name="rooms_manage_settings_project">المشروع الذي يرسل تقاريره هنا</string>
+    <string name="rooms_manage_settings_project_none">لا مشروع</string>
+    <string name="rooms_manage_settings_project_hint">حين تبدأ مهمة من هذا المشروع أو تنتهي، تُبلَّغ الغرفة.</string>
 </resources>

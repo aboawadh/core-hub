@@ -56,7 +56,10 @@
       "memory_refresh": "Summarise now",
       "memory_edit": "Edit summary",
       "memory_working": "Summarising…",
-      "memory_failed": "Could not summarise"
+      "memory_failed": "Could not summarise",
+      "settings_project": "Project reporting here",
+      "settings_project_none": "No project",
+      "settings_project_hint": "When a task of this project starts or ends, the room is told."
     }
   }
 }
