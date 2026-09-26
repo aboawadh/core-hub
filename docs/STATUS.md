@@ -622,12 +622,11 @@ its approval.
   leave. The members sheet **adds an agent** (agent, name in the room, role, instructions, model),
   **edits a seat, makes it lead, removes it** (after a question), and shows the room's **summary**
   (summarise now, edit by hand). Over the composer a strip says an agent passed the turn, or that the
-  guard stopped a pass, with **One more round**. A `room.updated` no longer takes the manager's
-  controls and the invite code away on the phones (the event is the same for every member). Not on
-  the phones: the web's "project reporting here" (it needs `report_room_id: null` to unlink) and
-  clearing a seat's model back to the agent's own (needs an explicit `null`, contract §114 — role and
-  instructions clear already); "no limit" on passes is refused by the hub until the phones' clients
-  send `max_depth: null` (§114, in progress the same night); seats have no order in the contract, so there is no reorder on any
+  guard stopped a pass, with **One more round**. Room settings also choose the **project that reports
+  here** (the old one unlinked with `report_room_id: null`), and an emptied role, instructions or model
+  is sent as `null` (contract §114), so a seat goes back to the agent's own model. A `room.updated` no
+  longer takes the manager's controls and the invite code away on the phones (the event is the same
+  for every member). Seats have no order in the contract, so there is no reorder on any
   client. Android: JVM tests (rules, reducer, requests against a scripted hub) and a Robolectric
   picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
