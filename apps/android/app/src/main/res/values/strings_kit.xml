@@ -8,7 +8,7 @@
     <string name="kit_no_matches">Nothing matches</string>
     <string name="kit_more_actions">More actions</string>
     <string name="kit_delete">Delete</string>
-    <string name="kit_delete_confirm">Delete %1$s?</string>
+    <string name="kit_delete_confirm">Delete “%1$s”?</string>
     <string name="kit_delete_body">This cannot be undone.</string>
     <string name="kit_show_secret">Show</string>
     <string name="kit_hide_secret">Hide</string>
@@ -23,7 +23,6 @@
     <string name="kit_preview">Preview</string>
     <string name="kit_revert">Revert</string>
     <string name="kit_reload">Reload</string>
-    <string name="kit_saved">Saved</string>
     <string name="kit_changed_elsewhere">This changed somewhere else since you opened it. Reload to see the new version.</string>
     <string name="kit_trigger_cron">Cron</string>
     <string name="kit_trigger_every">Every</string>

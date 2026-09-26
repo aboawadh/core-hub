@@ -8,7 +8,7 @@
     <string name="kit_no_matches">لا شيء يطابق</string>
     <string name="kit_more_actions">إجراءات أخرى</string>
     <string name="kit_delete">حذف</string>
-    <string name="kit_delete_confirm">حذف %1$s؟</string>
+    <string name="kit_delete_confirm">حذف «%1$s»؟</string>
     <string name="kit_delete_body">لا يمكن التراجع عن هذا.</string>
     <string name="kit_show_secret">إظهار</string>
     <string name="kit_hide_secret">إخفاء</string>
@@ -23,7 +23,6 @@
     <string name="kit_preview">معاينة</string>
     <string name="kit_revert">تراجع</string>
     <string name="kit_reload">إعادة التحميل</string>
-    <string name="kit_saved">تم الحفظ</string>
     <string name="kit_changed_elsewhere">تغيّر هذا في مكان آخر منذ فتحته. أعد التحميل لترى النسخة الجديدة.</string>
     <string name="kit_trigger_cron">Cron</string>
     <string name="kit_trigger_every">كل</string>

@@ -82,6 +82,6 @@ fun <T> ConfirmDeleteDialog(
     }
 }
 
-/** The usual title: «Delete “name”?». */
+/** The usual title: «Delete “name”?» (the quotes are the language's own). */
 @Composable
-fun deleteTitle(name: String): String = stringResource(R.string.kit_delete_confirm, "“$name”")
+fun deleteTitle(name: String): String = stringResource(R.string.kit_delete_confirm, name)
