@@ -571,6 +571,25 @@ its approval.
   `null`). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
   detail); **iOS verified only on the CI simulator, neither tried on the owner's phones**.
   Comments, checklist, history, projects and bulk actions are part II.
+- **Schedules on the phones (both apps)** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-schedules.md`, apps night batch 3): the Schedules list reads
+  every profile page by page; **+** (iOS top bar, Android "New schedule") makes one in the selector's
+  profile with the web's form — name, when it runs (the shared trigger editor: cron with presets,
+  every N minutes/hours/days, once, time zone, and the hub's next three runs from
+  `schedules.previewTrigger`), the web's six "Common schedules", the agent (Hermes first) and its
+  prompt, and the two run options the hub keeps (run if missed, what to do while the previous run is
+  going) — not offered for Hermes, which decides them; a Hermes refusal is said in words and its
+  cron zone is offered as «Use {zone}». A schedule opens on its own: state, when, next and last run,
+  agent, prompt, channel, last error, **run now**, **pause/resume**, **edit** (sends only what
+  changed; the agent stays), **delete** (asked first), and its **history** page by page (status or
+  "waiting", on time or run now, start, how long it took, output or error, a failed delivery, a tap
+  into the run's conversation; re-read every 3 s while a run is going). An agent's **Jobs** page
+  runs, pauses/resumes and deletes its jobs (a Hermes job "goes from Hermes's scheduler too"). Fixed
+  on the way: the generated clients left the `null` fields of a trigger and a target out, which the
+  hub refuses (400), so the phones' next-run preview never worked; both apps now send them
+  (`ScheduleBodies`). Targets are agent prompts only, as on the web. Android: JVM tests against a
+  scripted hub and Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the
+  owner's phones**.
 - **Inbox and your own settings on both phones** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-inbox-settings.md`, apps night batch 4): Notifications is
   Inbox | Settings; the inbox filters All / Unread, shows the unread count, **marks all read**, a tap

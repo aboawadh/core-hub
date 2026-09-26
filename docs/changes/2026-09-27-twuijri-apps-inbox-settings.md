@@ -65,6 +65,10 @@ $ pnpm typecheck               → exit=0
 $ gh workflow run ios.yml --ref night/apps-inbox-settings   (run 36276796078)
 X OwnSettingsTests.testTheInboxMarksAtOnceAndReadsAgainWhenTheHubRefuses — XCTAssertNotNil failed
   (قراءة القائمة بعد الرفض كانت تمحو سبب الرفض؛ صُحّح في التطبيقين: السبب يبقى بعد إعادة القراءة)
+
+$ gh workflow run ios.yml --ref night/apps-inbox-settings   (run 36277459665)
+✓ Build and test on the iOS simulator
+Executed 214 tests, with 0 failures (0 unexpected)
 ```
 صور الأندرويد: `apps/android/app/build/shots/own-settings/android-{account,account-channels,display,privacy,inbox}-{light-en,dark-ar}.png`
 (نظرتُ فيها؛ صف أدوات الوارد كان يضيق فيكسر «2 unread» حرفًا حرفًا، فصار سطرين).
