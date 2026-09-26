@@ -184,7 +184,7 @@ fun RoomScreen(roomId: String, profile: String, subtitle: String?, onMenu: () ->
                     ApprovalCard(approval) { vm.respond(approval, it, null) }
                 }
             }
-            HandoffStrip(vm, ui)
+            HandoffStrip(state, vm::continueHandoff)
             state.busySeats.forEach { seat -> SeatActivity(seat, state.stepOf(seat)) { vm.stopSeat(seat) } }
             val typing = state.typing.filterKeys { id -> state.members.none { it.id == id && it.userId == me } }.values
             if (typing.isNotEmpty()) {
@@ -386,7 +386,7 @@ private fun MembersSheet(vm: RoomViewModel, ui: RoomUi, onClose: () -> Unit) {
                 }
             }
         }
-        item { hub.core.android.ui.kit.HubCard(padding = 12.dp) { RoomMemoryCard(vm, ui) } }
+        item { hub.core.android.ui.kit.HubCard(padding = 12.dp) { RoomMemoryCard(state.memory, room?.canManage == true, vm::refreshMemory, vm::putMemory) } }
         val mine = state.members.firstOrNull { it.userId == me }
         if (mine != null && mine.role != Member.Role.OWNER) {
             item {

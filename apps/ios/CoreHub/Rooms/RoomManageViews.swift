@@ -249,19 +249,19 @@ struct RoomMemorySection: View {
                     LucideLabel(l10n("rooms.manage.memory_edit"), icon: .pencil)
                 }
                 .accessibilityIdentifier("room.memory.edit")
+                .sheet(isPresented: $editing) {
+                    TextEditorSheet(
+                        title: l10n("rooms.manage.memory_edit"), initial: memory?.summary ?? "", markdown: false, tag: "room.memory.editor"
+                    ) { text in
+                        try await model.putMemory(text)
+                    }
+                }
             }
         } header: {
             HStack(spacing: Space.s2) {
                 Text(l10n("rooms.manage.memory_title"))
                 if memory?.status == .summarizing { StatusPill(text: l10n("rooms.manage.memory_working"), kind: .warn) }
                 if memory?.status == .error { StatusPill(text: l10n("rooms.manage.memory_failed"), kind: .bad) }
-            }
-        }
-        .sheet(isPresented: $editing) {
-            TextEditorSheet(
-                title: l10n("rooms.manage.memory_edit"), initial: memory?.summary ?? "", markdown: false, tag: "room.memory.editor"
-            ) { text in
-                try await model.putMemory(text)
             }
         }
     }

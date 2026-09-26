@@ -40,9 +40,9 @@ struct RoomsList: View {
             }
             AsyncContent(key: "\(app.currentProfile)#\(archived)#\(generation)") {
                 let profile = app.currentProfile
-                let archived = archived
+                let showArchived = archived
                 return try await app.api.call {
-                    try await RoomsAPI.roomsList(xHubProfile: profile, archived: archived, limit: 100, apiConfiguration: $0)
+                    try await RoomsAPI.roomsList(xHubProfile: profile, archived: showArchived, limit: 100, apiConfiguration: $0)
                 }.items
             } content: { rooms, _ in
                 VStack(alignment: .leading, spacing: 2) {

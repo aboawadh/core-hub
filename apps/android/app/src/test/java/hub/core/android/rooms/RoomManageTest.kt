@@ -48,7 +48,7 @@ class RoomManageTest {
 
     @After fun stop() = server.shutdown()
 
-    private fun actions() = RoomActions(HubApis(server.url("/").toString(), OkHttpClient()))
+    private fun actions() = RoomActions(HubApis(server.url("/").toString().trimEnd('/'), OkHttpClient()))
 
     private fun ok(body: String) = MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(body)
 
@@ -107,7 +107,7 @@ class RoomManageTest {
 
     // Actions
 
-    @Test fun `a manager renames, sets, clears, archives and deletes; a member only leaves`() {
+    @Test fun `a manager renames, sets, clears, archives and deletes, a member only leaves`() {
         val a = RoomManage.Action.entries
         assertEquals(listOf(a[0], a[1], a[2], RoomManage.Action.ARCHIVE, RoomManage.Action.DELETE), RoomManage.actions(true, false))
         assertEquals(RoomManage.Action.UNARCHIVE, RoomManage.actions(true, true)[3])

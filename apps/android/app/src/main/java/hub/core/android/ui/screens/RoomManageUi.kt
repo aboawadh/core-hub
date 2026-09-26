@@ -203,8 +203,7 @@ fun SeatFormSheet(vm: RoomViewModel, seat: Seat?, onDismiss: () -> Unit) {
 
 /** The strip over the composer: an agent passing the turn now, or a stopped pass with its one more round. */
 @Composable
-fun HandoffStrip(vm: RoomViewModel, ui: RoomUi) {
-    val state = ui.state
+fun HandoffStrip(state: hub.core.android.rooms.RoomState, onContinue: (String) -> Unit) {
     val line = RoomManage.handoffLine(state.activeChains, state.handoffs, state.seats) ?: return
     val t = LocalTokens.current
     when (line) {
@@ -222,7 +221,7 @@ fun HandoffStrip(vm: RoomViewModel, ui: RoomUi) {
             Notice(text, Tone.WARNING)
             if (line.more && state.room?.archived != true) {
                 HubButton(
-                    stringResource(R.string.rooms_manage_handoff_continue), { vm.continueHandoff(line.id) }, kind = ButtonKind.Secondary,
+                    stringResource(R.string.rooms_manage_handoff_continue), { onContinue(line.id) }, kind = ButtonKind.Secondary,
                     size = ControlSize.Sm, icon = Lucide.Play, modifier = Modifier.testTag("room.handoff.continue"),
                 )
             }
@@ -235,9 +234,8 @@ fun HandoffStrip(vm: RoomViewModel, ui: RoomUi) {
  * now or write it by hand.
  */
 @Composable
-fun RoomMemoryCard(vm: RoomViewModel, ui: RoomUi) {
+fun RoomMemoryCard(memory: RoomMemory?, canManage: Boolean, onRefresh: () -> Unit, onSave: suspend (String) -> Result<*>) {
     val t = LocalTokens.current
-    val memory = ui.state.memory
     var editing by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("room.memory"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -251,10 +249,10 @@ fun RoomMemoryCard(vm: RoomViewModel, ui: RoomUi) {
             style = TextStyle(textDirection = TextDirection.Content), modifier = Modifier.testTag("room.memory.text"),
         )
         memory?.error?.takeIf { memory.status == RoomMemory.Status.ERROR }?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.danger) }
-        if (ui.state.room?.canManage == true) {
+        if (canManage) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HubButton(
-                    stringResource(R.string.rooms_manage_memory_refresh), vm::refreshMemory, kind = ButtonKind.Secondary, size = ControlSize.Sm,
+                    stringResource(R.string.rooms_manage_memory_refresh), onRefresh, kind = ButtonKind.Secondary, size = ControlSize.Sm,
                     icon = Lucide.RefreshCw, enabled = memory?.status != RoomMemory.Status.SUMMARIZING, modifier = Modifier.testTag("room.memory.refresh"),
                 )
                 HubButton(
@@ -267,7 +265,7 @@ fun RoomMemoryCard(vm: RoomViewModel, ui: RoomUi) {
     if (editing) {
         TextEditorSheet(
             stringResource(R.string.rooms_manage_memory_edit), memory?.summary.orEmpty(), { editing = false },
-            { text -> vm.putMemory(text) }, markdown = false, tag = "room.memory.editor",
+            onSave, markdown = false, tag = "room.memory.editor",
         )
     }
 }
