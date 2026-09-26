@@ -128,6 +128,38 @@ class ChatControlsTest {
         assertEquals(200, ChatControls.renameTitle("a".repeat(250))?.length)
     }
 
+    @Test fun `default model and automatic naming send an explicit null, and nothing else does`() = runTest {
+        // Contract decision §114: an optional nullable field goes out as `null` only when listed in `sendNull`.
+        val sent = mutableListOf<String>()
+        suspend fun send(patch: SessionPatch) {
+            server.enqueue(ok(sessionJson()))
+            api().update("01J8QK3ZR2W7M5N4P6T8V9X0S1", "work", patch)
+            val request = server.takeRequest()
+            assertEquals("PATCH", request.method)
+            sent += request.body.readUtf8()
+        }
+        send(ChatControls.modelPatch(null))
+        send(ChatControls.patch(Action.AUTO_TITLE)!!)
+        send(ChatControls.modelPatch("openai/gpt-5"))
+        send(SessionPatch(pinned = true))
+        send(SessionPatch(title = "Kept", sendNull = setOf(SessionPatch.Clearable.TITLE)))
+        assertEquals(
+            listOf(
+                """{"model":null}""",
+                """{"title":null}""",
+                """{"model":"openai/gpt-5"}""",
+                """{"pinned":true}""",
+                """{"title":"Kept"}""",
+            ),
+            sent,
+        )
+        assertEquals(
+            listOf(Action.RENAME, Action.AUTO_TITLE, Action.PIN, Action.ARCHIVE, Action.FORK, Action.EXPORT, Action.DELETE),
+            ChatControls.actions(pinned = false, archived = false, globalAgent = false, canCompress = false, titled = true),
+        )
+        assertFalse(Action.AUTO_TITLE in ChatControls.actions(pinned = false, archived = false, globalAgent = true, canCompress = false, titled = true))
+    }
+
     @Test fun `compressing and steering say what happened`() {
         assertEquals(
             ChatControls.Compression.Compressed(90000, 12000),

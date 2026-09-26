@@ -5,11 +5,13 @@ import hub.core.android.data.HubError
 import hub.core.android.ui.screens.TaskFacts
 import hub.core.android.ui.screens.TaskOps
 import hub.core.android.ui.screens.TaskRules
+import hub.core.client.infrastructure.ExplicitNulls
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.Assignee
 import hub.core.client.model.RunStatus
 import hub.core.client.model.TaskAllOfExternal
 import hub.core.client.model.TaskDependencyState
+import hub.core.client.model.TaskPatch
 import hub.core.client.model.TaskPriority
 import hub.core.client.model.TaskStatus
 import kotlinx.coroutines.test.runTest
@@ -96,9 +98,15 @@ class TaskDetailTest {
         assertEquals(TaskPriority.URGENT, patch.priority)
         assertNull(patch.description)
         assertNull(patch.projectId)
-        // A cleared description is sent as empty text; another project by its id.
+        assertTrue("an untouched description stays out", patch.sendNull.isEmpty())
+        // A cleared description is sent as `null` (§114); another project by its id.
         val moved = TaskRules.patch(original, original + mapOf("description" to "", "project" to "P2"))!!
-        assertEquals("", moved.description)
+        assertNull(moved.description)
+        assertEquals(setOf(TaskPatch.Clearable.DESCRIPTION), moved.sendNull)
+        assertEquals(
+            """{"project_id":"P2","description":null}""",
+            ExplicitNulls.encodeToString(Serializer.kotlinxSerializationJson, moved),
+        )
         assertEquals("P2", moved.projectId)
         // A title emptied is not sent (the form refuses it first).
         assertNull(TaskRules.patch(original, original + mapOf("title" to "   ")))

@@ -36,7 +36,7 @@ import hub.core.client.model.AgentCapability
 import kotlinx.coroutines.launch
 
 /**
- * The conversation's «⋮» (apps batch 1): rename, pin, archive, fork into a new chat, compress
+ * The conversation's «⋮» (apps batch 1): rename, name it automatically (a chat with a title), pin, archive, fork into a new chat, compress
  * (an agent that can), export the Markdown transcript, and delete — asked first. The global agent's
  * conversation keeps only compress and export (ChatControls.actions).
  */
@@ -64,6 +64,7 @@ fun ChatMenuButton(
         archived = session?.archived == true,
         globalAgent = session?.globalAgent == true,
         canCompress = AgentCapability.COMPRESS in agent?.capabilities.orEmpty(),
+        titled = !session?.title.isNullOrEmpty(),
     )
     Box {
         HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("chat.more"))
@@ -73,8 +74,9 @@ fun ChatMenuButton(
                 when (action) {
                     ChatControls.Action.RENAME ->
                         MenuItem(stringResource(R.string.chat_controls_rename), { open = false; renaming = true }, tag, icon = Lucide.Pencil)
-                    ChatControls.Action.PIN, ChatControls.Action.UNPIN, ChatControls.Action.ARCHIVE, ChatControls.Action.UNARCHIVE -> {
+                    ChatControls.Action.AUTO_TITLE, ChatControls.Action.PIN, ChatControls.Action.UNPIN, ChatControls.Action.ARCHIVE, ChatControls.Action.UNARCHIVE -> {
                         val (label, icon) = when (action) {
+                            ChatControls.Action.AUTO_TITLE -> R.string.chat_controls_auto_title to Lucide.Sparkles
                             ChatControls.Action.PIN -> R.string.chat_controls_pin to Lucide.Pin
                             ChatControls.Action.UNPIN -> R.string.chat_controls_unpin to Lucide.PinOff
                             ChatControls.Action.ARCHIVE -> R.string.chat_controls_archive to Lucide.Archive

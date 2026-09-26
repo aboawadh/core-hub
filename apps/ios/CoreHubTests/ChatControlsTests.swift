@@ -92,6 +92,27 @@ final class ChatControlsTests: XCTestCase {
         XCTAssertEqual(ChatControls.renameTitle(String(repeating: "a", count: 250))?.count, 200)
     }
 
+    func testDefaultModelAndAutomaticNamingSendAnExplicitNullAndNothingElseDoes() throws {
+        // Contract decision §114: an optional nullable field goes out as `null` only when listed in `sendNull`.
+        func body(_ patch: SessionPatch) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(patch)) as? [String: Any])
+        }
+        let reset = try body(ChatControls.modelPatch(nil))
+        XCTAssertEqual(Array(reset.keys), ["model"])
+        XCTAssertTrue(reset["model"] is NSNull)
+        let named = try body(XCTUnwrap(ChatControls.patch(.autoTitle)))
+        XCTAssertEqual(Array(named.keys), ["title"])
+        XCTAssertTrue(named["title"] is NSNull)
+        XCTAssertEqual(try body(ChatControls.modelPatch("openai/gpt-5")) as? [String: String], ["model": "openai/gpt-5"])
+        XCTAssertEqual(try body(SessionPatch(pinned: true)) as? [String: Bool], ["pinned": true], "nothing unlisted goes out as null")
+        XCTAssertEqual(try body(SessionPatch(title: "Kept", sendNull: [.title])) as? [String: String], ["title": "Kept"], "a value wins")
+        XCTAssertEqual(
+            ChatControls.actions(pinned: false, archived: false, globalAgent: false, canCompress: false, titled: true),
+            [.rename, .autoTitle, .pin, .archive, .fork, .export, .delete]
+        )
+        XCTAssertFalse(ChatControls.actions(pinned: false, archived: false, globalAgent: true, canCompress: false, titled: true).contains(.autoTitle))
+    }
+
     func testCompressingAndSteeringSayWhatHappened() {
         let done = ChatControls.compression(SessionCompression(status: .compressed, beforeTokens: 90000, afterTokens: 12000))
         XCTAssertEqual(done, .compressed(before: 90000, after: 12000))

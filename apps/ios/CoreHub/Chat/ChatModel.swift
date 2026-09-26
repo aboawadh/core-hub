@@ -280,10 +280,11 @@ extension ChatModel {
         await change(SessionPatch(title: title))
     }
 
-    /// The chat's model from the profile's catalogue (`<provider>/<model>`).
-    func setModel(_ value: String) async {
+    /// The chat's model from the profile's catalogue (`<provider>/<model>`); `nil` goes back to
+    /// the agent's default.
+    func setModel(_ value: String?) async {
         guard value != state.model else { return }
-        await change(SessionPatch(model: value))
+        await change(ChatControls.modelPatch(value))
     }
 
     func delete() async -> Bool {

@@ -552,8 +552,9 @@ its approval.
   chat, **compress** (`sessions.compress`, agents with `compress`), export, delete after a question;
   a long press on a chat in the list offers the same plus Select. Under a reply: copy and «…» (read
   aloud, reply with `reply_to_message_id`, fork from here); a long press on your own message does the
-  same. Not possible through the generated clients yet: going back to the default model or clearing a
-  title (they drop `null` from `SessionPatch`). Android: JVM tests against a stand-in hub and
+  same. The model picker offers «Default model» on an open chat too (`model: null`), and a titled
+  chat's menu offers «Name it automatically» (`title: null`, the hub renames it) — since the explicit
+  nulls of §114 (`docs/changes/2026-09-27-twuijri-client-explicit-null.md`). Android: JVM tests against a stand-in hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **Tasks on the phones, part I (both apps)** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-tasks-1.md`): a tap on a board card opens **the task on its
@@ -567,8 +568,7 @@ its approval.
   Tasks top bar makes a new task in the selector's profile (title, Markdown description, project or
   the profile's own list, priority, optionally an agent and "start now" — the create then
   `tasks.assignTask(start)`, with an `Idempotency-Key` so a retried Save makes no second task).
-  A description cleared on the phone is sent as empty text (the generated clients cannot send
-  `null`). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
+  A description cleared on the phone is sent as `null` (§114). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
   detail); **iOS verified only on the CI simulator, neither tried on the owner's phones**.
   Comments, checklist, history, projects and bulk actions are part II.
 - **Schedules on the phones (both apps)** (since 2026-09-27,
@@ -586,8 +586,8 @@ its approval.
   into the run's conversation; re-read every 3 s while a run is going). An agent's **Jobs** page
   runs, pauses/resumes and deletes its jobs (a Hermes job "goes from Hermes's scheduler too"). Fixed
   on the way: the generated clients left the `null` fields of a trigger and a target out, which the
-  hub refuses (400), so the phones' next-run preview never worked; both apps now send them
-  (`ScheduleBodies`). Targets are agent prompts only, as on the web. Android: JVM tests against a
+  hub refuses (400), so the phones' next-run preview never worked; the generated clients now write
+  them themselves (§114; batch 3's per-app `ScheduleBodies` was removed). Targets are agent prompts only, as on the web. Android: JVM tests against a
   scripted hub and Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the
   owner's phones**.
 - **Inbox and your own settings on both phones** (since 2026-09-27,
@@ -604,6 +604,15 @@ its approval.
   Hermes's hide-ids switch for admins as on the web. The contract has no delete for a notice and no
   list of browser sign-ins, so neither is offered. Android: JVM tests against a scripted hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Explicit `null` from the phone clients** (since 2026-09-27, DECISIONS §114, proposed — owner to
+  confirm; `docs/changes/2026-09-27-twuijri-client-explicit-null.md`): the generated Kotlin and Swift
+  clients always send a required property that may be null (`null` when unset), and send an optional
+  one as `null` only when the caller lists it in the model's `sendNull`; nothing else changes on the
+  wire. Made by a post-generation patch (`packages/contracts/scripts/explicit-nulls.mjs`) that fails
+  when the generator's output moves. It fixed every required-nullable request field the phones left
+  out (a schedule's trigger and target, among others) and gave the phones «Default model», «Name it
+  automatically» and a cleared task description. Schedule create/preview/edit bodies from Android were
+  checked with the hub's own contract validator; iOS by unit tests on the CI simulator.
 - **Rooms management on both phones** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-rooms.md`, apps night batch 7), as the web's Rooms page has
   it: the rooms list has **Active | Archived** and a **long press** on a room renames, archives or

@@ -5,7 +5,7 @@ import XCTest
 /// Schedules on the phone (batch 3): what the form sends for a new schedule and for an edit, the
 /// web's "Common schedules", who decides the run options, Hermes's refusals and the zone it asks
 /// for, a run's time — and the trigger and target going out with their `null` fields, which the
-/// hub requires. Android's SchedulesTest is the twin.
+/// hub requires (written by the generated models, §114). Android's SchedulesTest is the twin.
 final class SchedulesTests: XCTestCase {
     private let en = L10n(.en, bundle: Bundle(for: AppModel.self))
     private let ar = L10n(.ar, bundle: Bundle(for: AppModel.self))
@@ -142,34 +142,30 @@ final class SchedulesTests: XCTestCase {
     }
 
     func testATriggerAndATargetGoOutWithTheirNullFields() throws {
-        // The generated models leave a nil field out; the hub requires every field of both.
+        // The contract requires every field of both, some of them null: the generated models
+        // write a required nullable field as `null` (contract decision §114), no interceptor.
         let write = ScheduleWrite(
             name: "Every 15",
             trigger: ScheduleTrigger(kind: .interval, everyMinutes: 15, timezone: "UTC"),
             target: ScheduleTarget(kind: .agentPrompt, agentId: "A1", prompt: "Ping", skills: []),
             overlap: .wait
         )
-        let encoded = try CodableHelper().jsonEncoder.encode(write)
-        let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-        XCTAssertNil((plain["trigger"] as? [String: Any])?["expression"], "the generated body leaves it out")
-        let filled = try XCTUnwrap(ScheduleBodies.complete(encoded))
-        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: filled) as? [String: Any])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(write)) as? [String: Any])
         let trigger = try XCTUnwrap(object["trigger"] as? [String: Any])
         XCTAssertTrue(trigger["expression"] is NSNull)
         XCTAssertTrue(trigger["run_at"] is NSNull)
         XCTAssertEqual(trigger["every_minutes"] as? Int, 15)
+        XCTAssertNil(trigger["display"], "read-only and optional: left out")
         let target = try XCTUnwrap(object["target"] as? [String: Any])
         for field in ["model", "provider", "workflow_id", "input"] { XCTAssertTrue(target[field] is NSNull, field) }
         XCTAssertEqual(target["prompt"] as? String, "Ping")
         XCTAssertEqual(object["overlap"] as? String, "wait")
-        // Other bodies pass untouched.
-        XCTAssertNil(ScheduleBodies.complete(Data(#"{"enabled":false}"#.utf8)))
-        XCTAssertNil(ScheduleBodies.complete(Data(#"{"trigger":{"kind":"task","id":"T1"}}"#.utf8)))
-        // And the request that leaves the app carries them.
-        var request = URLRequest(url: URL(string: "https://hub.test/x")!)
-        request.httpMethod = "POST"
-        request.httpBody = try CodableHelper().jsonEncoder.encode(SchedulePreviewRequest(trigger: ScheduleTrigger(kind: .cron, expression: "0 9 * * *", timezone: "UTC")))
-        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(BodilessRequests.adjust(request).httpBody)) as? [String: Any])
+        XCTAssertNil(object["delivery"], "an optional field nobody set stays out")
+        // The preview's body too, and a plain patch gains no nulls.
+        let preview = SchedulePreviewRequest(trigger: ScheduleTrigger(kind: .cron, expression: "0 9 * * *", timezone: "UTC"))
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(preview)) as? [String: Any])
         XCTAssertTrue((sent["trigger"] as? [String: Any])?["every_minutes"] is NSNull)
+        let pause = try XCTUnwrap(JSONSerialization.jsonObject(with: CodableHelper().jsonEncoder.encode(ScheduleWrite(enabled: false))) as? [String: Bool])
+        XCTAssertEqual(pause, ["enabled": false])
     }
 }

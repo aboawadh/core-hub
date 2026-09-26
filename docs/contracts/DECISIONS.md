@@ -3594,3 +3594,43 @@ Decided by the owner on 2026-09-26 (before the apps night), not proposed:
   Web and desktop keep it in the top bar. It stays what NAVIGATION.md rule 4 says: one concrete
   profile, never «all», it switches `X-Hub-Profile` in place and never navigates. The header of an
   agent's pages on iOS keeps its full-width selector, because those pages edit one profile.
+
+## 114. The generated phone clients send `null` when the contract asks for it
+
+Proposed on the apps night (2026-09-27) — owner to confirm. It changes no wire shape; it lets the
+Kotlin and Swift clients send what the contract already allows.
+
+The generated Kotlin client left every `null` out of a request (`explicitNulls = false`, so a PATCH
+built from a model does not clear fields it did not mean to touch) and the Swift one did the same
+(`encodeIfPresent`). So the phones could not say "set this to null" — back to the agent's default
+model (`SessionPatch.model: null`), give a chat's naming back to the hub (`title: null`, §26), clear a
+task's description — and a body whose schema **requires** a property that may be null was refused
+with 400: a schedule's `trigger` and `target` list every field as required, some of them null, so
+the phones' create, edit and next-run preview never passed the hub's contract check (batch 3 had
+patched it per app with a `ScheduleBodies` interceptor, now removed).
+
+The rule, read from the contract for every schema a JSON request body can hold (components, inline
+bodies, inline object properties and inline array items, `$ref` aliases followed):
+
+- a property that is **required and admits `null`** is always written, `null` when unset;
+- a property that is **optional and admits `null`** stays absent when unset (a PATCH still changes
+  only what it names), and is written as `null` only when the caller lists it in the model's
+  `sendNull` set — `SessionPatch(sendNull = setOf(SessionPatch.Clearable.MODEL))` in Kotlin,
+  `SessionPatch(sendNull: [.model])` in Swift. `Clearable` holds exactly those properties, so the
+  compiler refuses a field that cannot be cleared. A listed property that holds a value is sent with
+  its value;
+- read-only properties are never written; response decoding does not change.
+
+It is made by `packages/contracts/scripts/explicit-nulls.mjs` after generation, like the multipart
+and serializer patches: Swift models get `sendNull`/`Clearable` and an `encode(to:)` that writes
+`encodeNil` where the rule says (nested models encode themselves); Kotlin models implement
+`ExplicitNulls` (an interface written next to the client), whose `withExplicitNulls` puts the nulls
+back into the JSON tree, nested models, lists and maps included, and `ApiClient` sends every JSON
+body through it. The patch fails generation when a line it expects is not in the generator's output,
+and when a nullable property sits in an inline object it cannot name (make that object a component).
+
+Rejected: `explicitNulls = true` in Kotlin (every untouched field of a PATCH would clear what it did
+not name); a tri-state wrapper type per property (`NullEncodable` in the Swift generator, a
+`Patch<T>` in Kotlin), which changes the type of every nullable request field and every call site
+that builds one; and per-app interceptors that rewrite bodies after encoding (what batch 3 did), which
+each screen would have to know about.

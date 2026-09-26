@@ -176,9 +176,9 @@ struct ChatScreen: View {
                     agentID: model.state.agentID,
                     model: model.state.model,
                     onModel: { value in
-                        guard let value else { return }
                         Task { await model.setModel(value) }
                     },
+                    allowDefault: true,
                     onSteer: canSteerAtAll ? steer : nil,
                     steerReady: ChatControls.canSteer(running: model.state.isBusy, text: draft, capabilities: agent?.capabilities ?? [])
                 )
@@ -247,7 +247,8 @@ struct ChatScreen: View {
             pinned: model.state.pinned,
             archived: model.state.archived,
             globalAgent: isGlobalAgent,
-            canCompress: agent?.capabilities.contains(.compress) ?? false
+            canCompress: agent?.capabilities.contains(.compress) ?? false,
+            titled: !(model.state.title ?? "").isEmpty
         ).filter { $0 != .fork || openChat != nil }
         ForEach(actions, id: \.self) { action in
             switch action {
@@ -255,8 +256,8 @@ struct ChatScreen: View {
                 menuItem(action, "chat_controls.rename", .pencil) {
                     renaming = RenameTarget(id: model.sessionID, profile: model.profile, title: model.state.title ?? "")
                 }
-            case .pin, .unpin, .archive, .unarchive:
-                menuItem(action, "chat_controls.\(action.rawValue)", icon(for: action)) {
+            case .autoTitle, .pin, .unpin, .archive, .unarchive:
+                menuItem(action, action == .autoTitle ? "chat_controls.auto_title" : "chat_controls.\(action.rawValue)", icon(for: action)) {
                     guard let patch = ChatControls.patch(action) else { return }
                     Task {
                         let done = await model.change(patch)
@@ -303,6 +304,7 @@ struct ChatScreen: View {
 
     private func icon(for action: ChatControls.Action) -> Lucide {
         switch action {
+        case .autoTitle: return .sparkles
         case .pin: return .pin
         case .unpin: return .pinOff
         case .archive: return .archive

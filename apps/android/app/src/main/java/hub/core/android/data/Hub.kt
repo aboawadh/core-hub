@@ -44,8 +44,7 @@ class HubApis(hub: String, client: OkHttpClient) {
     val sessions = SessionsApi(base, client)
     val agents = AgentsApi(base, client)
     val tasks = TasksApi(base, client)
-    /** A schedule's trigger and target go with their `null` fields ([ScheduleBodies]). */
-    val schedules = SchedulesApi(base, client.newBuilder().addInterceptor(ScheduleBodies).build())
+    val schedules = SchedulesApi(base, client)
     val notify = NotifyApi(base, client)
     val rooms = RoomsApi(base, client)
     val updates = UpdatesApi(base, client)

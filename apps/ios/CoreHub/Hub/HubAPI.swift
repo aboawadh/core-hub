@@ -176,8 +176,7 @@ final class BodilessRequests: OpenAPIInterceptor {
     }
 
     static func adjust(_ request: URLRequest) -> URLRequest {
-        // A schedule's trigger and target go with their `null` fields (ScheduleBodies.swift).
-        guard request.httpBody?.isEmpty ?? true, request.httpBodyStream == nil else { return ScheduleBodies.complete(request) }
+        guard request.httpBody?.isEmpty ?? true, request.httpBodyStream == nil else { return request }
         var copy = request
         copy.setValue(nil, forHTTPHeaderField: "Content-Type")
         return copy

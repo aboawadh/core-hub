@@ -223,7 +223,7 @@ fun ChatScreen(
             approval = ui.approval,
             isAdmin = signedIn?.user?.isAdmin == true,
             onApproval = { value -> chipAgent?.let { vm.setApproval(it, value) } },
-            allowDefault = sessionId == null,
+            allowDefault = true,
             folder = ui.draftFolder,
             dirs = ui.dirs,
             dirsError = ui.dirsError?.let { hub.core.android.ui.components.errorText(it) },

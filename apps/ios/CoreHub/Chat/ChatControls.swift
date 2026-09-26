@@ -127,16 +127,24 @@ enum ChatControls {
         return title.isEmpty ? nil : String(title.prefix(200))
     }
 
+    /// What «Default model» sends: `model: null` (contract decision §114); a model is sent by its key.
+    static func modelPatch(_ value: String?) -> SessionPatch {
+        guard let value else { return SessionPatch(sendNull: [.model]) }
+        return SessionPatch(model: value)
+    }
+
     enum Action: String, CaseIterable {
-        case rename, pin, unpin, archive, unarchive, fork, compress, export, delete
+        case rename, autoTitle, pin, unpin, archive, unarchive, fork, compress, export, delete
     }
 
     /// The chat's own menu, in order. The global agent's conversation is not a chat of the list
-    /// (DECISIONS §46): it is never renamed, pinned, archived, forked or deleted from here.
-    static func actions(pinned: Bool, archived: Bool, globalAgent: Bool, canCompress: Bool, canExport: Bool = true) -> [Action] {
+    /// (DECISIONS §46): it is never renamed, pinned, archived, forked or deleted from here. A chat
+    /// with a title can give the naming back to the hub (`.autoTitle`).
+    static func actions(pinned: Bool, archived: Bool, globalAgent: Bool, canCompress: Bool, canExport: Bool = true, titled: Bool = false) -> [Action] {
         var list: [Action] = []
         if !globalAgent {
             list.append(.rename)
+            if titled { list.append(.autoTitle) }
             list.append(pinned ? .unpin : .pin)
             list.append(archived ? .unarchive : .archive)
             list.append(.fork)
@@ -148,8 +156,10 @@ enum ChatControls {
     }
 
     /// The patch an action sends (the other fields stay out: a merge-patch changes only what it names).
+    /// «Name it automatically» sends `title: null`: the hub renames the chat from its first turn (§26).
     static func patch(_ action: Action) -> SessionPatch? {
         switch action {
+        case .autoTitle: return SessionPatch(sendNull: [.title])
         case .pin: return SessionPatch(pinned: true)
         case .unpin: return SessionPatch(pinned: false)
         case .archive: return SessionPatch(archived: true)

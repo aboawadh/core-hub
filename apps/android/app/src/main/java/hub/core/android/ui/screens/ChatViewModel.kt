@@ -302,8 +302,8 @@ class ChatViewModel(
             _ui.update { it.copy(draftModel = value) }
             return
         }
-        if (value == null || value == _ui.value.chat.session?.model) return
-        change(SessionPatch(model = value))
+        if (value == _ui.value.chat.session?.model) return
+        change(ChatControls.modelPatch(value))
     }
 
     fun setFolder(value: String?) = _ui.update { it.copy(draftFolder = value) }

@@ -14,7 +14,7 @@ struct ComposerChips: View {
     /// The chat's model (`<provider>/<model>`), `nil` for the agent's default.
     let model: String?
     let onModel: (String?) -> Void
-    /// A new chat may keep the agent's default; a chat that has one cannot go back to it.
+    /// The picker offers «Default model» (a chat goes back to it with `model: null`, §114).
     var allowDefault = false
     /// A new chat's working folder; `nil` hides the chip (a chat's folder is fixed once it ran).
     var folder: Binding<String?>? = nil
