@@ -777,6 +777,31 @@ its approval.
   sends for these files), so Reload shows on any page of the shared editor whose refusal carries it. Android: JVM tests against a
   scripted hub and Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the
   owner's phones**.
+- **Models extras on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-models.md`,
+  apps night batch 15), as the web's Models page has it. **Providers**: a provider opens on a page of
+  its own (iOS) or a sheet (Android) with who it is for, its kind, address, key state and when its list
+  was fetched; where the list came from (§83) — «from your account» for a signed-in provider, «a
+  fallback list kept in code» with the reason, the catalogue's error, a refresh in progress; enable
+  switch, **edit** (name, address, a new key as a secret field that can be shown — empty keeps the
+  key), sign in / sign in again, **test** with the provider's words and the time, **refresh the model
+  list** (read back until it is no longer loading), **remove the key** (asked) and **remove** (asked);
+  its models with a **display name** each (`models.putModel`, the id encoded once as the web does so
+  `a/b` ids stay one segment), image-only and hidden ones marked; «refresh all model lists».
+  **Adding**: who it is for first, a preset already added in that scope is not offered (a second is
+  `409`), a key already on file makes the key optional (§94), a **custom OpenAI-compatible endpoint**
+  (chat, speech to text or text to speech), a loopback address on a hub in a container called out
+  with the host alias. **Sign-in by device code** says declined / ran out / did not finish with the
+  runtime's reason and can start again. **Defaults**: «from the default profile» per role, clearing
+  the chat model back to the default profile's, the fallbacks need a chat model first and a chain
+  saved on an inherited chat model saves that model too (as the web), and the **auxiliary roles**.
+  **Speech**: each side's **model** (the provider's own list of its kind, or typed, or the provider's
+  default) and **language** (detect, popular languages by name, or a typed code), the voice list says
+  when it is documented or absent and takes a typed voice id. **Images**: only models that draw on
+  providers that draw, image-only first (§87, §110), the subscription's named «Images via your …
+  subscription», «from the default profile», and going back to it. Not on the phones: models probe
+  («Fetch» in the add dialog), visible-model lists and per-model tuning, the Runtime card, the
+  inheriting agents list; **signing out** of a signed-in provider has no contract operation (the web
+  has none either). Unit tests on both, Android shots; not yet tried on the owner's phones.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still

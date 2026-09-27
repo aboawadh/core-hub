@@ -113,6 +113,7 @@ struct ModelsSpeechTab: View {
 
 /// Keeps one speech setting (`model`, `language`, `voice`) of one provider; an empty value is the
 /// provider's default ("detect" for a language).
+@MainActor
 private func keepSpeechSetting(_ app: AppModel, provider: String, key: String, value: String) async throws {
     let profile = app.currentProfile
     let patch = SpeechSettingsPatch(providers: [SpeechSettingsPatchProvidersInner(id: provider, settings: [key: ModelLogic.speechSetting(value)])])
