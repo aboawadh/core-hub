@@ -872,6 +872,18 @@ number + 100, above the old app's 63; a manual preview image reports `1.1.0-prev
 yet seen on a signed build or a published image: no signed workflow or release has run since
 (docs/RELEASING.md).
 
+## Compatibility
+Since 2026-09-27 **nothing people already run may break** (ADR 0027, owner). Two guards in CI
+compare every pull request with the latest release tag: `pnpm contracts:compat` (the OpenAPI
+document, its webhooks and the realtime event schemas — removed, renamed, newly required,
+narrowed input, weakened output) and `pnpm migrations:guard` (released migrations unchanged;
+nothing released dropped, renamed or emptied). An unavoidable break passes only when the owner
+lists it in `docs/contracts/breaking-approved.json` (empty today). Proven by their tests and by
+the real history: against v1.1.2 the contract guard reports the webhook operations that became
+profile-scoped in v1.1.3; against v1.1.1 the removed preset, relay and peer fields. Meaning,
+environment names, release file names, socket commands and the models catalogue are review
+items, not checked by a machine.
+
 ## First run
 A hub with no owner is **open to the first comer for an hour** after the process
 starts (ADR 0019, `COREHUB_SETUP_OPEN_MINUTES`, `0` = token only): `/setup` in the

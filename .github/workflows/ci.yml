@@ -60,6 +60,14 @@ jobs:
             exit 1
           fi
       - run: pnpm contracts:check-clients
+      # ADR 0027: nothing people already run may break. Both guards compare with the latest
+      # release tag `v*`, which the shallow checkout does not have.
+      - name: Release tags for the compatibility guards
+        run: git fetch --no-tags --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+      - name: No breaking contract change against the latest release (ADR 0027)
+        run: pnpm contracts:compat
+      - name: No destructive or edited migration against the latest release (ADR 0027)
+        run: pnpm migrations:guard
       - run: pnpm typecheck
       - name: Tests of every package but the server (its unit suite runs in `server-tests`)
         run: pnpm -r --workspace-concurrency=1 --if-present --filter '!@corehub/server' test

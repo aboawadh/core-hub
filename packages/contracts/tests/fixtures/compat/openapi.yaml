@@ -1,0 +1,193 @@
+# The released contract the compatibility guard tests start from (tests/compat.test.ts). Each
+# test changes one thing in a copy of it and checks what the guard says.
+openapi: 3.1.0
+info:
+  title: Compat fixture
+  version: 1.0.0
+servers:
+  - url: /api/v1
+security:
+  - bearer: []
+paths:
+  /health:
+    get:
+      operationId: meta.health
+      security: []
+      x-scope: global
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+  /notes:
+    get:
+      operationId: notes.list
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: A page of notes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Note'
+                  next_cursor:
+                    type: [string, 'null']
+    post:
+      operationId: notes.create
+      x-roles: [owner, admin, member]
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteCreate'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: Invalid.
+  /notes/{note_id}:
+    delete:
+      operationId: notes.delete
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+        - name: note_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted.
+webhooks:
+  noteEvent:
+    post:
+      operationId: webhook.noteEvent
+      parameters:
+        - name: X-Fixture-Event
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Note'
+      responses:
+        '200':
+          description: Received.
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  parameters:
+    Profile:
+      name: X-Hub-Profile
+      in: header
+      required: true
+      schema:
+        type: string
+  schemas:
+    Scoped:
+      type: object
+      required: [id, created_at]
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Note:
+      allOf:
+        - $ref: '#/components/schemas/Scoped'
+        - type: object
+          required: [title, status, pinned, body]
+          properties:
+            title:
+              type: string
+            status:
+              $ref: '#/components/schemas/NoteStatus'
+            pinned:
+              type: boolean
+            body:
+              $ref: '#/components/schemas/Block'
+            author:
+              oneOf:
+                - $ref: '#/components/schemas/Author'
+                - type: 'null'
+    NoteStatus:
+      type: string
+      enum: [draft, published, archived]
+    Author:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    Block:
+      oneOf:
+        - $ref: '#/components/schemas/TextBlock'
+        - $ref: '#/components/schemas/ImageBlock'
+    TextBlock:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [text]
+        text:
+          type: string
+    ImageBlock:
+      type: object
+      required: [type, url]
+      properties:
+        type:
+          type: string
+          enum: [image]
+        url:
+          type: string
+    NoteCreate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        status:
+          $ref: '#/components/schemas/NoteStatus'
+        tags:
+          type: array
+          items:
+            type: string
+        color:
+          type: string
+          default: yellow
