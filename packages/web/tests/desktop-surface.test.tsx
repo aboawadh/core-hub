@@ -392,6 +392,8 @@ describe('surface', () => {
     const tabs = SETTINGS_IDS.filter((id) => manifest.navigation.settingsTabs.includes(id));
     expect(tabs.slice(tabs.indexOf('privacy'), tabs.indexOf('about') + 1)).toEqual([
       'privacy',
+      // The owner's Secrets, on web and desktop (DECISIONS §125).
+      'secrets',
       'this_device',
       'about',
     ]);
