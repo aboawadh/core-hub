@@ -92,8 +92,20 @@ pnpm i18n:check               i18n:check  OK
 pnpm nav:check                nav:check  OK — 39 destinations, ...
 pnpm --filter @corehub/contracts test   Tests  118 passed (118)
 ```
-iOS وAndroid: لا Swift ولا Java على هذا الجهاز، فبناؤهما واختباراتهما في CI فقط (انظر نتيجة CI
-في الـPR).
+iOS وAndroid: لا Swift ولا Java على هذا الجهاز، فبناؤهما واختباراتهما في CI فقط. نتيجة CI على
+الـPR #205 (الالتزام a5e6e74، كل الفحوص):
+```
+Generate the Swift client (CoreHubClient)                   pass  38s
+Build and test on the iOS simulator                         pass  8m37s
+Android build, unit tests, lint                             pass  9m44s
+Lint, typecheck, contracts, client tests, build             pass  5m27s
+Server unit tests (shard 1/3, 2/3, 3/3)                     pass
+Web smoke journeys (Playwright against the real hub)        pass  9m16s
+Desktop app smoke (Electron under Xvfb against the real hub) pass  1m25s
+Docker image builds and answers /health                     pass  3m8s
+db:generate + db:migrate (SQLite and PostgreSQL)            pass  1m9s
+PR adds or updates a change record                          pass
+```
 
 ## المخاطر والرجوع
 - المخاطر: توليد Swift/Kotlin يسمّي الوسيط والنوع كما توقّعنا (`workflowCheck:` /
