@@ -118,7 +118,7 @@ object TrajectoryRules {
             query.isEmpty() || haystack(step).contains(query)
         }
         if (!filter.byDuration) return kept
-        return kept.withIndex().sortedWith(compareByDescending<IndexedValue<TrajectoryStep>> { durationOf(it.value, now) ?: -1 }.thenBy { it.index }).map { it.value }
+        return kept.withIndex().sortedWith(compareByDescending<IndexedValue<TrajectoryStep>> { durationOf(it.value, now) ?: -1L }.thenBy { it.index }).map { it.value }
     }
 
     /** One line of a step: the words, or the tool's preview (else its arguments), shortened. */
