@@ -1534,6 +1534,9 @@ const app = await buildServer({
     DATA_DIR: dataDir,
     PORT: String(port),
     ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+    // The journeys never reach the real push relay the hub uses by default (DEFAULT_RELAY_URL):
+    // a phone sender stays "not configured" here, as it was before the relay was built in.
+    COREHUB_PUSH_RELAY: 'off',
     // The terminal journey's hub (playwright.config.ts): the owner's web terminal is on.
     ...(process.env.COREHUB_WEB_TERMINAL === '1' ? { COREHUB_WEB_TERMINAL: '1' } : {}),
   }),

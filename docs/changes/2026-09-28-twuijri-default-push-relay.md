@@ -33,6 +33,15 @@ $ curl https://corehub-push-relay.twuijri.workers.dev/v1/health
 ```
 eslint وprettier على الملفات: نظيفة. باقي حزمة الخادم على CI.
 
+أول CI لـ#209 بعد الدمج: رحلة الويب `zzzzzz-browser-push` سقطت لأن مركز رحلات Playwright (`packages/web/e2e/hub.ts`)
+صار يستعمل المرحّل المبني فظهر مرسل FCM «جاهز» بدل «غير مضبوط». أُضيف `COREHUB_PUSH_RELAY: 'off'` لذلك المركز كما في
+مساعد اختبارات الخادم — الرحلات لا تتصل بالمرحّل الحقيقي:
+```
+$ PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1 e2e/zzzzzz-browser-push.spec.ts
+  ✓  1 [chromium] › e2e/zzzzzz-browser-push.spec.ts:31:1 › a browser turns notifications on, and a test notice is pushed to it (1.8s)
+  1 passed (11.0s)
+```
+
 ## المخاطر والرجوع
 الهبات بعد التحديث تتصل بالمرحّل (تسجيل ورموز الأجهزة فقط، والإشعار الخاص يخفي النص). إن تعطّل المرحّل تبقى حالة المرسل
 `unreachable` كما هي مصممة. الرجوع: revert، أو `COREHUB_PUSH_RELAY=off` لهب بعينه.
