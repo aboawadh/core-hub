@@ -29,6 +29,7 @@ const OTHER = '01J8QK3ZR2W7M5N4P6T8V9X0WG';
 const RUN = '01J8QK3ZR2W7M5N4P6T8V9X0WR';
 const APPROVAL = '01J8QK3ZR2W7M5N4P6T8V9X0AP';
 const AGENT = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
+const TRIGGER = '01J8QK3ZR2W7M5N4P6T8V9X0TG';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -102,6 +103,8 @@ function fakeHub(
   } = {},
 ) {
   const seen: Seen[] = [];
+  const triggers: Array<Record<string, unknown>> = [];
+  const lines: Array<Record<string, unknown>> = [];
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -161,6 +164,58 @@ function fakeHub(
             setTimeout(() => void json(saved).then(resolve), delay),
           )
         : json(saved);
+    }
+    if (path === `/workflows/${FLOW}/triggers` && method === 'GET') {
+      return json({ items: triggers });
+    }
+    if (path === `/workflows/${FLOW}/triggers` && method === 'POST') {
+      const made = {
+        id: TRIGGER,
+        workflow_id: FLOW,
+        name: 'ClickUp',
+        enabled: true,
+        events: [],
+        secret_stored: false,
+        signature_header: null,
+        signature_encoding: null,
+        signature_prefix: null,
+        path: `/api/v1/workflow-hooks/${TRIGGER}`,
+        last_delivery_at: null,
+        ...(body as object),
+      };
+      triggers.push(made);
+      return json(made, 201);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}` && method === 'PATCH') {
+      const patch = { ...(body as Record<string, unknown>) };
+      if ('secret' in patch) {
+        patch.secret_stored = !!patch.secret;
+        delete patch.secret;
+      }
+      Object.assign(triggers[0]!, patch);
+      return json(triggers[0]);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}/test`) {
+      const line = {
+        id: '01J8QK3ZR2W7M5N4P6T8V9X0DK',
+        trigger_id: TRIGGER,
+        workflow_id: FLOW,
+        received_at: '2026-09-28T09:00:00Z',
+        status: 'run_started',
+        event: (body as { event?: string | null }).event ?? 'taskCreated',
+        event_id: '1',
+        task_id: 'core-hub-test-task',
+        workflow_run_id: RUN,
+        filtered: false,
+        test: true,
+        error: null,
+        body_preview: '{}',
+      };
+      lines.unshift(line);
+      return json(line);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}/deliveries`) {
+      return json({ items: lines, next_cursor: null });
     }
     if (path === `/workflows/${FLOW}/run`)
       return json({ job_id: '01J8QK3ZR2W7M5N4P6T8V9X0JY', workflow_run_id: RUN }, 202);
@@ -413,6 +468,89 @@ describe('Workflows: its own page', () => {
       .find((item) => item.dataset.code === 'field_invalid')!;
     expect(issue).toHaveTextContent('The hub did not accept “title” as written.');
     expect(screen.getByTestId('workflow-save')).toBeDisabled();
+  });
+
+  it('adds a ClickUp trigger: its address to copy, a secret never shown, a test event and its line (§123)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    const panel = await screen.findByTestId('workflow-triggers');
+    await user.click(within(panel).getByTestId('workflow-trigger-add'));
+    const card = await within(panel).findByTestId('workflow-trigger');
+    expect(
+      seen.find((c) => c.path === `/workflows/${FLOW}/triggers` && c.method === 'POST'),
+    ).toMatchObject({
+      profile: 'designer',
+      body: { preset: 'clickup', events: ['taskCreated', 'taskStatusUpdated'] },
+    });
+    expect(within(card).getByTestId('workflow-trigger-url')).toHaveValue(
+      `${window.location.origin}/api/v1/workflow-hooks/${TRIGGER}`,
+    );
+    expect(within(card).getByTestId('workflow-trigger-test')).toBeDisabled();
+
+    await user.type(within(card).getByTestId('workflow-trigger-secret'), 'from-clickup');
+    await user.click(within(card).getByTestId('workflow-trigger-secret-save'));
+    await waitFor(() =>
+      expect(within(card).getByTestId('workflow-trigger-secret')).toHaveAttribute(
+        'placeholder',
+        '[stored]',
+      ),
+    );
+    expect(within(card).getByTestId('workflow-trigger-secret')).toHaveValue('');
+    expect(
+      seen.find((c) => c.path === `/workflow-triggers/${TRIGGER}` && c.method === 'PATCH')!.body,
+    ).toEqual({ secret: 'from-clickup' });
+
+    await user.click(within(card).getByTestId('workflow-trigger-event-taskAssigneeUpdated'));
+    await waitFor(() =>
+      expect(
+        seen
+          .filter((c) => c.path === `/workflow-triggers/${TRIGGER}` && c.method === 'PATCH')
+          .at(-1)!.body,
+      ).toEqual({ events: ['taskCreated', 'taskStatusUpdated', 'taskAssigneeUpdated'] }),
+    );
+
+    await user.click(within(card).getByTestId('workflow-trigger-test'));
+    expect(await within(card).findByTestId('workflow-trigger-test-result')).toHaveTextContent(
+      'Run started',
+    );
+    const line = await within(card).findByTestId('workflow-trigger-delivery');
+    expect(line).toHaveAttribute('data-status', 'run_started');
+    expect(line).toHaveTextContent('task core-hub-test-task');
+    await user.click(within(line).getByTestId('workflow-delivery-run'));
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`run=${RUN}`));
+  });
+
+  it('a condition holds several rules, saved as the contract’s rules (§123)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Filter');
+    await user.click(screen.getByTestId('workflow-add-condition'));
+    await user.click(await screen.findByTestId('workflow-condition-rules'));
+    const rules = await screen.findByTestId('workflow-rules');
+    expect(within(rules).getAllByTestId('workflow-rule')).toHaveLength(1);
+    await user.clear(within(rules).getByTestId('workflow-rule-path'));
+    await user.type(within(rules).getByTestId('workflow-rule-path'), 'trigger.event');
+    await user.click(within(rules).getByTestId('workflow-rule-add'));
+    const second = within(rules).getAllByTestId('workflow-rule')[1]!;
+    await user.type(within(second).getByTestId('workflow-rule-value'), 'taskCreated');
+    await pick(user, 'workflow-rules-match', 'any one rule holds');
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    const post = seen.find((c) => c.path === '/workflows' && c.method === 'POST')!;
+    expect((post.body as { nodes: Array<Record<string, unknown>> }).nodes[0]!.rules).toEqual({
+      match: 'any',
+      items: [
+        { path: 'trigger.event', operator: 'exists', value: null },
+        { path: 'trigger.event', operator: '==', value: 'taskCreated' },
+      ],
+    });
   });
 
   it('keeps the workflow’s limits in the side panel while no step is selected (§102)', async () => {

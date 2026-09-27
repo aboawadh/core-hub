@@ -232,6 +232,13 @@
       "when": 1790396719646,
       "tag": "0032_task_definition_of_done",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1790544916316,
+      "tag": "0033_workflow_triggers",
+      "breakpoints": true
     }
   ]
 }

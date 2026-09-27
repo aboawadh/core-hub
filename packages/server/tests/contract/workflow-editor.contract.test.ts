@@ -2,6 +2,7 @@
 // the generated TypeScript client — the live check of an unsaved drawing, every profile's
 // workflows, and a run whose steps say what they produced and which way they went. Every
 // answer is validated against the schema the contract documents for its status.
+import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   HubApiError,
@@ -49,6 +50,7 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
   let hub: TestHub;
   let token: string | undefined;
   let client: HubClient;
+  let baseUrl = '';
 
   async function call(
     operationId: string,
@@ -99,7 +101,7 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
     );
     await hub.app.listen({ port: 0, host: '127.0.0.1' });
     const address = hub.app.server.address();
-    const baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+    baseUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
     client = createHubClient({
       baseUrl,
       apiBase: serverBasePath(document),
@@ -201,5 +203,88 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
       params: { workflow_id: workflow.id as string },
     });
     expect((history.items as unknown[]).length).toBe(1);
+  });
+
+  it('an inbound ClickUp trigger: created, secret stored, a signed delivery runs, the log and the run say so (§123)', async () => {
+    const secret = 'contract-test-clickup-secret';
+    const workflow = await call('schedules.createWorkflow', 201, {
+      body: {
+        name: 'من ClickUp',
+        nodes: [
+          node('gate', 'condition', '', {
+            rules: {
+              match: 'all',
+              items: [{ path: 'trigger.event', operator: '==', value: 'taskCreated' }],
+            },
+          }),
+          node('tell', 'notify', 'مهمة {{trigger.task_id}}'),
+        ],
+        edges: [{ id: 'e1', from: 'gate', to: 'tell', route: 'success' }],
+      },
+    });
+    const workflowId = workflow.id as string;
+    const trigger = await call('schedules.createWorkflowTrigger', 201, {
+      params: { workflow_id: workflowId },
+      body: { preset: 'clickup', events: ['taskCreated', 'taskUpdated'] },
+    });
+    expect(trigger.secret_stored).toBe(false);
+    const stored = await call('schedules.updateWorkflowTrigger', 200, {
+      params: { workflow_trigger_id: trigger.id as string },
+      body: { secret },
+    });
+    expect(stored.secret_stored).toBe(true);
+    expect(JSON.stringify(stored)).not.toContain(secret);
+    const listed = await call('schedules.listWorkflowTriggers', 200, {
+      params: { workflow_id: workflowId },
+    });
+    expect((listed.items as unknown[]).length).toBe(1);
+
+    // The public door, with the bytes ClickUp would send and their signature.
+    const raw =
+      '{"event":"taskCreated","task_id":"c-1","webhook_id":"w","history_items":[{"id":"77"}]}';
+    const signature = createHmac('sha256', secret).update(raw).digest('hex');
+    const receiveOp = ops.get('schedules.receiveWorkflowTrigger')!;
+    const res = await fetch(`${baseUrl}${trigger.path as string}`, {
+      method: 'POST',
+      body: raw,
+      headers: { 'content-type': 'application/json', 'x-signature': signature },
+    });
+    const receipt = (await res.json()) as Record<string, unknown>;
+    expect(res.status, JSON.stringify(receipt)).toBe(202);
+    expect(schemas.validate(responseSchema(receiveOp, 202)!, receipt)).toEqual([]);
+    await workflowEngineFor(hub.app).settled();
+
+    const tested = await call('schedules.testWorkflowTrigger', 200, {
+      params: { workflow_trigger_id: trigger.id as string },
+      body: { event: 'taskUpdated' },
+    });
+    expect(tested).toMatchObject({ test: true, status: 'run_started', event: 'taskUpdated' });
+    await workflowEngineFor(hub.app).settled();
+
+    const log = await call('schedules.listWorkflowTriggerDeliveries', 200, {
+      params: { workflow_trigger_id: trigger.id as string },
+    });
+    expect(
+      (log.items as Array<Record<string, unknown>>).map((d) => [d.status, d.filtered]),
+    ).toEqual([
+      ['run_succeeded', true],
+      ['run_succeeded', false],
+    ]);
+    const runs = await call('schedules.listWorkflowRuns', 200, {
+      params: { workflow_id: workflowId },
+      query: { task_id: 'c-1' },
+    });
+    expect(runs.items).toEqual([
+      expect.objectContaining({
+        workflow_trigger_id: trigger.id,
+        delivery_id: receipt.delivery_id,
+        event_id: '77',
+        task_id: 'c-1',
+        filtered: false,
+      }),
+    ]);
+    await call('schedules.deleteWorkflowTrigger', 204, {
+      params: { workflow_trigger_id: trigger.id as string },
+    });
   });
 });

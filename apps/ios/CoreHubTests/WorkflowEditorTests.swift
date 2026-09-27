@@ -81,6 +81,26 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertFalse(WorkflowEditRules.canSave(draft, validation: nil))
     }
 
+    func testAConditionsRulesAreShownAndKeptWhenSaved() throws {
+        // Several rules (§123) come from the web; the phone shows them and saves them untouched.
+        let json = #"{"match":"any","items":[{"path":"trigger.event","operator":"==","value":"taskCreated"},{"path":"trigger.task_id","operator":"exists","value":null}]}"#
+        let rules = try JSONDecoder().decode(WorkflowRules.self, from: Data(json.utf8))
+        let shown = WorkflowEditRules.ruleLines(rules)
+        XCTAssertEqual(shown.match, "any")
+        XCTAssertEqual(shown.lines, [#"trigger.event == "taskCreated""#, "trigger.task_id exists"])
+        XCTAssertTrue(WorkflowEditRules.ruleLines(nil).lines.isEmpty)
+        var draft = empty()
+        draft.name = "Filter"
+        WorkflowEditRules.add(.condition, title: "Only new", to: &draft)
+        draft.nodes[0].rules = rules
+        XCTAssertEqual(WorkflowEditRules.write(draft, clearing: false).nodes?[0].rules, rules)
+        XCTAssertEqual(WorkflowEditRules.check(draft).nodes?[0].rules, rules)
+        XCTAssertEqual(
+            WorkflowEditRules.triggerURL(hub: "https://hub.example/", path: "/hooks/T1"),
+            "https://hub.example/hooks/T1"
+        )
+    }
+
     func testTheLiveCheckSendsTheDrawingWithoutTheName() {
         // A new drawing has no name yet; the check never reads it and an older hub refused "".
         var draft = empty()

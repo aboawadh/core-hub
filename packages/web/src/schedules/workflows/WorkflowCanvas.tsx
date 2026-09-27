@@ -633,6 +633,17 @@ const KIND_GLYPH: Record<WfNode['kind'], string> = {
 };
 
 function summaryOf(node: WfNode): string {
+  // A condition with several rules shows them, not the single line it no longer reads (§123).
+  if (node.kind === 'condition' && node.rules && node.rules.items.length > 0) {
+    const joiner = node.rules.match === 'any' ? ' | ' : ' & ';
+    return node.rules.items
+      .map((rule) =>
+        rule.value === null
+          ? `${rule.path} ${rule.operator}`
+          : `${rule.path} ${rule.operator} ${rule.value}`,
+      )
+      .join(joiner);
+  }
   const text = (node.input ?? '').replace(/\s+/g, ' ').trim();
   if (node.kind === 'delay' && /^\d+(\.\d+)?$/.test(text)) {
     const seconds = Number(text);

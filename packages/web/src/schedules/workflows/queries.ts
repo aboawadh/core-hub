@@ -36,6 +36,56 @@ export interface WorkflowRunRow {
   error: string | null;
   started_at: string | null;
   finished_at: string | null;
+  /** A run a trigger's delivery started (§123); absent from an older hub. */
+  workflow_trigger_id?: string | null;
+  delivery_id?: string | null;
+  event_id?: string | null;
+  task_id?: string | null;
+  /** A condition said no and nothing followed: not one to act on. */
+  filtered?: boolean;
+}
+
+export type TriggerPreset = 'clickup' | 'github' | 'generic_hmac' | 'token';
+
+/** An inbound webhook trigger (`WorkflowTrigger`, §123). The secret itself never comes back. */
+export interface WorkflowTriggerRow {
+  id: string;
+  workflow_id: string;
+  name: string;
+  preset: TriggerPreset;
+  enabled: boolean;
+  events: string[];
+  secret_stored: boolean;
+  signature_header: string | null;
+  signature_encoding: 'hex' | 'base64' | null;
+  signature_prefix: string | null;
+  path: string;
+  last_delivery_at: string | null;
+}
+
+export type DeliveryStatus =
+  | 'received'
+  | 'duplicate'
+  | 'signature_rejected'
+  | 'filtered_out'
+  | 'run_started'
+  | 'run_succeeded'
+  | 'run_failed';
+
+export interface TriggerDeliveryRow {
+  id: string;
+  trigger_id: string;
+  workflow_id: string;
+  received_at: string;
+  status: DeliveryStatus;
+  event: string | null;
+  event_id: string | null;
+  task_id: string | null;
+  workflow_run_id: string | null;
+  filtered: boolean;
+  test: boolean;
+  error: string | null;
+  body_preview: string | null;
 }
 
 /** How often a run still going is asked about, besides the realtime events. */
@@ -48,7 +98,101 @@ export const workflowKeys = {
   one: (profile: string, id: string) => ['schedules', 'workflows', profile, id] as const,
   runs: (profile: string, id: string) => ['schedules', 'workflows', profile, id, 'runs'] as const,
   run: (profile: string, id: string) => ['schedules', 'workflow-run', profile, id] as const,
+  triggers: (profile: string, id: string) =>
+    ['schedules', 'workflows', profile, id, 'triggers'] as const,
+  deliveries: (profile: string, triggerId: string) =>
+    ['schedules', 'workflow-trigger', profile, triggerId, 'deliveries'] as const,
 };
+
+/** How often an open delivery log asks for what came in since (deliveries have no event). */
+const DELIVERY_POLL_MS = 5_000;
+
+export function useWorkflowTriggers(profile: string, workflowId: string | null) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: workflowKeys.triggers(profile, workflowId ?? ''),
+    queryFn: async () => {
+      const { data } = await client.request('get', '/workflows/{workflow_id}/triggers', {
+        params: { workflow_id: workflowId! },
+        ...inProfile(profile),
+      });
+      return (data as unknown as { items: WorkflowTriggerRow[] }).items;
+    },
+    enabled: !!session && !!workflowId,
+  });
+}
+
+export function useTriggerDeliveries(profile: string, triggerId: string, open: boolean) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: workflowKeys.deliveries(profile, triggerId),
+    queryFn: async () => {
+      const { data } = await client.request(
+        'get',
+        '/workflow-triggers/{workflow_trigger_id}/deliveries',
+        {
+          params: { workflow_trigger_id: triggerId },
+          query: { limit: 20 },
+          ...inProfile(profile),
+        },
+      );
+      return (data as unknown as { items: TriggerDeliveryRow[] }).items;
+    },
+    enabled: !!session && open,
+    refetchInterval: open ? DELIVERY_POLL_MS : false,
+  });
+}
+
+export function useTriggerWrites(profile: string, workflowId: string) {
+  const { client } = useAuth();
+  const queryClient = useQueryClient();
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['schedules'] });
+  return {
+    create: useMutation({
+      mutationFn: async (body: { preset: TriggerPreset; name?: string; events?: string[] }) =>
+        (
+          await client.request('post', '/workflows/{workflow_id}/triggers', {
+            params: { workflow_id: workflowId },
+            body: body as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as WorkflowTriggerRow,
+      onSuccess: refresh,
+    }),
+    update: useMutation({
+      mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
+        (
+          await client.request('patch', '/workflow-triggers/{workflow_trigger_id}', {
+            params: { workflow_trigger_id: id },
+            body: patch as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as WorkflowTriggerRow,
+      onSuccess: refresh,
+    }),
+    remove: useMutation({
+      mutationFn: async (id: string) => {
+        await client.request('delete', '/workflow-triggers/{workflow_trigger_id}', {
+          params: { workflow_trigger_id: id },
+          ...inProfile(profile),
+        });
+        return id;
+      },
+      onSuccess: refresh,
+    }),
+    test: useMutation({
+      mutationFn: async ({ id, event }: { id: string; event: string | null }) =>
+        (
+          await client.request('post', '/workflow-triggers/{workflow_trigger_id}/test', {
+            params: { workflow_trigger_id: id },
+            body: { event } as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as TriggerDeliveryRow,
+      onSuccess: refresh,
+    }),
+  };
+}
 
 export function useWorkflows() {
   const { client, session } = useAuth();
