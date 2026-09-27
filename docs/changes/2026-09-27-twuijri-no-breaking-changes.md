@@ -44,7 +44,7 @@ v1.1.2 وv1.1.3، وحُذفت حقول من presets وrelay وpeers بين v1.1
 - `scripts/compat-base.mjs` (جديد): اختيار الوسم، `git show`، قراءة الموافقات والتحقق منها، الطباعة.
 - `docs/contracts/breaking-approved.json` (جديد، فارغ).
 - الاختبارات: `packages/contracts/tests/compat.test.ts` مع `tests/fixtures/compat/openapi.yaml`
-  و`note.created.schema.json` (30 نوع كسر، 17 إضافة تمر، 7 للأحداث، ومستودع git مؤقت بوسوم
+  و`note.created.schema.json` (31 حالة كسر، 17 حالة تمر، 7 للأحداث، ومستودع git مؤقت بوسوم
   للموافقات)؛ `scripts/migrations-guard.test.mjs` (يُشغَّل ضمن `pnpm scripts:test` في CI).
 - `package.json`: `contracts:compat` و`migrations:guard`.
 - `.github/workflows/ci.yml`: ثلاث خطوات في job `checks` (جلب وسوم `v*`، الحارسان) — لا job جديد ولا
