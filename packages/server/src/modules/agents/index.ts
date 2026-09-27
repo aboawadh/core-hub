@@ -31,7 +31,7 @@
  * test process, so the service is kept per Socket.IO server (one per app), the same way
  * `auth` keeps its context.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -836,12 +836,10 @@ function contextOf(app: FastifyInstance): AgentsContext {
     hermesPython: () => {
       if (own.hermesPython) return own.hermesPython;
       const { mode, home } = runtime.status();
-      const command = runtime.executable();
-      if (mode !== 'managed' || !home || !command) return null;
-      // The interpreter of Hermes's own venv, beside its `hermes` entry point (as the TUI
-      // gateway is started).
-      const python = path.join(path.dirname(command), 'python');
-      if (!existsSync(python)) return null;
+      if (mode !== 'managed' || !home) return null;
+      // Hermes's own interpreter and packages, however it was installed (`hermes-python.ts`).
+      const python = runtime.pythonCommand();
+      if (!python) return null;
       return hermesPythonRunner({ python, env: () => runtime.cliEnv() });
     },
     pairingPollMs: own.pairingPollMs ?? 1000,

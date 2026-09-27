@@ -54,6 +54,7 @@ import {
   type GatewayStatus,
 } from './hermes-gateways.js';
 import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
+import { resolveHermesPython, type PythonCommand } from './hermes-python.js';
 import {
   personalHermesRoot,
   shareHermesInstall,
@@ -226,6 +227,9 @@ export class HermesRuntime {
    * once at `start()` — before any Hermes process of this hub starts.
    */
   private shared: SharedInstall | null = null;
+  /** Hermes's Python for short programs (`hermes-python.ts`), found at start and restart. */
+  private python: PythonCommand | null = null;
+  private pythonFor: string | null = null;
   /** The last lines the managed gateway wrote, for the reason shown when it stops or stalls. */
   private readonly lastLines: string[] = [];
   private stopping = false;
@@ -716,6 +720,27 @@ export class HermesRuntime {
   }
 
   /**
+   * How to run a short program on Hermes's own Python and packages, or `null` when this host's
+   * Hermes offers none (`hermes-python.ts`). Found in the background at `start()` and after a
+   * restart; `null` until then.
+   */
+  pythonCommand(): PythonCommand | null {
+    return this.pythonFor && this.pythonFor === this.executable() ? this.python : null;
+  }
+
+  /** Finds Hermes's Python for the executable on this host now. Never throws. */
+  async resolvePython(): Promise<PythonCommand | null> {
+    const hermes = this.executable();
+    if (!hermes) return null;
+    // The runtime's environment, so Hermes answers for this home's dependency state.
+    const found = await resolveHermesPython(hermes, this.cliEnv()).catch(() => null);
+    this.python = found;
+    this.pythonFor = hermes;
+    if (!found) this.log.info({ hermes }, "hermes: no way to run Hermes's Python on this host");
+    return found;
+  }
+
+  /**
    * Whether the Hermes on this host is the person's own install — a Hermes home of theirs that
    * is not this hub's (the desktop app's local mode, a hub run beside Hermes) — which Hermes's
    * own updater may update when the person asks (`AgentInstall.self_update`). Never in the
@@ -802,7 +827,10 @@ export class HermesRuntime {
     if (this.mode !== 'undecided') return this.mode;
     // Every Hermes command of this hub runs in its home, an external gateway or not (kanban,
     // profiles, plugins): the install state goes in first.
-    if (whichSync('hermes', this.options.host)) this.shareInstall();
+    if (whichSync('hermes', this.options.host)) {
+      this.shareInstall();
+      void this.resolvePython();
+    }
     if (await this.healthy()) {
       this.mode = 'external';
       this.setState('running', null);
@@ -837,6 +865,8 @@ export class HermesRuntime {
     if (this.mode !== 'managed') {
       throw new Error(`hermes runtime is ${this.mode}, not managed by this hub`);
     }
+    // Hermes may have been updated in place (`selfUpdate`): its Python is looked for again.
+    void this.resolvePython();
     // Every messaging gateway: the keys and endpoints a restart makes live are theirs too.
     const others = this.profileGateways.restartAll();
     const child = this.child;

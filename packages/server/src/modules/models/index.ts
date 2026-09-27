@@ -17,7 +17,6 @@
  * agent starts with and the default model an agent inherits, so the `agents` module never
  * asks a person for a key (ADR 0010 §Propagation).
  */
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
@@ -266,10 +265,10 @@ function contextOf(app: FastifyInstance): ModelsService {
             // was signed in to (decision §83); the token stays in that process.
             python: () => {
               const { mode, home } = runtime.status();
-              const command = runtime.executable();
-              if (mode !== 'managed' || !home || !command) return null;
-              const python = path.join(path.dirname(command), 'python');
-              if (!existsSync(python)) return null;
+              if (mode !== 'managed' || !home) return null;
+              // Hermes's own interpreter and packages, however it was installed.
+              const python = runtime.pythonCommand();
+              if (!python) return null;
               return hermesPythonRunner({ python, env: () => runtime.cliEnv(), timeoutMs: 45_000 });
             },
             // The newest Codex CLI release, read by itself; the hub's environment may pin it.

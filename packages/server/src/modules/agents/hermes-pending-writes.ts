@@ -18,6 +18,7 @@
  *   store, `apply_memory_pending`, or `apply_skill_pending`; the record is dropped only when Hermes
  *   says it applied.
  */
+import type { PythonCommand } from './hermes-python.js';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
@@ -172,13 +173,16 @@ export type HermesPython = (
 ) => Promise<{ code: number; stdout: string; stderr: string }>;
 
 export function hermesPythonRunner(options: {
-  python: string;
+  /** A venv's interpreter, or how Hermes runs its own (`hermes-python.ts`). */
+  python: string | PythonCommand;
   env: () => NodeJS.ProcessEnv;
   timeoutMs?: number;
 }): HermesPython {
+  const { command, args } =
+    typeof options.python === 'string' ? { command: options.python, args: ['-c'] } : options.python;
   return (home, argv) =>
     new Promise((resolve) => {
-      const child = spawn(options.python, ['-c', ...argv], {
+      const child = spawn(command, [...args, ...argv], {
         env: { ...options.env(), HERMES_HOME: home, NO_COLOR: '1' },
         cwd: home,
         stdio: ['ignore', 'pipe', 'pipe'],
