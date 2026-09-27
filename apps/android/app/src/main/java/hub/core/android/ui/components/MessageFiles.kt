@@ -174,7 +174,7 @@ class FileOpener(private val context: Context, private val downloads: FileDownlo
 }
 
 @Composable
-private fun rememberOpener(profile: String): FileOpener {
+internal fun rememberOpener(profile: String): FileOpener {
     val context = LocalContext.current
     val downloads = context.graph.files
     val opener = remember(profile) { FileOpener(context, downloads, profile) }
@@ -232,7 +232,7 @@ private fun PictureFile(file: HubFile, profile: String) {
 
 /** Any other file: a row that opens it. */
 @Composable
-private fun OpenableFile(file: HubFile, profile: String) {
+internal fun OpenableFile(file: HubFile, profile: String) {
     val context = LocalContext.current
     val downloads = context.graph.files
     val scope = rememberCoroutineScope()

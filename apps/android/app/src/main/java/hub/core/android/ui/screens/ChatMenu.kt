@@ -69,6 +69,9 @@ fun ChatMenuButton(
     Box {
         HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("chat.more"))
         HubMenu(open, { open = false }) {
+            // The chat's insight (apps batch 6): context, runs, subagents, changed files, files.
+            hub.core.android.ui.components.ChatInsightMenuItems(sessionId, profile) { open = false }
+            MenuDivider()
             actions.forEach { action ->
                 val tag = Modifier.testTag("chat.${action.name.lowercase()}")
                 when (action) {

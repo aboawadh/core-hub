@@ -215,6 +215,8 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                         .joinToString(" · ").ifEmpty { null },
                 ) {
                     PendingButton(shell, nav)
+                    // The context ring and running subagents (apps batch 6); their sheets live here too.
+                    hub.core.android.ui.components.ChatInsightBar(route.sessionId, route.profile)
                     hub.core.android.ui.screens.ChatMenuButton(
                         shell, route.sessionId, route.profile, title,
                         onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },

@@ -18,6 +18,8 @@ enum ChatControls {
         let value: String
         let label: String
         let group: String
+        /// The catalogue's `context_window`, for the context ring's estimate (apps batch 6).
+        var window: Int? = nil
         var id: String { value }
     }
 
@@ -25,7 +27,7 @@ enum ChatControls {
     static func models(_ catalogue: [Model]) -> [ModelOption] {
         catalogue
             .filter { $0.kind == .chat && $0.imageOnly != true && $0.visible && !$0.disabled }
-            .map { ModelOption(value: $0.key, label: $0.alias ?? $0.model, group: $0.provider) }
+            .map { ModelOption(value: $0.key, label: $0.alias ?? $0.model, group: $0.provider, window: $0.contextWindow) }
     }
 
     /// The options matching what was typed, in the label, the id or the provider; case does not matter.
@@ -228,9 +230,11 @@ enum ChatActions {
         }
     }
 
-    static func compress(_ app: AppModel, id: String, profile: String) async throws -> SessionCompression {
-        try await app.api.call {
-            try await SessionsAPI.sessionsCompress(xHubProfile: profile, sessionId: id, sessionCompressRequest: SessionCompressRequest(), apiConfiguration: $0)
+    /// `focus` is what the summary should keep in view (apps batch 6: `ChatInsight.compressRequest`).
+    static func compress(_ app: AppModel, id: String, profile: String, focus: String = "") async throws -> SessionCompression {
+        let request = ChatInsight.compressRequest(focus: focus)
+        return try await app.api.call {
+            try await SessionsAPI.sessionsCompress(xHubProfile: profile, sessionId: id, sessionCompressRequest: request, apiConfiguration: $0)
         }
     }
 
