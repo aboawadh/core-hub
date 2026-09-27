@@ -38,6 +38,7 @@ import { ApprovalGate } from '../ScheduleRuns.js';
 import { WorkflowCanvas, type CanvasIssues } from './WorkflowCanvas.js';
 import { IssueList, StepPanel, StepRunPanel } from './StepPanel.js';
 import { WorkflowTriggers } from './WorkflowTriggers.js';
+import { FailureAlertForm } from './SendForm.js';
 import {
   NODE_KINDS,
   emptyDraft,
@@ -507,6 +508,11 @@ export default function WorkflowEditor({
                         ) : (
                           <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
                         )}
+                        <FailureAlertForm
+                          alert={draft.on_failure ?? null}
+                          profile={profile}
+                          onChange={(alert) => dispatch({ type: 'alert', alert })}
+                        />
                         <WorkflowTriggers
                           workflowId={workflowId}
                           profile={profile}
@@ -718,6 +724,13 @@ function RunView({
         {shown && (
           <Badge tone={RUN_TONE[shown.status] ?? 'neutral'} dot testId="workflow-run-state">
             {t(`schedules.run.status.${shown.status}`)}
+          </Badge>
+        )}
+        {shown?.phase && (
+          <Badge testId="workflow-run-phase">
+            {t(`workflows.phase.${shown.phase}`) === `workflows.phase.${shown.phase}`
+              ? shown.phase
+              : t(`workflows.phase.${shown.phase}`)}
           </Badge>
         )}
         {shown?.filtered && (
