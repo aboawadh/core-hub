@@ -445,7 +445,13 @@ its approval.
   default; not tried) — proven by a run on the branch (docs/RELEASING.md). Since 2026-09-26 an
   uploaded build is also added to the TestFlight groups in `testflight_groups` (default `Owner`)
   by `apps/ios/scripts/testflight-distribute.mjs` once App Store Connect has processed it —
-  tested against a fake App Store Connect only, not yet on a real run.
+  tested against a fake App Store Connect only, not yet on a real run. Since 2026-09-27 (§117) an
+  uploaded build also goes to the external group `Public` (input `external_group`): the workflow
+  keeps the group's **public TestFlight link** on (limit `public_link_limit`, default 1000), prints
+  it in the run's summary, sets "What to Test", and submits the build for Beta App Review
+  (`apps/ios/scripts/testflight-public.mjs`); while the owner's Test Information (feedback email,
+  review contact, demo account) is missing, that step fails and names the fields — tested against a
+  fake App Store Connect only, not yet on a real run.
 - **App icons** (since 2026-09-26): every app shows the Core Hub mark, white on the accent
   (`#0b6b5d`) like the favicon, made by `pnpm icons:build` (`scripts/icons/build-icons.mjs`, resvg)
   from `CoreHubMark.tsx` and `tokens.json`: iOS `AppIcon` (one opaque 1024 px icon, with iOS 18

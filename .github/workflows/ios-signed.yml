@@ -5,7 +5,8 @@ name: iOS signed build
 # profiles come through the App Store Connect API key, which xcodebuild also uses
 # (-allowProvisioningUpdates). Never on a pull request: only when the owner runs it by hand or
 # pushes a release tag. TestFlight only when a manual run asks for it, and then the build is added
-# to the TestFlight groups asked for (Owner by default); the .ipa becomes a workflow artifact only
+# to the TestFlight groups asked for (Owner by default) and submitted for Beta App Review into the
+# external group with the public link (Public by default); the .ipa becomes a workflow artifact only
 # on a tag or when asked (the repository is public).
 on:
   workflow_dispatch:
@@ -18,6 +19,14 @@ on:
         description: 'TestFlight groups to add the uploaded build to (comma-separated; empty adds none)'
         required: false
         default: 'Owner'
+      external_group:
+        description: 'External TestFlight group with the public link; the build is submitted for Beta App Review into it (empty skips)'
+        required: false
+        default: 'Public'
+      public_link_limit:
+        description: 'Most testers who can join through the public link (1-10000)'
+        required: false
+        default: '1000'
       keep_artifacts:
         description: 'Keep the signed .ipa as a workflow artifact (anyone can download it)'
         type: boolean
@@ -44,8 +53,9 @@ jobs:
   signed:
     name: Signed archive and export
     runs-on: macos-latest
-    # 60 for the build, and up to 30 more waiting for App Store Connect to process a TestFlight upload.
-    timeout-minutes: 95
+    # 60 for the build, up to 30 more waiting for App Store Connect to process a TestFlight upload,
+    # and up to 30 more for the public-link step when the groups step did not already wait.
+    timeout-minutes: 130
     steps:
       - uses: actions/checkout@v4
       - name: Refuse tags that are not on main
@@ -234,6 +244,7 @@ jobs:
           test "$aps" = production || { echo "::error::aps-environment is '${aps}', expected production"; exit 1; }
           echo "Signed .ipa: $(du -h "$IPA" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload to TestFlight
+        id: upload
         if: github.event_name == 'workflow_dispatch' && inputs.upload_testflight
         env:
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
@@ -258,6 +269,21 @@ jobs:
           path: ${{ env.IPA }}
           retention-days: 14
           if-no-files-found: error
+      # The public TestFlight link (docs/RELEASING.md → TestFlight): makes sure the external group
+      # exists with its public link on and prints the link in the job summary, sets the build's
+      # "What to Test", and submits it for Beta App Review into that group. Review details only the
+      # owner can give (feedback email, contact, demo account) are never invented: when missing, this
+      # step fails and names them, after the upload, the internal groups and the artifact are done.
+      - name: TestFlight public link and Beta App Review
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.upload_testflight && inputs.external_group != '' && steps.upload.outcome == 'success' }}
+        timeout-minutes: 35
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          EXTERNAL_GROUP: ${{ inputs.external_group }}
+          PUBLIC_LINK_LIMIT: ${{ inputs.public_link_limit }}
+          TESTFLIGHT_WAIT_MINUTES: '30'
+        run: node apps/ios/scripts/testflight-public.mjs "$APP_ID" "$BUILD_NUMBER" "$BUILT_VERSION" "$EXTERNAL_GROUP" "$PUBLIC_LINK_LIMIT"
       # The logs stay in the job's log, where GitHub masks the secrets; they are never uploaded.
       - name: Tail of the xcodebuild logs
         if: failure()
