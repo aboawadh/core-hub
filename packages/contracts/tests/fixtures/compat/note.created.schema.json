@@ -1,0 +1,30 @@
+{
+  "$comment": "A released realtime event the compatibility guard tests start from (tests/compat.test.ts).",
+  "type": "object",
+  "required": ["event", "namespace", "seq", "payload"],
+  "properties": {
+    "event": { "const": "note.created" },
+    "namespace": { "const": "/rt/notes" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "payload": {
+      "type": "object",
+      "required": ["note", "reason"],
+      "properties": {
+        "note": { "$ref": "#/$defs/Note" },
+        "reason": { "type": "string", "enum": ["created", "imported"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Note": {
+      "type": "object",
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    }
+  }
+}

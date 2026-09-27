@@ -40,6 +40,14 @@ from `PRODUCT` / `derived` there, never a typed literal.
 - `docs/` — everything a contributor needs; `docs/changes/` — one record per task.
 
 ## Hard rules
+- **No breaking changes** (ADR 0027, owner 2026-09-27: real people run Core Hub). Hubs,
+  apps, scripts and data people already have keep working: the contract only grows (nothing
+  removed, renamed, newly required or narrowed; responses and events promise nothing less),
+  migrations are forward-only and non-destructive, an upgrade is replacing the image, old
+  environment names are still read, a newer app copes with an older hub and an older app with a
+  newer hub, release file names stay. CI (`pnpm contracts:compat`, `pnpm migrations:guard`)
+  compares with the latest release. If a break seems unavoidable, stop and ask the owner; only
+  he approves one (`docs/contracts/breaking-approved.json`).
 - Server code lives in a module under `packages/server/src/modules/<domain>`;
   modules talk through their public `index.ts` only; composition happens in
   `packages/server/src/app/`. See `docs/ARCHITECTURE.md` §Modules.

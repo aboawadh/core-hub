@@ -285,6 +285,23 @@ describe('distribute', () => {
     assert.deepEqual(posts()[0].body, { data: [{ type: 'betaGroups', id: 'g-owner' }] });
   });
 
+  it('does not add a build to an internal group that gets every build, and succeeds', async () => {
+    fake.builds = [{ processingState: 'VALID', internalBuildState: 'READY_FOR_BETA_TESTING' }];
+    fake.groups[0].attributes.hasAccessToAllBuilds = true;
+    const { code, lines } = await run({ groups: 'Owner' });
+    assert.equal(code, 0);
+    assert.equal(posts().length, 0);
+    assert.ok(has(lines, 'notice', 'gets every build automatically'));
+  });
+
+  it('still adds the other groups when one gets every build', async () => {
+    fake.builds = [{ processingState: 'VALID', internalBuildState: 'READY_FOR_BETA_TESTING' }];
+    fake.groups[0].attributes.hasAccessToAllBuilds = true;
+    const { code } = await run({ groups: 'Owner, Friends' });
+    assert.equal(code, 0);
+    assert.deepEqual(posts()[0].body, { data: [{ type: 'betaGroups', id: 'g-friends' }] });
+  });
+
   it('fails when the app is not in App Store Connect', async () => {
     fake.apps = [];
     const { code, lines } = await run();

@@ -445,7 +445,13 @@ its approval.
   default; not tried) — proven by a run on the branch (docs/RELEASING.md). Since 2026-09-26 an
   uploaded build is also added to the TestFlight groups in `testflight_groups` (default `Owner`)
   by `apps/ios/scripts/testflight-distribute.mjs` once App Store Connect has processed it —
-  tested against a fake App Store Connect only, not yet on a real run.
+  tested against a fake App Store Connect only, not yet on a real run. Since 2026-09-27 (§117) an
+  uploaded build also goes to the external group `Public` (input `external_group`): the workflow
+  keeps the group's **public TestFlight link** on (limit `public_link_limit`, default 1000), prints
+  it in the run's summary, sets "What to Test", and submits the build for Beta App Review
+  (`apps/ios/scripts/testflight-public.mjs`); while the owner's Test Information (feedback email,
+  review contact, demo account) is missing, that step fails and names the fields — tested against a
+  fake App Store Connect only, not yet on a real run.
 - **App icons** (since 2026-09-26): every app shows the Core Hub mark, white on the accent
   (`#0b6b5d`) like the favicon, made by `pnpm icons:build` (`scripts/icons/build-icons.mjs`, resvg)
   from `CoreHubMark.tsx` and `tokens.json`: iOS `AppIcon` (one opaque 1024 px icon, with iOS 18
@@ -872,6 +878,18 @@ that differs, and on a `v*` tag that does not match. Signed Android/iOS builds a
 number + 100, above the old app's 63; a manual preview image reports `1.1.0-preview.<run>`. Not
 yet seen on a signed build or a published image: no signed workflow or release has run since
 (docs/RELEASING.md).
+
+## Compatibility
+Since 2026-09-27 **nothing people already run may break** (ADR 0027, owner). Two guards in CI
+compare every pull request with the latest release tag: `pnpm contracts:compat` (the OpenAPI
+document, its webhooks and the realtime event schemas — removed, renamed, newly required,
+narrowed input, weakened output) and `pnpm migrations:guard` (released migrations unchanged;
+nothing released dropped, renamed or emptied). An unavoidable break passes only when the owner
+lists it in `docs/contracts/breaking-approved.json` (empty today). Proven by their tests and by
+the real history: against v1.1.2 the contract guard reports the webhook operations that became
+profile-scoped in v1.1.3; against v1.1.1 the removed preset, relay and peer fields. Meaning,
+environment names, release file names, socket commands and the models catalogue are review
+items, not checked by a machine.
 
 ## First run
 A hub with no owner is **open to the first comer for an hour** after the process

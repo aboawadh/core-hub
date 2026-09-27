@@ -21,6 +21,25 @@ catches and where it lives.
 The contract test does not replace per-module tests: TEAM-RULES §4 asks every implemented
 route for at least one success and one failure case in the module's own tests.
 
+## Breaking changes (ADR 0027)
+
+Both guards compare the working tree with the newest release tag `v*` (semver; `--base <ref>`
+or `COMPAT_BASE` to compare with something else) and run in the `checks` job after
+`git fetch --no-tags --depth=1 origin 'refs/tags/v*:refs/tags/v*'`.
+
+| Break | Caught by | Where |
+|---|---|---|
+| Removed operation, path, method, webhook, parameter, field, enum value, union variant; newly required parameter, request field or body; narrowed request type, enum or limit; request object newly closed; changed request default; response field that became nullable, optional or another type; removed success status or media type; auth added, `x-roles` narrowed, `x-scope: global` lost | `pnpm contracts:compat` | `packages/contracts/scripts/compat.mjs`; tests and fixtures in `packages/contracts/tests/compat.test.ts`, `tests/fixtures/compat/` |
+| Removed or renamed realtime event, removed event field or enum value, event field that became nullable or another type | `pnpm contracts:compat` | same script, over `packages/contracts/events/**` |
+| Released migration edited or deleted; new migration that drops or renames a released table or column, empties a table, or copies a table without one of its columns | `pnpm migrations:guard` | `scripts/migrations-guard.mjs`; tests in `scripts/migrations-guard.test.mjs` (`pnpm scripts:test`) |
+
+A break the owner approved is listed, by the id the guard prints, in
+`docs/contracts/breaking-approved.json` with `base`, `decision` (an existing `ADR NNNN` or
+`DECISIONS §N`), `approved_by: "twuijri"` and `reason` (ADR 0027 §8). An approval covers one
+release: after the next tag the guard reports it as stale. Meaning, defaults outside the
+contract, environment variables, release file names, socket commands and the models catalogue
+are not machine-checked: the pull request template's Compatibility item asks for them.
+
 ## i18n drift
 
 `pnpm i18n:check` (`scripts/i18n-check.mjs`) flattens each locale set's `ar.json` and

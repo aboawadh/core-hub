@@ -1,0 +1,4 @@
+{
+  "$comment": "Breaks of the contract or the data that the owner approved (ADR 0027 §8). One entry per break: id exactly as `pnpm contracts:compat` / `pnpm migrations:guard` prints it, base = the release tag it is measured against, decision = the ADR or DECISIONS entry recording the owner's approval, approved_by = twuijri, reason. Only the owner adds entries.",
+  "approvals": []
+}
