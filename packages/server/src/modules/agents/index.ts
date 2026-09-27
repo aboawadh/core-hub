@@ -68,7 +68,13 @@ import { readJourney } from './hermes-journey.js';
 import { AgentAvatars } from './avatars.js';
 import { namedHermesProfiles } from './hermes-profiles.js';
 import { RunLeases } from './hub-tools/leases.js';
-import { HUB_SERVER_NAME } from './hub-tools/block.js';
+import { HUB_SERVER_NAME, removeBlock } from './hub-tools/block.js';
+import { removeHook } from './hub-tools/hook.js';
+import {
+  createDefaultProfileReplacement,
+  type DefaultProfileReplacement,
+  type SwapFs,
+} from './hermes-default-swap.js';
 import { registerHubToolRoutes } from './hub-tools/routes.js';
 import {
   HubToolsService,
@@ -260,6 +266,15 @@ export {
   type HermesCompression,
 } from './hermes-compression.js';
 export { profileHome } from './profile-home.js';
+export {
+  SHARED_AT_ROOT,
+  createDefaultProfileReplacement,
+  swapDefaultProfile,
+  type DefaultProfileReplacement,
+  type DefaultReplaceRequest,
+  type DefaultSwapReport,
+  type SwapFs,
+} from './hermes-default-swap.js';
 // The models module asks a signed-in provider's own model list from Hermes's Python (§83).
 export { hermesPythonRunner } from './hermes-pending-writes.js';
 export {
@@ -903,6 +918,41 @@ export function hermesProcessesFor(app: FastifyInstance): Array<{
 /** The hub's own tools of this app (contract decision §67). */
 export function hubToolsFor(app: FastifyInstance): HubToolsService {
   return contextOf(app).hubTools;
+}
+
+/**
+ * Replacing Hermes's default profile with an archive (contract decision §116), where this hub
+ * runs Hermes itself — `null` anywhere else. While it works, the root gateway and the TUI gateway
+ * are held down and Hermes's dashboard server is stopped (it reads the root's files too); once
+ * the hub's rows are in, the hub's tools go back into the new root (when on there) and leave the
+ * backup (their key is the default's), and the skill library is seeded in both. Afterwards the
+ * profile gateways are checked again: the backup brought the old default's channels and jobs.
+ */
+export function hermesDefaultReplacementFor(
+  app: FastifyInstance,
+  fs?: SwapFs,
+): DefaultProfileReplacement | null {
+  const ctx = contextOf(app);
+  const { mode, home } = ctx.runtime.status();
+  if (mode !== 'managed' || !home) return null;
+  return createDefaultProfileReplacement({
+    home,
+    hold: (work) =>
+      ctx.runtime.withRootHeld(async () => {
+        await ctx.dashboard.stop('the default profile is being replaced');
+        return work();
+      }),
+    prepare: (report) => {
+      removeBlock(report.backup);
+      removeHook(report.backup);
+      ctx.hubTools.syncAll();
+      seedSkillLibraryOf(home, app.log);
+      seedSkillLibraryOf(report.backup, app.log);
+    },
+    after: () => ctx.runtime.scheduledJobsChanged(),
+    ...(fs ? { fs } : {}),
+    log: app.log,
+  });
 }
 
 /** Who each live run acts for — the hub's own tools read it; a test opens one by hand. */

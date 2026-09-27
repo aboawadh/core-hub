@@ -354,6 +354,43 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
   });
 });
 
+describe('Hermes runtime: the root held while the default profile is replaced (decision §116)', () => {
+  it('holds the root gateway down and closes the TUI gateway during the work, then starts the gateway again', async () => {
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const tui = runtime.tuiChannel()!;
+    // A conversation in flight: the TUI gateway is closed anyway, its files are about to move.
+    await HermesTuiSession.open(tui, null);
+    const during = await runtime.withRootHeld(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return {
+        gateways: spawned.length,
+        gatewayKilled: spawned[0]!.child.killed,
+        tuiAlive: tui.alive,
+      };
+    });
+    expect(during).toEqual({ gateways: 1, gatewayKilled: ['SIGTERM'], tuiAlive: false });
+    expect(started[0]!.killed).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(spawned).toHaveLength(2); // the root gateway is back, on the files now there
+    expect(runtime.tuiChannel()).not.toBe(tui);
+    await runtime.stop();
+  });
+});
+
 describe("Hermes runtime: Hermes's settings changed (contract decision §58)", () => {
   it('retires the TUI gateway so the next message reads the new values, and leaves an external Hermes alone', async () => {
     const { logger } = capturingLogger();

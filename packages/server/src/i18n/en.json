@@ -83,7 +83,13 @@
     "profile_archive_not_gzip": "The file is not a .tar.gz archive.",
     "profile_archive_not_tar": "The file is compressed but is not a tar archive.",
     "profile_archive_truncated": "The archive is cut short; upload it again.",
-    "profile_archive_too_large": "The archive unpacks to more than the hub accepts (4 GB)."
+    "profile_archive_too_large": "The archive unpacks to more than the hub accepts (4 GB).",
+    "profile_replace_not_done": "The import did not happen and your default profile is as it was:",
+    "profile_replace_no_default": "This hub has no default profile to replace.",
+    "profile_replace_unpacking": "Unpacking the archive…",
+    "profile_replace_moving": "Keeping the current default as {backup} and putting the archive in its place…",
+    "profile_replace_done": "The archive is now the default profile; the previous one is kept as {backup}.",
+    "profile_replace_busy": "The default profile is already being replaced; wait for that import to finish."
   },
   "sessions": {
     "run_interrupted": "Stopped by the user.",

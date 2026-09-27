@@ -21,7 +21,15 @@
  * names (`L`/`K`) and PAX headers (`x`/`g`) are metadata entries that describe the next one;
  * they travel with it, or are dropped with it.
  */
-import { createReadStream, createWriteStream } from 'node:fs';
+import {
+  closeSync,
+  createReadStream,
+  createWriteStream,
+  mkdirSync,
+  openSync,
+  writeSync,
+} from 'node:fs';
+import nodePath from 'node:path';
 import { Transform, Writable, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip, createGzip } from 'node:zlib';
@@ -67,6 +75,21 @@ export interface ArchiveRules {
    * the profile's providers writes them (contract decision §37).
    */
   append?: readonly { path: string; data: Buffer }[];
+  /**
+   * Receives every folder and regular file that is kept (not dropped, not captured), as it
+   * streams: how an import into the default profile unpacks the archive itself (contract
+   * decision §116), once a first read has checked it.
+   */
+  sink?: ArchiveSink;
+}
+
+/** Where `rewriteArchive` hands the entries it keeps, one at a time. */
+export interface ArchiveSink {
+  /** A folder, or a regular file whose bytes follow; `mode` is the header's permission bits. */
+  open(path: string, kind: 'dir' | 'file', mode: number): void;
+  write(bytes: Buffer): void;
+  /** The entry opened last is complete. */
+  close(): void;
 }
 
 /** A captured entry larger than this is not one the hub wrote. */
@@ -130,6 +153,52 @@ export async function rewriteArchive(
   return filter.report();
 }
 
+/**
+ * Unpacks `source` into the folder `target` (made when missing): folders and regular files only,
+ * each one checked to land inside `target`. Meant for an archive a first `rewriteArchive` read
+ * has already checked (one root, no links, no unsafe paths); an entry that would still leave
+ * `target` stops the unpacking with an error rather than being written. Returns the report.
+ */
+export async function extractArchive(
+  source: string,
+  target: string,
+  rules: Pick<ArchiveRules, 'drop' | 'capture' | 'maxUnpackedBytes'> = {},
+): Promise<ArchiveReport> {
+  const root = nodePath.resolve(target);
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  let open: number | null = null;
+  const inside = (entry: string): string => {
+    const resolved = nodePath.resolve(root, entry);
+    if (entry.startsWith('/') || !resolved.startsWith(root + nodePath.sep)) {
+      throw new Error(`${entry}: the entry leaves the archive's folder`);
+    }
+    return resolved;
+  };
+  const sink: ArchiveSink = {
+    open(entry, kind, mode) {
+      const where = inside(entry);
+      if (kind === 'dir') {
+        mkdirSync(where, { recursive: true, mode: (mode & 0o755) | 0o700 });
+        return;
+      }
+      mkdirSync(nodePath.dirname(where), { recursive: true, mode: 0o755 });
+      open = openSync(where, 'w', (mode & 0o755) | 0o600);
+    },
+    write(bytes) {
+      if (open !== null) writeSync(open, bytes);
+    },
+    close() {
+      if (open !== null) closeSync(open);
+      open = null;
+    },
+  };
+  try {
+    return await rewriteArchive(source, null, { ...rules, sink });
+  } finally {
+    if (open !== null) closeSync(open);
+  }
+}
+
 function discard(): Writable {
   return new Writable({
     write(_chunk, _encoding, callback) {
@@ -172,6 +241,8 @@ export class TarFilter extends Transform {
   /** The entry being captured (its path and bytes so far), while in `skip`. */
   private capturing: { path: string; chunks: Buffer[]; left: number } | null = null;
   private readonly captured: Record<string, Buffer> = {};
+  /** An entry handed to `rules.sink` is open and has not been closed yet. */
+  private sinkOpen = false;
 
   constructor(private readonly rules: ArchiveRules) {
     super();
@@ -263,6 +334,7 @@ export class TarFilter extends Transform {
       const own = Math.min(part.length, Math.max(this.content, 0));
       if (own > 0) {
         const bytes = part.subarray(0, own);
+        if (this.sinkOpen) this.rules.sink?.write(Buffer.from(bytes));
         this.push(this.masker ? this.masker.feed(bytes) : Buffer.from(bytes));
         this.content -= own;
         if (this.content === 0) this.endData();
@@ -277,6 +349,10 @@ export class TarFilter extends Transform {
   }
 
   private endData(): void {
+    if (this.sinkOpen) {
+      this.sinkOpen = false;
+      this.rules.sink?.close();
+    }
     if (!this.masker) return;
     this.push(this.masker.flush());
     if (this.masker.hits > 0) note(this.lists.masked, this.path);
@@ -348,6 +424,14 @@ export class TarFilter extends Transform {
     this.held = [];
     this.push(block);
     this.path = path;
+    if (this.rules.sink && (regular || type === '5')) {
+      this.rules.sink.open(
+        path,
+        regular ? 'file' : 'dir',
+        readOctal(block.subarray(100, 108)) ?? 0,
+      );
+      this.sinkOpen = true;
+    }
     this.masker = regular && this.secrets.length > 0 ? new Masker(this.secrets) : null;
     this.state = 'data';
     this.remaining = regular ? padded : 0;

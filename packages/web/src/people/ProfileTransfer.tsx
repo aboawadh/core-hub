@@ -8,7 +8,10 @@
  *
  * **Import** is a file, a slug and a name: the file is uploaded (with its progress), then a
  * job hands it to Hermes, which makes the profile; the list shows it when the job is done.
- * A slug already used is refused here, before the hub has to.
+ * A slug already used is refused here, before the hub has to. Or, ticked, the archive
+ * **replaces the default profile** (decision §116): a second, explicit warning says what
+ * happens, and the dialog ends by naming the backup the old default is kept as, with the
+ * way to switch to it.
  *
  * Neither exists on a hub that does not run Hermes itself; the hub says so by name and the
  * dialog shows that sentence.
@@ -22,8 +25,19 @@ import {
   useUploadAttachment,
 } from '../attachments/queries.js';
 import { describeError } from '../auth/client.js';
+import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
-import { Button, Dialog, Field, Input, Notice, Segmented, useToast } from '../ui/index.js';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  Field,
+  Input,
+  Notice,
+  Segmented,
+  useConfirm,
+  useToast,
+} from '../ui/index.js';
 import {
   PROFILE_NAME_MAX,
   jobFinished,
@@ -286,6 +300,8 @@ export function ImportDialog({
   const { t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { setProfile } = useAuth();
+  const { ask, dialog } = useConfirm();
   const { upload } = useUploadAttachment();
   const start = useImportWorkspace();
   const picker = useRef<HTMLInputElement>(null);
@@ -295,13 +311,19 @@ export function ImportDialog({
   const [uploading, setUploading] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  // «استبدل البروفايل الافتراضي بهذا» (decision §116), and what it ended with.
+  const [replaceDefault, setReplaceDefault] = useState(false);
+  const [replaced, setReplaced] = useState<ProfileImportResult | null>(null);
   const job = useFollowedJob(jobId);
 
   const taken = new Set(existing.map((workspace) => workspace.slug));
   const slugTaken = taken.has(slug);
   const badSlug = slug.length > 0 && !SLUG.test(slug);
   const busy = uploading !== null || start.isPending || (jobId !== null && !jobFinished(job));
-  const ready = file !== null && slug.length > 0 && !badSlug && !slugTaken && !busy;
+  // Replacing the default makes no new profile, so it needs no id of its own.
+  const ready =
+    file !== null && !busy && (replaceDefault || (slug.length > 0 && !badSlug && !slugTaken));
+  const currentDefault = existing.find((workspace) => workspace.slug === 'default');
 
   // Done: the list learns the new profile, the person hears it once, the dialog closes.
   const announced = useRef<string | null>(null);
@@ -312,6 +334,11 @@ export function ImportDialog({
       const made = job.result as unknown as ProfileImportResult;
       void queryClient.invalidateQueries({ queryKey: peopleKeys.workspaces() });
       void queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      if (made.replaced_default && made.backup) {
+        // The dialog stays: it names the backup and offers the way back to it.
+        setReplaced(made);
+        return;
+      }
       toast({ tone: 'success', title: t('workspaces.import_done', { name: made.name }) });
       onClose();
     } else if (job.status === 'failed' || job.status === 'cancelled') {
@@ -345,6 +372,24 @@ export function ImportDialog({
       setFailure(t('workspaces.import_too_large'));
       return;
     }
+    // The second, explicit warning: exactly what happens to the default (decision §116).
+    if (
+      replaceDefault &&
+      !(await ask({
+        title: t('workspaces.import_replace_confirm_title'),
+        body: (
+          <span dir="auto">
+            {t('workspaces.import_replace_confirm_body', {
+              name: currentDefault?.name ?? 'default',
+            })}
+          </span>
+        ),
+        confirmLabel: t('workspaces.import_replace_confirm'),
+        tone: 'danger',
+      }))
+    ) {
+      return;
+    }
     let attachmentId: string;
     try {
       setUploading(0);
@@ -365,7 +410,13 @@ export function ImportDialog({
       setUploading(null);
     }
     start.mutate(
-      { attachment_id: attachmentId, slug, ...(name.trim() ? { name: name.trim() } : {}) },
+      {
+        attachment_id: attachmentId,
+        // Still sent as before; the hub does not use it when replacing the default.
+        slug: replaceDefault && !SLUG.test(slug) ? 'imported' : slug,
+        ...(name.trim() ? { name: name.trim() } : {}),
+        ...(replaceDefault ? { replace_default: true } : {}),
+      },
       {
         onSuccess: (id) => setJobId(id),
         onError: (error) => setFailure(describeError(error, t)),
@@ -381,74 +432,117 @@ export function ImportDialog({
       closeLabel={t('common.cancel')}
       testId="import-workspace-dialog"
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t('common.cancel')}
+        replaced ? (
+          <Button onClick={onClose} data-testid="close-import">
+            {t('ui.close')}
           </Button>
-          <Button disabled={!ready} data-testid="start-import" onClick={() => void submit()}>
-            {t('workspaces.import')}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={!ready} data-testid="start-import" onClick={() => void submit()}>
+              {t(replaceDefault ? 'workspaces.import_replace_confirm' : 'workspaces.import')}
+            </Button>
+          </>
+        )
       }
     >
-      <div className="flex flex-col gap-3">
-        <p className="text-sm">{t('workspaces.import_what')}</p>
-        <div className="flex items-center gap-2">
-          <input
-            ref={picker}
-            type="file"
-            accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
-            hidden
-            data-testid="import-file"
-            onChange={choose}
-          />
-          <Button variant="secondary" size="sm" onClick={() => picker.current?.click()}>
-            {t(file ? 'workspaces.import_other_file' : 'workspaces.import_choose')}
-          </Button>
-          <span className="truncate text-sm text-muted" dir="ltr" data-testid="import-file-name">
-            {file?.name ?? t('workspaces.import_no_file')}
-          </span>
-        </div>
-        <Field
-          label={t('workspaces.slug')}
-          hint={t('workspaces.slug_hint')}
-          {...(badSlug
-            ? { error: t('workspaces.slug_bad') }
-            : slugTaken
-              ? { error: t('workspaces.slug_taken') }
-              : {})}
-        >
-          {(props) => (
-            <Input
-              {...props}
-              dir="ltr"
-              value={slug}
-              invalid={badSlug || slugTaken}
-              onChange={(event) => setSlug(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label={t('workspaces.name')}>
-          {(props) => (
-            <Input
-              {...props}
-              dir="auto"
-              maxLength={PROFILE_NAME_MAX}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          )}
-        </Field>
-        {uploading !== null && <JobProgress testId="import-progress" ratio={uploading} />}
-        {jobId !== null && !failure && <JobProgress job={job} testId="import-progress" />}
-        {failure && (
-          <Notice tone="danger" role="alert">
-            <span dir="auto" data-testid="import-failure">
-              {failure}
+      {dialog}
+      {replaced?.backup ? (
+        <div className="flex flex-col gap-3" data-testid="import-replaced">
+          <Notice tone="success" role="status">
+            <span dir="auto">
+              {t('workspaces.import_replace_done', { backup: replaced.backup.slug })}
             </span>
           </Notice>
-        )}
-      </div>
+          <div>
+            <Button
+              variant="secondary"
+              size="sm"
+              data-testid="open-backup"
+              onClick={() => {
+                setProfile(replaced.backup!.slug);
+                onClose();
+              }}
+            >
+              {t('workspaces.import_replace_open', { backup: replaced.backup.slug })}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm">{t('workspaces.import_what')}</p>
+          <div className="flex items-center gap-2">
+            <input
+              ref={picker}
+              type="file"
+              accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
+              hidden
+              data-testid="import-file"
+              onChange={choose}
+            />
+            <Button variant="secondary" size="sm" onClick={() => picker.current?.click()}>
+              {t(file ? 'workspaces.import_other_file' : 'workspaces.import_choose')}
+            </Button>
+            <span className="truncate text-sm text-muted" dir="ltr" data-testid="import-file-name">
+              {file?.name ?? t('workspaces.import_no_file')}
+            </span>
+          </div>
+          <Checkbox
+            checked={replaceDefault}
+            onChange={setReplaceDefault}
+            disabled={busy}
+            label={t('workspaces.import_replace_default')}
+            hint={t('workspaces.import_replace_default_hint')}
+            testId="import-replace-default"
+          />
+          {!replaceDefault && (
+            <Field
+              label={t('workspaces.slug')}
+              hint={t('workspaces.slug_hint')}
+              {...(badSlug
+                ? { error: t('workspaces.slug_bad') }
+                : slugTaken
+                  ? { error: t('workspaces.slug_taken') }
+                  : {})}
+            >
+              {(props) => (
+                <Input
+                  {...props}
+                  dir="ltr"
+                  value={slug}
+                  invalid={badSlug || slugTaken}
+                  onChange={(event) => setSlug(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
+          <Field
+            label={t('workspaces.name')}
+            {...(replaceDefault ? { hint: t('workspaces.import_replace_name_hint') } : {})}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                dir="auto"
+                maxLength={PROFILE_NAME_MAX}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
+          {uploading !== null && <JobProgress testId="import-progress" ratio={uploading} />}
+          {jobId !== null && !failure && <JobProgress job={job} testId="import-progress" />}
+          {failure && (
+            <Notice tone="danger" role="alert">
+              <span dir="auto" data-testid="import-failure">
+                {failure}
+              </span>
+            </Notice>
+          )}
+        </div>
+      )}
     </Dialog>
   );
 }

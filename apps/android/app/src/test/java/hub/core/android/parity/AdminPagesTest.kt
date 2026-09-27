@@ -126,6 +126,19 @@ class AdminPagesTest {
         assertNull(ProfileRules.hermesRefusal(HubError(409, "conflict", "x")))
     }
 
+    @Test fun `an import into the default sends the option and reads the backup back (decision 116)`() {
+        assertEquals(ProfileImport("att1", "team", "Old", replaceDefault = true), ProfileRules.import("att1", "team", " Old ", replaceDefault = true))
+        // The hub does not use the slug then, but it is still sent, and valid.
+        assertEquals("imported", ProfileRules.import("att1", "", "", replaceDefault = true).slug)
+        assertNull(ProfileRules.import("att1", "team", "Team").replaceDefault)
+        val replaced = job("succeeded", """{"profile_id":"p","slug":"default","name":"Old","providers":0,"replaced_default":true,
+            "backup":{"profile_id":"b","slug":"default-backup-2","name":"default-backup-2"},"skipped":[]}""", kind = "import")
+        assertEquals("default-backup-2", ProfileRules.replacedBackup(replaced))
+        // An ordinary import, and a hub older than the option (no `replaced_default`), have none.
+        assertNull(ProfileRules.replacedBackup(job("succeeded", """{"profile_id":"p","slug":"team","name":"Team","providers":0}""", kind = "import")))
+        assertNull(ProfileRules.replacedBackup(job("failed", error = """{"error":"The import did not happen","code":"internal"}""")))
+    }
+
     // ------------------------------------------------------------------ push senders
 
     private val account = """{"type":"service_account","project_id":"corehub-1","client_email":"a@b.iam.gserviceaccount.com",

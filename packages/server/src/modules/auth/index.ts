@@ -156,6 +156,7 @@ export {
 export {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
+  mirrorDisplayName,
   registerProfileMirror,
   type ProfileMirror,
   type RuntimeCompression,
@@ -166,7 +167,9 @@ export {
   MAX_EXPORT_BYTES,
   ProfileArchiveRefusal,
   ProfileArchiveUnavailable,
+  BACKUP_SLUG,
   registerProfileTransfer,
+  type DefaultProfileReplacement as ProfileDefaultReplacement,
   type ProfileArchiveFiles,
   type ProfileArchiveRuntime,
   type ProfileTransferPorts,
