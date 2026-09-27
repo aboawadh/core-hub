@@ -21,9 +21,23 @@
 - `apps/ios/scripts/asc-review-detail.test.mjs` — ثلاث حالات: موجودة، مفتوحة تُعاد تسميتها، كلها منشورة/في المراجعة فتُنشأ جديدة.
 لا يمس التطبيقات ولا المستخدمين.
 
-## الفحوص
-- `node --test apps/ios/scripts/asc-review-detail.test.mjs apps/ios/scripts/asc-prepare-submission.test.mjs` — 16/16 نجحت.
+## الفحوص (الأوامر ونواتجها الفعلية)
+```
+$ node --test apps/ios/scripts/asc-review-detail.test.mjs apps/ios/scripts/asc-prepare-submission.test.mjs
+ℹ tests 16
+ℹ suites 2
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 265.991048
+```
+eslint وprettier على الملفات الثلاثة: نظيفة.
 
-## القيود والخطوة التالية
-لم يُجرَّب على App Store Connect الحقيقي بعد. بعد الدمج: `ios-store-metadata.yml` (upload، 1.1.4) ثم `ios-submit.yml`
-(submit=false للفحص، ثم submit=true).
+## المخاطر والرجوع
+إعادة التسمية تمس نسخة لم تُنشر قط، فلا تأثير على المستخدمين. الرجوع: revert لهذا الـPR، ثم تغيير رقم النسخة يدويًا في App Store Connect.
+
+## التسليم والخطوة التالية
+PR https://github.com/twuijri/core-hub/pull/197 — ينتظر دمج المالك. لم يُجرَّب على App Store Connect الحقيقي بعد. بعد الدمج:
+`ios-store-metadata.yml` (upload، 1.1.4) ثم `ios-submit.yml` (submit=false للفحص، ثم submit=true).
