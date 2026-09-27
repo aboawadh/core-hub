@@ -75,15 +75,12 @@ final class ModelsAdminTests: XCTestCase {
         XCTAssertEqual(AdminLogic.tokens(12_300), "12.3K")
     }
 
-    func testWhatNeedsAComputersScreenIsOneTapAwayOnTheWebForTheRolesThatMayUseIt() throws {
-        XCTAssertEqual(WebOnlyPages.rows(role: "owner").map(\.term), ["linked_hubs", "terminal"])
-        XCTAssertEqual(WebOnlyPages.rows(role: "admin").map(\.term), ["linked_hubs"])
-        XCTAssertTrue(WebOnlyPages.rows(role: "member").isEmpty)
-        // The paths are the manifest's own web routes.
-        let object = try JSONSerialization.jsonObject(with: Fixture.repositoryFile("navigation", "json")) as! [String: Any]
-        let web = (object["surfaceRoutes"] as! [String: Any])["web"] as! [String: Any]
-        for page in WebOnlyPages.rows(role: "owner") {
-            XCTAssertEqual(web[page.term] as? String, page.path, page.term)
-        }
+    func testLinkedHubsAndTheTerminalArePhonePagesForTheRolesThatMayUseThem() {
+        let tools = NavigationMap.settingsManagement + NavigationMap.settingsTools
+        XCTAssertEqual(NavigationMap.visible(tools, admin: true, owner: true).filter { [.linkedHubs, .terminal].contains($0) }, [.linkedHubs, .terminal])
+        XCTAssertEqual(NavigationMap.visible(tools, admin: true, owner: false).filter { [.linkedHubs, .terminal].contains($0) }, [.linkedHubs])
+        XCTAssertTrue(NavigationMap.visible(tools, admin: false).filter { [.linkedHubs, .terminal].contains($0) }.isEmpty)
+        XCTAssertTrue(PageRegistry.page(.linkedHubs)?.native ?? false)
+        XCTAssertTrue(PageRegistry.page(.terminal)?.native ?? false)
     }
 }

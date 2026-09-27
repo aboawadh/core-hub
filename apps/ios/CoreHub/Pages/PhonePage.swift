@@ -36,8 +36,8 @@ enum PageRegistry {
     /// Every Settings destination, in the manifest's order (tabs, management, tools).
     static let settings: [PhonePage] = [
         .account, .users, .webhooks, .display, .notifications, .privacy, .thisDevice, .about,
-        .models, .deviceConnections, .knowledge,
-        .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files,
+        .models, .deviceConnections, .knowledge, .linkedHubs,
+        .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files, .terminal,
     ]
 
     /// Every agent-level destination, in `agentLevel` order.

@@ -915,6 +915,11 @@ struct FileLinkOpener: ViewModifier {
             opener.open(file, profile: profile, app: app)
             return .handled
         }
+        // One of the hub's own pages opens that page in the app, never the hub's web page.
+        if let page = FileLinks.appLink(href, hub: hub) {
+            app.open(page)
+            return .handled
+        }
         guard FileLinks.word(of: href, hub: hub) != nil, let sessionID else { return outside(url) }
         let scope = profile.isEmpty ? app.currentProfile : profile
         Task {
@@ -923,10 +928,10 @@ struct FileLinkOpener: ViewModifier {
             }
             if let file = FileLinks.resolve(href, hub: hub, own: own, files: list?.items, sessionID: sessionID) {
                 opener.open(file, profile: profile, app: app)
-            } else if url.scheme == nil || url.host == nil {
-                opener.notice = l10n("attachments.link_failed")
             } else {
-                _ = await UIApplication.shared.open(url)
+                // A path on the hub that is neither a file of this conversation nor a page the app
+                // has: said here, never handed to a browser as a hub page.
+                opener.notice = l10n("attachments.link_failed")
             }
         }
         return .handled

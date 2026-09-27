@@ -144,6 +144,29 @@ enum FileLinks {
         return decoded.isEmpty ? nil : decoded
     }
 
+    /// A link to one of the hub's own pages (`https://<hub>/tasks`, `/chat/<id>?profile=work`) as the
+    /// app's own link (`corehub://open/tasks`), so it opens that page in the app, not in a browser;
+    /// nil for anything that is not a page the app has.
+    static func appLink(_ href: String, hub: URL?) -> URL? {
+        guard let components = URLComponents(string: href.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        if components.scheme != nil {
+            guard let hub, let home = URLComponents(url: hub, resolvingAgainstBaseURL: false),
+                  components.scheme?.lowercased() == home.scheme?.lowercased(),
+                  components.host?.lowercased() == home.host?.lowercased(),
+                  (components.port ?? defaultPort(components.scheme)) == (home.port ?? defaultPort(home.scheme)) else { return nil }
+        } else if !components.path.hasPrefix("/") {
+            return nil
+        }
+        let path = components.path
+        guard !path.isEmpty, path != "/", AppRoutes.match(path) != nil else { return nil }
+        var link = URLComponents()
+        link.scheme = Product.id
+        link.host = "open"
+        link.path = path
+        link.queryItems = components.queryItems
+        return link.url
+    }
+
     private static func defaultPort(_ scheme: String?) -> Int? {
         switch scheme?.lowercased() {
         case "http": return 80

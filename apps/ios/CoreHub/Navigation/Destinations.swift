@@ -11,6 +11,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     case agentManager = "agent_manager"
     case models
     case knowledge
+    case linkedHubs = "linked_hubs"
     case chat
     case rooms
     case tasks
@@ -33,6 +34,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     case updates
     case plugins
     case files
+    case terminal
     case agentSkills = "agent_skills"
     case agentMcp = "agent_mcp"
     case agentMemory = "agent_memory"
@@ -65,13 +67,16 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     /// Owners and admins only (`roles: ["admin"]`).
     var adminOnly: Bool {
         switch self {
-        case .agentManager, .users, .webhooks, .logs, .performance, .workspaces, .updates, .plugins, .files,
+        case .agentManager, .linkedHubs, .users, .webhooks, .logs, .performance, .workspaces, .updates, .plugins, .files,
              .agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentConfigFiles, .agentSettings:
             return true
         default:
             return false
         }
     }
+
+    /// The owner alone (`roles: ["owner"]`): the terminal.
+    var ownerOnly: Bool { self == .terminal }
 
     /// The adapter capability an agent-level page needs (`capability`); the client never
     /// decides it (NAVIGATION.md rule 3).
@@ -98,9 +103,9 @@ enum NavigationMap {
     static let segments: [DestinationID] = [.chat, .rooms]
     static let footer: [DestinationID] = [.settings]
     static let settingsTabs: [DestinationID] = [.account, .users, .webhooks, .display, .notifications, .privacy, .thisDevice, .about]
-    static let settingsManagement: [DestinationID] = [.models, .deviceConnections, .knowledge]
+    static let settingsManagement: [DestinationID] = [.models, .deviceConnections, .knowledge, .linkedHubs]
     static let settingsTools: [DestinationID] = [
-        .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files,
+        .logs, .usage, .skillsUsage, .performance, .theme, .workspaces, .updates, .plugins, .files, .terminal,
     ]
     static let agentLevel: [DestinationID] = [.agentSkills, .agentMcp, .agentMemory, .agentJobs, .agentChannels, .agentPlugins, .agentConfigFiles, .agentSettings]
     /// Reached only from these entries (`secondaryEntries`).
@@ -111,8 +116,8 @@ enum NavigationMap {
     static let agentBackTerm = "back_to_agents"
 
     /// Entries a person with this role sees, in order.
-    static func visible(_ list: [DestinationID], admin: Bool) -> [DestinationID] {
-        list.filter { admin || !$0.adminOnly }
+    static func visible(_ list: [DestinationID], admin: Bool, owner: Bool = false) -> [DestinationID] {
+        list.filter { (admin || !$0.adminOnly) && (owner || !$0.ownerOnly) }
     }
 
     /// An agent's menu: only what its adapter declares, in `agentLevel` order; Settings for

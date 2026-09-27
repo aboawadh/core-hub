@@ -236,6 +236,7 @@ enum Icons {
         case .models: return .box
         case .deviceConnections: return .qrCode
         case .knowledge: return .bookOpen
+        case .linkedHubs: return .link
         case .logs: return .scrollText
         case .usage: return .chartColumn
         case .skillsUsage: return .activity
@@ -245,6 +246,7 @@ enum Icons {
         case .updates: return .circleArrowDown
         case .plugins: return .puzzle
         case .files: return .folder
+        case .terminal: return .terminal
         case .agentSkills: return .sparkles
         case .agentMcp: return .server
         case .agentMemory: return .brain

@@ -1,5 +1,6 @@
 // Settings (destination `settings`) on a phone: the list is the page itself (NAVIGATION.md §٢),
 // the navigation bar goes back to the chats, and each page opened from it shows the way back.
+import CoreHubClient
 import SwiftUI
 import UIKit
 import UserNotifications
@@ -8,6 +9,8 @@ struct SettingsScreen: View {
     let backToChats: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    /// The Terminal row shows only when the hub answers `GET /terminal` with `200` (as on the web).
+    @State private var terminalOn = false
 
     var body: some View {
         NavigationStack {
@@ -20,31 +23,6 @@ struct SettingsScreen: View {
                 }
                 Section(l10n("settings.tools")) {
                     rows(NavigationMap.settingsTools)
-                }
-                // What needs a computer's screen stays on the web, one tap away (not destinations here).
-                let web = WebOnlyPages.rows(role: app.credentials?.role ?? "member")
-                if !web.isEmpty, let hub = app.credentials?.hubURL {
-                    Section {
-                        ForEach(web, id: \.term) { page in
-                            Link(destination: hub.appendingPathComponent(String(page.path.dropFirst()))) {
-                                HStack {
-                                    Label {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(l10n("nav.\(page.term)")).foregroundStyle(Tone.text)
-                                            Text(l10n("settings.on_the_web_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
-                                        }
-                                    } icon: {
-                                        LucideIcon(page.term == "terminal" ? .terminal : .globe, size: 18).foregroundStyle(Tone.textMuted)
-                                    }
-                                    Spacer()
-                                    LucideIcon(.externalLink, size: 14).foregroundStyle(Tone.textFaint)
-                                }
-                            }
-                            .accessibilityIdentifier("settings.web.\(page.term)")
-                        }
-                    } header: {
-                        Text(l10n("settings.on_the_web"))
-                    }
                 }
             }
             .navigationTitle(l10n("nav.settings"))
@@ -66,12 +44,16 @@ struct SettingsScreen: View {
             .scrollContentBackground(.hidden)
             .background(Tone.bg)
             .accessibilityIdentifier("screen.settings")
+            .task {
+                terminalOn = ((try? await TerminalAvailability.load(app)) ?? .off).isOn
+            }
         }
     }
 
     @ViewBuilder
     private func rows(_ list: [DestinationID]) -> some View {
-        ForEach(NavigationMap.visible(list, admin: app.isAdmin)) { destination in
+        let owner = app.credentials?.role == Role.owner.rawValue
+        ForEach(NavigationMap.visible(list, admin: app.isAdmin, owner: owner).filter { $0 != .terminal || terminalOn }) { destination in
             NavigationLink(value: destination) {
                 Label {
                     Text(l10n(destination.titleKey))
@@ -207,27 +189,6 @@ struct PushStatusSection: View {
         // Back from the iPhone's Settings: read the permission again.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await PushCenter.shared.foreground(app: app) } }
-        }
-    }
-}
-
-/// The web pages the phone does not draw (navigation.json `surfaces: [web]` / `[web, desktop]`) that an
-/// owner or admin may still want from here: they open in the browser.
-enum WebOnlyPages {
-    struct Page: Equatable {
-        let term: String
-        /// The page's path on the web (`surfaceRoutes.web`).
-        let path: String
-    }
-
-    static let linkedHubs = Page(term: "linked_hubs", path: "/settings/linked-hubs")
-    static let terminal = Page(term: "terminal", path: "/settings/terminal")
-
-    static func rows(role: String) -> [Page] {
-        switch role {
-        case "owner": return [linkedHubs, terminal]
-        case "admin": return [linkedHubs]
-        default: return []
         }
     }
 }
