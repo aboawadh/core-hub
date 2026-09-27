@@ -71,7 +71,7 @@ ADR 0005 makes the profile an ambient filter. The header carries the profile
 because switching workspace must not require a lookup. There is no `?profile=`
 query form (the clients today send both, sometimes with different values).
 Global operations (`auth`, `updates`, `devices`, `notify`, `meta`, stubs) are
-marked `x-scope: global` and ignore the header.
+marked `x-scope: global` and ignore the header (the notify webhooks read it: §115).
 
 ## 5. The server mints every id; there are no client-side drafts
 
@@ -3634,3 +3634,29 @@ not name); a tri-state wrapper type per property (`NullEncodable` in the Swift g
 `Patch<T>` in Kotlin), which changes the type of every nullable request field and every call site
 that builds one; and per-app interceptors that rewrite bodies after encoding (what batch 3 did), which
 each screen would have to know about.
+
+## 115. A notify webhook belongs to the profile its request names, and says so in the contract
+
+Proposed on the apps night (2026-09-27) — owner to confirm. The wire does not change: the header
+the hub already read is now declared.
+
+§4 listed `notify` among the global operations that ignore `X-Hub-Profile`, and the seven webhook
+operations (`notify.listWebhooks`, `createWebhook`, `updateWebhook`, `deleteWebhook`, `testWebhook`,
+`listWebhookDeliveries`, `redeliverWebhookDelivery`) were marked `x-scope: global` with no profile
+parameter. The hub did otherwise since §59: it stores each webhook in the profile of the request
+(`X-Hub-Profile`, `default` when absent) and finds it there again, so switching profiles lists a
+different set, and the web — whose client sends the header on every call — worked. The generated
+phone clients send only what an operation declares, so the phones listed and wrote the default
+profile's webhooks whatever profile they were in, until batch 10 added the header by hand (an OkHttp
+interceptor on Android, `customHeaders` on iOS).
+
+Now the seven operations declare `X-Hub-Profile` (the shared `Profile` parameter) and drop
+`x-scope: global`; the generated clients take the profile as their first argument like every other
+profile-scoped call, and the hand-added header is gone. On the hub the route's guard now resolves
+the profile before the handler (`requireWorkspace`), with the same answers as before: an unknown or
+forbidden slug is `404 profile_not_found`, and no header still means `default`. The event catalogue
+(`notify.listWebhookEvents`) stays global — it is the same in every profile — and so do the inbox and
+the notification preferences, which belong to the person.
+
+Rejected: keeping the interceptors (every client would have to know which global operations are
+secretly scoped), and a `?profile=` query form (§4 rejected it for all operations).

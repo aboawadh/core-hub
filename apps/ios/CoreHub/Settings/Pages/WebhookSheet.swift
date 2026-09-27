@@ -209,7 +209,7 @@ struct WebhookSheet: View {
     private func loadEvents() async {
         let profile = profile
         do {
-            events = try await app.api.call { try await NotifyAPI.notifyListWebhookEvents(apiConfiguration: $0.inProfile(profile)) }.items
+            events = try await app.api.call { try await NotifyAPI.notifyListWebhookEvents(apiConfiguration: $0) }.items
             eventsError = nil
         } catch is CancellationError {
         } catch {
@@ -225,9 +225,9 @@ struct WebhookSheet: View {
         let profile = profile, id = hook?.id
         do {
             if let id {
-                _ = try await app.api.call { try await NotifyAPI.notifyUpdateWebhook(webhookId: id, webhookWrite: body, apiConfiguration: $0.inProfile(profile)) }
+                _ = try await app.api.call { try await NotifyAPI.notifyUpdateWebhook(xHubProfile: profile, webhookId: id, webhookWrite: body, apiConfiguration: $0) }
             } else {
-                _ = try await app.api.call { try await NotifyAPI.notifyCreateWebhook(webhookWrite: body, apiConfiguration: $0.inProfile(profile)) }
+                _ = try await app.api.call { try await NotifyAPI.notifyCreateWebhook(xHubProfile: profile, webhookWrite: body, apiConfiguration: $0) }
             }
             failure = nil
             saved()

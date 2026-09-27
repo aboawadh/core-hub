@@ -120,7 +120,7 @@ internal fun rememberHubDataOps(profile: String): HubDataOps {
     val graph = LocalContext.current.graph
     val hub = graph.store.current?.hub.orEmpty()
     return remember(profile, hub) {
-        val apis by lazy { HubDataApis(hub, graph.http.authed, profile) }
+        val apis by lazy { HubDataApis(hub, graph.http.authed) }
         HubDataOps(profile) { apis }
     }
 }

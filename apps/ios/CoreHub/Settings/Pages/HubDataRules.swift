@@ -5,8 +5,9 @@ import CoreHubClient
 import Foundation
 
 extension CoreHubClientAPIConfiguration {
-    /// This call in `profile`. The notify webhooks are `x-scope: global` in the contract (no profile
-    /// parameter), yet the hub keeps each webhook in the profile the request names, as the web sends it.
+    /// This call in `profile`, for a global operation the hub still reads the header of (a profile's
+    /// export and import, ProfileTransfer.swift). The notify webhooks declare the header now (§115)
+    /// and take it as their `xHubProfile` argument.
     func inProfile(_ profile: String) -> CoreHubClientAPIConfiguration {
         customHeaders["X-Hub-Profile"] = profile
         return self
