@@ -120,6 +120,12 @@ function chooseView(): HTMLElement[] {
         },
         h('strong', {}, t('welcome.local.title')),
         h('span', { class: 'muted' }, t('welcome.local.body')),
+        // Nobody should wonder whether local mode changes the Hermes they already have.
+        h(
+          'span',
+          { class: 'muted', 'data-testid': 'local-own-hermes' },
+          t('welcome.local.own_hermes'),
+        ),
         busy === 'local' && h('span', { class: 'muted' }, t('local.starting')),
       ),
     ),

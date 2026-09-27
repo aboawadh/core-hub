@@ -5,7 +5,7 @@
  * Everything here uses argv arrays — no shell string is ever built (AGENTS.md hard rules),
  * so an agent name from the registry cannot become a command injection.
  */
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -86,11 +86,99 @@ export async function runCommand(
 
 /**
  * Pulls a version out of `--version` output: agents print anything from `1.2.3` to
- * `claude-code/2.1.0 (darwin-arm64)`.
+ * `claude-code/2.1.0 (darwin-arm64)` and `Hermes Agent v0.21.5+3397.gd25bbd0 (2026.9.24)`.
  */
 export function parseVersion(output: string): string | null {
-  const match = /\b(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output);
+  // A `v` glued to the number (`Hermes Agent v0.21.5`) is not a word boundary: without the
+  // first branch that line read as `21.5`.
+  const match = /(?:\bv(?=\d)|\b)(\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output);
   return match?.[1] ?? null;
+}
+
+export interface VersionReading {
+  version: string | null;
+  /** Why no version was read; null when one was. */
+  error: string | null;
+}
+
+/**
+ * Asks a program for its version and stops listening as soon as a line carries one.
+ *
+ * `runCommand` waits for the program to finish, and some do more than print: `hermes
+ * --version` prints its version first and then checks for updates over git and the network,
+ * synchronously (`hermes_cli/_startup_fast.py`), which on a cold start can outlast any short
+ * deadline — and then the version it had already printed was thrown away with the "Command
+ * failed" (the desktop report of 2026-09-27). Here the first complete line with a version
+ * ends the read and the process is stopped; the deadline only matters when no version comes.
+ * `PYTHONUNBUFFERED=1` is added to the given environment so a Python program's lines are not
+ * held in its buffer until it exits.
+ */
+export function readVersion(
+  argv: readonly string[],
+  options: { timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<VersionReading> {
+  const [command, ...args] = argv;
+  if (!command) return Promise.resolve({ version: null, error: 'empty command' });
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const shown = argv.join(' ');
+  return new Promise((resolve) => {
+    let settled = false;
+    let text = '';
+    let pending = '';
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // No environment given: the child inherits the hub's as it is (nothing added).
+      ...(options.env ? { env: { ...options.env, PYTHONUNBUFFERED: '1' } } : {}),
+      windowsHide: true,
+    });
+    const finish = (reading: VersionReading) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+      resolve(reading);
+    };
+    const timer = setTimeout(() => {
+      finish({
+        version: parseVersion(text),
+        error: parseVersion(text)
+          ? null
+          : `${shown} did not print a version within ${Math.round(timeoutMs / 1000)} s`,
+      });
+    }, timeoutMs);
+    const take = (chunk: Buffer | string) => {
+      pending += String(chunk);
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() ?? '';
+      for (const line of lines) {
+        text += `${line}\n`;
+        const version = parseVersion(line);
+        if (version) {
+          finish({ version, error: null });
+          return;
+        }
+      }
+    };
+    child.stdout?.on('data', take);
+    child.stderr?.on('data', take);
+    child.once('error', (error) => finish({ version: null, error: `${shown}: ${error.message}` }));
+    child.once('close', (code, signal) => {
+      text += pending;
+      const version = parseVersion(text);
+      if (version) return finish({ version, error: null });
+      const last = text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .at(-1);
+      finish({
+        version: null,
+        error: `${shown} ${signal ? `stopped (${signal})` : `exited with code ${code ?? '?'}`}${
+          last ? `: ${last}` : ' without printing a version'
+        }`,
+      });
+    });
+  });
 }
 
 export interface HttpProbe {

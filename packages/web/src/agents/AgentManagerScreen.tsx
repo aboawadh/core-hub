@@ -154,7 +154,13 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
         }
       />
       {agent.limited && <Notice tone="warning">{t('agents.limited')}</Notice>}
-      {agent.runtime.error && <Notice tone="danger">{agent.runtime.error}</Notice>}
+      {/* Errors carry paths and commands with no spaces to break at: they wrap anywhere
+          rather than run past the card's edge. */}
+      {agent.runtime.error && (
+        <Notice tone="danger" className="wrap-anywhere" testId="agent-runtime-error">
+          <span dir="auto">{agent.runtime.error}</span>
+        </Notice>
+      )}
       {/* Hermes's messaging gateways: the default profile's and one per named profile with a
           channel. The Restart below restarts all of them. */}
       {agent.runtime.gateways && agent.runtime.gateways.length > 0 && (
@@ -190,7 +196,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
                   </span>
                 )}
                 {gateway.error && (
-                  <span className="text-danger-soft-text" dir="auto">
+                  <span className="text-danger-soft-text wrap-anywhere" dir="auto">
                     {gateway.error}
                   </span>
                 )}
@@ -199,7 +205,11 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
           </ul>
         </div>
       )}
-      {agent.install.error && <Notice tone="danger">{agent.install.error}</Notice>}
+      {agent.install.error && (
+        <Notice tone="danger" className="wrap-anywhere" testId="agent-install-error">
+          <span dir="auto">{agent.install.error}</span>
+        </Notice>
+      )}
       {/* What the agent can do — information, not a way anywhere. */}
       <ul className="flex flex-wrap gap-1" data-testid="agent-capabilities">
         {agent.capabilities.map((c) => (

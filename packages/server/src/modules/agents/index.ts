@@ -61,7 +61,12 @@ import { auditFor, jobRunnerFor } from '../audit/index.js';
 import { createAdapterSet, type AdapterSet, type AdapterSetOptions } from './adapters/index.js';
 import type { AdapterKind, AgentTarget } from './adapters/types.js';
 import { HERMES_ENTRY, catalogEntry } from './catalog/index.js';
-import { HermesRuntime, type HermesRuntimeStatus, type Spawner } from './hermes-runtime.js';
+import {
+  HermesRuntime,
+  gatewayNote,
+  type HermesRuntimeStatus,
+  type Spawner,
+} from './hermes-runtime.js';
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import { QR_PLATFORMS, pairWhatsApp, testMcpServer, type HermesApiCall } from './hermes-tools.js';
 import { readJourney } from './hermes-journey.js';
@@ -661,6 +666,7 @@ function contextOf(app: FastifyInstance): AgentsContext {
       hermes: {
         apiKey: () => runtime.apiKey(),
         tui: () => runtime.tuiChannel(),
+        gatewayNote: () => gatewayNote(runtime.status()),
         // Made if it is missing, then given the hub's providers before its turn: a profile
         // made later — here, in Hermes, or on first use — runs on them like any other.
         ensureProfile: async (name: string) => {
