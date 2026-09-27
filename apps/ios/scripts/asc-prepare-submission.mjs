@@ -75,7 +75,7 @@ export const EXCLUDED_TERRITORIES = Object.freeze(['CHN']);
 export const BASE_TERRITORY = 'USA';
 
 /** Version states in which the version can still be changed and submitted. */
-const EDITABLE = new Set([
+export const EDITABLE = new Set([
   'PREPARE_FOR_SUBMISSION',
   'DEVELOPER_REJECTED',
   'REJECTED',
