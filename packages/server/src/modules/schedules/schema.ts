@@ -148,7 +148,22 @@ export type WorkflowNode = {
    * from them and `input` is not read; absent or `null`, `input` is the one comparison.
    */
   rules?: WorkflowRules | null;
+  /**
+   * `notify`: send the words to Telegram and/or a Core Hub conversation instead of the inbox
+   * (DECISIONS §124).
+   */
+  send?: WorkflowSend | null;
   position?: { x: number; y: number };
+};
+
+/** A "Send message" step's targets, in the contract's words (`WorkflowSend`). */
+export type WorkflowSend = { targets: WorkflowSendTarget[] };
+export type WorkflowSendTarget = {
+  platform: string;
+  chat_id?: string | null;
+  session_id?: string | null;
+  title?: string | null;
+  agent_id?: string | null;
 };
 
 /** A condition step's rules, in the contract's words (`WorkflowRules`). */
@@ -412,6 +427,24 @@ export const workflowTriggerSeen = sqliteTable(
     uniqueIndex('workflow_trigger_seen_key_uq').on(t.triggerId, t.key),
     index('workflow_trigger_seen_created_idx').on(t.createdAt),
   ],
+);
+
+/**
+ * Each part a "Send message" step sent (DECISIONS §124), by the run it belongs to (a rerun
+ * counts as its first run), the node, the target and the part — so a step tried again sends
+ * only what did not go out.
+ */
+export const workflowSentParts = sqliteTable(
+  'workflow_sent_parts',
+  {
+    ...scopedColumns(),
+    runKey: ulid('run_key').notNull(),
+    nodeKey: text('node_key', { length: 64 }).notNull(),
+    target: text('target', { length: 120 }).notNull(),
+    part: integer('part').notNull(),
+    messageId: text('message_id', { length: 64 }).notNull(),
+  },
+  (t) => [uniqueIndex('workflow_sent_parts_uq').on(t.runKey, t.nodeKey, t.target, t.part)],
 );
 
 export const nodeRuns = sqliteTable(

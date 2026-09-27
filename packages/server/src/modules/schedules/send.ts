@@ -1,0 +1,139 @@
+/**
+ * The "Send message" step (DECISIONS §124): a `notify` node with `send` delivers its words to
+ * Telegram and/or a Core Hub conversation. Pure pieces here — splitting a long text, calling
+ * Telegram's Bot API, reading a target — and the step itself in `workflow-engine.ts`.
+ *
+ * Nothing claims success without the platform's own id for what it took. A step that is tried
+ * again (a retry, a rerun from a step) does not send twice: each part sent is written down by
+ * the run it belongs to, the node, the target and the part (`workflow_sent_parts`).
+ */
+import type { WorkflowSend, WorkflowSendTarget } from './schema.js';
+
+/** Telegram's limit for one message's text, in UTF-16 code units (what `String#length` counts). */
+export const TELEGRAM_MAX_CHARS = 4096;
+/** The platforms a target may name today; the contract keeps it a plain string. */
+export const SEND_PLATFORMS = ['telegram', 'core_hub'] as const;
+
+/**
+ * Cut a text into parts of at most `max` UTF-16 units, at the last paragraph break, else the
+ * last line break, else the last space, before the limit; a single run of characters longer
+ * than the limit is cut where it must, never inside a surrogate pair (an emoji, a rare
+ * character). Arabic text is cut on the same boundaries: nothing here depends on the script.
+ */
+export function splitMessage(text: string, max: number = TELEGRAM_MAX_CHARS): string[] {
+  const parts: string[] = [];
+  let rest = text.trim();
+  while (rest.length > max) {
+    const window = rest.slice(0, max);
+    let cut = window.lastIndexOf('\n\n');
+    if (cut < max / 4) cut = window.lastIndexOf('\n');
+    if (cut < max / 4) cut = window.lastIndexOf(' ');
+    if (cut < max / 4) {
+      cut = max;
+      const code = rest.charCodeAt(cut - 1);
+      // A high surrogate at the edge belongs with the low one after it.
+      if (code >= 0xd800 && code <= 0xdbff) cut -= 1;
+    }
+    const part = rest.slice(0, cut).trimEnd();
+    if (part) parts.push(part);
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+/** A target's stable name: `telegram:<chat_id>`, `core_hub:<session_id>`. */
+export function targetKey(target: WorkflowSendTarget): string {
+  if (target.platform === 'telegram') return `telegram:${(target.chat_id ?? '').trim()}`;
+  if (target.platform === 'core_hub') return `core_hub:${target.session_id ?? ''}`;
+  return `${target.platform}:`;
+}
+
+/** What is wrong with a send, as reason codes for the workflow check (`send_*`). */
+export function sendProblems(send: WorkflowSend): Array<{ code: string; index: number | null }> {
+  const out: Array<{ code: string; index: number | null }> = [];
+  const targets = Array.isArray(send.targets) ? send.targets : [];
+  if (targets.length === 0) out.push({ code: 'send_no_target', index: null });
+  targets.forEach((target, index) => {
+    if (!(SEND_PLATFORMS as readonly string[]).includes(target.platform)) {
+      out.push({ code: 'send_platform_unknown', index });
+    } else if (target.platform === 'telegram' && !(target.chat_id ?? '').trim()) {
+      out.push({ code: 'send_chat_missing', index });
+    } else if (target.platform === 'core_hub' && !target.session_id && !target.agent_id) {
+      out.push({ code: 'send_conversation_missing', index });
+    }
+  });
+  return out;
+}
+
+export function hasSend(send: WorkflowSend | null | undefined): send is WorkflowSend {
+  return !!send && typeof send === 'object' && Array.isArray(send.targets);
+}
+
+export type TelegramAnswer = { ok: true; messageId: string } | { ok: false; reason: string };
+
+/**
+ * One `sendMessage` through the Bot API. The token goes in the path, as Telegram asks; it is
+ * never written to a log or a reason. A refusal is Telegram's own `description`.
+ */
+export async function telegramSend(
+  fetchImpl: typeof fetch,
+  apiBase: string,
+  token: string,
+  chatId: string,
+  text: string,
+): Promise<TelegramAnswer> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${apiBase.replace(/\/$/, '')}/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    const said = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `Telegram could not be reached (${said.replace(token, '…')})` };
+  }
+  let body: { ok?: boolean; result?: { message_id?: number }; description?: string } = {};
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+  if (body.ok === true && body.result?.message_id !== undefined) {
+    return { ok: true, messageId: String(body.result.message_id) };
+  }
+  return {
+    ok: false,
+    reason: body.description?.trim() || `Telegram answered ${response.status}`,
+  };
+}
+
+/** What a send did — the step's `output` and `WorkflowSendResult`. */
+export interface SendResult {
+  status: 'sent' | 'partial' | 'failed';
+  message_id: string | null;
+  message_ids: string[];
+  delivered_to: string[];
+  failures: Array<{ target: string; reason: string }>;
+}
+
+export function resultOf(
+  delivered: Array<{ target: string; ids: string[] }>,
+  failures: Array<{ target: string; reason: string }>,
+): SendResult {
+  const ids = delivered.flatMap((each) => each.ids);
+  return {
+    status:
+      failures.length === 0 && delivered.length > 0
+        ? 'sent'
+        : delivered.length > 0
+          ? 'partial'
+          : 'failed',
+    message_id: ids[0] ?? null,
+    message_ids: ids,
+    delivered_to: delivered.map((each) => each.target),
+    failures,
+  };
+}

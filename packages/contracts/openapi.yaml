@@ -12861,6 +12861,50 @@ paths:
           $ref: '#/components/responses/NotFound'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+  /workflows/send-test:
+    post:
+      operationId: schedules.testWorkflowSend
+      tags: [schedules]
+      summary: Send a test message to a "Send message" step's targets now
+      description: >-
+        What the step would do, at once, with `text` as the words: Telegram through the
+        profile's bot, a Core Hub conversation by posting into it (made again under the same
+        title when it was deleted). Nothing is remembered as sent, so pressing it twice sends
+        twice (DECISIONS §124).
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowSendTest'
+            example:
+              text: 'رسالة تجريبية من سير العمل'
+              send:
+                targets:
+                  - platform: telegram
+                    chat_id: '-1001234567890'
+      x-rt-events: []
+      responses:
+        '200':
+          description: What was sent, and where it failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSendResult'
+              example:
+                status: sent
+                message_id: '812'
+                message_ids: ['812']
+                delivered_to: ['telegram:-1001234567890']
+                failures: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /workflow-imports:
     post:
       operationId: schedules.previewWorkflowImport
@@ -24810,6 +24854,14 @@ components:
         approval_required:
           type: boolean
           description: 'Gate the node behind an approval (`kind: workflow_step`) before it runs.'
+        send:
+          description: >-
+            A `notify` step that sends its words to Telegram and/or a Core Hub conversation
+            instead of the inbox (DECISIONS §124). On `updateWorkflow`, a notify node sent
+            without this field keeps the saved node's; `null` removes it.
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowSend'
+            - type: 'null'
         rules:
           description: >-
             A `condition` step's several rules (DECISIONS §123). When it has at least one rule
@@ -25446,6 +25498,95 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+    WorkflowSend:
+      type: object
+      description: >-
+        A "Send message" step (DECISIONS §124): a `notify` node with this field sends its
+        words (`input`, a template) to each target instead of the inbox. It is a field of a
+        `notify` node rather than a new `kind`, so an app that does not know it still loads
+        the workflow (it sees a notice) and the hub keeps the field when such an app saves.
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/WorkflowSendTarget'
+    WorkflowSendTarget:
+      type: object
+      description: >-
+        Where one copy of the message goes. `platform` is a plain string so a platform can be
+        added later (WhatsApp) without an older app meeting a value it cannot read: `telegram`
+        (`chat_id`, sent by the profile's own bot, `TELEGRAM_BOT_TOKEN` of the Hermes
+        profile) or `core_hub` (a conversation of this hub, `session_id`; `title` and
+        `agent_id` let the hub make it again if it was deleted). An unknown platform is
+        refused when the workflow is saved (`send_platform_unknown`).
+      required: [platform]
+      properties:
+        platform:
+          type: string
+          maxLength: 40
+        chat_id:
+          type: [string, 'null']
+          maxLength: 64
+          description: '`telegram`: a chat, user or group id such as `-1001234567890`, or `@channel`.'
+        session_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: '`core_hub`: the conversation the message is posted in.'
+        title:
+          type: [string, 'null']
+          maxLength: 200
+          description: "`core_hub`: the conversation's title, to make it again if it was deleted."
+        agent_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+          description: "`core_hub`: the conversation's agent, to make it again if it was deleted."
+    WorkflowSendTest:
+      type: object
+      required: [send, text]
+      properties:
+        send:
+          $ref: '#/components/schemas/WorkflowSend'
+        text:
+          type: string
+          minLength: 1
+          maxLength: 20000
+    WorkflowSendResult:
+      type: object
+      description: >-
+        What a send did (also a "Send message" step's `output`): `sent` when every target took
+        it, `partial` when some did, `failed` when none did — never `sent` without an id from
+        the platform. `message_ids` are every part's id in order; `message_id` the first.
+      required: [status, message_id, message_ids, delivered_to, failures]
+      properties:
+        status:
+          type: string
+          enum: [sent, partial, failed]
+        message_id:
+          type: [string, 'null']
+        message_ids:
+          type: array
+          items:
+            type: string
+        delivered_to:
+          type: array
+          items:
+            type: string
+          description: '`telegram:<chat_id>` or `core_hub:<session_id>` for each target that took it.'
+        failures:
+          type: array
+          items:
+            type: object
+            required: [target, reason]
+            properties:
+              target:
+                type: string
+              reason:
+                type: string
+                description: The platform's own words when it gave any (Telegram's `description`).
     WorkflowRules:
       type: object
       description: >-
