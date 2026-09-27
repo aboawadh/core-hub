@@ -38,7 +38,8 @@ enum KnowledgeRules {
     static func dayText(_ item: KnowledgeItem, language: AppLanguage) -> String {
         let formatter = DateFormatter()
         formatter.locale = language.locale
-        formatter.setLocalizedDateFormatFromTemplate("dMMMyyyy")
+        // A fixed pattern: a localized template can carry the region's own digits (Arabic-Indic).
+        formatter.dateFormat = "d MMM y"
         if let date = item.date {
             formatter.timeZone = TimeZone(identifier: "UTC")
             return formatter.string(from: date)
@@ -93,7 +94,8 @@ enum SkillsUsageRules {
         let formatter = DateFormatter()
         formatter.locale = language.locale
         formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.setLocalizedDateFormatFromTemplate(year ? "dMMMyyyy" : "dMMM")
+        // A fixed pattern: a localized template can carry the region's own digits (Arabic-Indic).
+        formatter.dateFormat = year ? "d MMM y" : "d MMM"
         return formatter.string(from: date)
     }
 }

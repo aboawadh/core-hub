@@ -81,7 +81,9 @@ final class HubDataRulesTests: XCTestCase {
         XCTAssertEqual(SkillsUsageRules.agentChoices(agents, chosen: "A1"), agents)
         XCTAssertEqual(SkillsUsageRules.agentChoices(agents, chosen: "A9").map(\.agentId), ["A1", "A9"])
         XCTAssertEqual(SkillsUsageRules.utcOffset(TimeZone(identifier: "Asia/Riyadh")!, at: date), 180)
-        XCTAssertFalse(SkillsUsageRules.dayText(date, language: .ar).contains("٢"))
+        for text in [SkillsUsageRules.dayText(date, language: .ar), SkillsUsageRules.dayText(date, language: .ar, year: true)] {
+            XCTAssertFalse(text.unicodeScalars.contains { (0x0660...0x0669).contains($0.value) }, text)
+        }
     }
 
     // MARK: - Webhooks
