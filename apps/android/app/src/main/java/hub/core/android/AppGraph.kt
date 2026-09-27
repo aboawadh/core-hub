@@ -94,6 +94,8 @@ class AppGraph(
     releaseSource: hub.core.android.phone.ReleaseSource? = null,
 ) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
+    /** The order the person dragged the chats into, per view (ChatOrder.kt). */
+    val chatOrder = hub.core.android.ui.screens.ChatOrderStore(context.getSharedPreferences("corehub.chatorder", Context.MODE_PRIVATE))
     val store = SessionStore(
         SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
     )

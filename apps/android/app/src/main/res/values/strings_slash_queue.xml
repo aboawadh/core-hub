@@ -25,4 +25,6 @@
     <string name="queue_steer">Steer</string>
     <string name="queue_steer_hint">Stop the live turn and take this instead, in the same context.</string>
     <string name="queue_remove">Remove</string>
+    <string name="order_move_up">Move up</string>
+    <string name="order_move_down">Move down</string>
 </resources>

@@ -25,4 +25,6 @@
     <string name="queue_steer">توجيه</string>
     <string name="queue_steer_hint">أوقف الدور الجاري وخُذ هذه بدله، في السياق نفسه.</string>
     <string name="queue_remove">إزالة</string>
+    <string name="order_move_up">انقل للأعلى</string>
+    <string name="order_move_down">انقل للأسفل</string>
 </resources>

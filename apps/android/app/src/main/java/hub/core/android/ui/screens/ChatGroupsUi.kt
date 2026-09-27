@@ -120,7 +120,8 @@ fun LazyListScope.chatGroups(
     isAdmin: Boolean,
     folded: Boolean,
     onOpen: () -> Unit,
-    row: @Composable (Session) -> Unit,
+    /** A hub chat's row: the chat, its group's key, its key in the list, and its group's chats in order (for drag and Move up/down). */
+    row: @Composable (Session, String, Any, List<String>) -> Unit,
 ) {
     groups.forEach { group ->
         val open = group is ChatGroup.Rest || !folded || group.key !in extras.collapsed
@@ -131,13 +132,15 @@ fun LazyListScope.chatGroups(
                 }
                 if (open) {
                     if (group.items.isEmpty()) item(key = group.key + ":empty") { EmptyGroupHint() }
-                    items(group.items, key = { group.key + ":" + it.id }) { row(it) }
+                    val shown = group.items.map { it.id }
+                    items(group.items, key = { group.key + ":" + it.id }) { row(it, group.key, group.key + ":" + it.id, shown) }
                 }
             }
             is ChatGroup.Channel -> {
                 item(key = group.key) { ChannelHeader(group.channel, group.items.size + group.conversations.size, open, shell) }
                 if (open) {
-                    items(group.items, key = { group.key + ":" + it.id }) { row(it) }
+                    val shown = group.items.map { it.id }
+                    items(group.items, key = { group.key + ":" + it.id }) { row(it, group.key, group.key + ":" + it.id, shown) }
                     items(group.conversations, key = { group.key + ":c:" + it.id }) { c ->
                         ConversationRow(c, badges, shell, nav, dialogs, isAdmin, onOpen)
                     }
@@ -146,7 +149,8 @@ fun LazyListScope.chatGroups(
             is ChatGroup.Rest -> {
                 if (group.items.isNotEmpty()) {
                     item(key = group.key) { GroupLabel(stringResource(R.string.chats_recent, group.items.size)) }
-                    items(group.items, key = { it.id }) { row(it) }
+                    val shown = group.items.map { it.id }
+                    items(group.items, key = { it.id }) { row(it, group.key, it.id, shown) }
                 }
             }
         }
