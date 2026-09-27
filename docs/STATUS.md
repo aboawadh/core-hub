@@ -729,6 +729,31 @@ its approval.
   once with Copy. Hermes's incoming webhooks (§97) stay on the agent's Channels page. Android: JVM
   tests against a scripted hub and Robolectric pictures (light English, dark Arabic); iOS: unit tests
   on the CI simulator; **not yet tried on the owner's phones**.
+- **Admin pages on both phones: People, Profiles, push senders, pairing requests** (since
+  2026-09-27, `docs/changes/2026-09-27-twuijri-apps-admin.md`, apps night batches 12 and 14), as the
+  web's admin pages have them; a member who reaches one sees that only an owner or an admin manages it.
+  **People**: each person with role, state and what they may enter (every profile, these, or none);
+  a row offers only what the hub accepts — the owner's account is not edited by an admin, the owner
+  sets their own password, nobody disables or deletes themselves; add a person, set a password (typed
+  once, never shown), make admin, make member (choosing their profiles in the same step, as the hub
+  requires), a member's profiles, disable/enable, delete after a question. Below: everyone's **linked
+  messaging accounts** (remove after a question) and the **lockouts** (address, reason, attempts,
+  until when; unlock one or all). **Profiles**: the list with current/default marks and counts; a new
+  profile from scratch or as a copy of one chosen, the slug following the name; **rename** (never the
+  id; Hermes's own words when it refuses); **archive** after a question that says what stays;
+  **export** asks with or without providers (warning about keys in the clear), follows the job,
+  downloads the archive and hands it to the share sheet (Android also saves to Downloads);
+  **import** picks an archive from the phone's files, suggests slug and name, says what will be made
+  and asks once more, uploads it and follows the job. Export and import name the profile you are in
+  (`X-Hub-Profile`), as the web's do. **Push senders** (admin, folded at the bottom of Device
+  connections): each sender's state, source and devices, what is stored without a secret; setup is
+  file first — the service-account JSON or `AuthKey_….p8` picked from the phone's files and checked
+  there (google-services.json and other wrong files said so; the key id taken from the file name),
+  with paste instead, Key ID / Team / bundle / environment for APNs, a stored secret kept when left
+  empty, the hub's verdict after saving, forget after a question. **Pairing requests**: an admin's
+  pending sheet (the bell) now also lists senders waiting to pair with the profile's channel agent,
+  approved or denied there. Android: JVM tests against a scripted hub and Robolectric pictures; iOS:
+  unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
