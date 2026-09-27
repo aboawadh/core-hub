@@ -46,7 +46,52 @@ GitHub نفسه، وسير عمل يرفع إلى Play، وإجابات نماذ
 - لم يتغيّر بناء APK الخاص بـGitHub (`android-signed.yml`، `publish-release.yml`) ولا `build.gradle.kts`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-CHECKS_PLACEHOLDER
+محليًا (Node 24، JDK 17، Android SDK 35):
+
+```
+$ ./gradlew --max-workers=2 testDebugUnitTest --tests 'hub.core.android.shots.PlayStoreShots'
+BUILD SUCCESSFUL in 9s          (اختباران: english، arabic)
+
+$ node apps/android/scripts/play-listing.mjs --take-shots --summary
+en-US/title.txt: 8/30
+en-US/short_description.txt: 77/80
+en-US/full_description.txt: 2010/4000
+en-US/changelogs/default.txt: 457/500
+en-US/images/phoneScreenshots/01-chat.png: 1320 × 2346   … 06-new-chat.png: 1320 × 2346
+ar/title.txt: 6/30
+ar/short_description.txt: 66/80
+ar/full_description.txt: 1765/4000
+ar/changelogs/default.txt: 382/500
+ar/images/phoneScreenshots/01-chat.png: 1320 × 2346      … 06-new-chat.png: 1320 × 2346
+play-listing  OK — en-US, ar are within Google Play's limits.
+
+# AAB موقّع بمفتاح محلي مؤقت (لا أسرار الإصدار محليًا)، versionCode 100001:
+$ COREHUB_ANDROID_KEYSTORE=<throwaway.jks> … ./gradlew --max-workers=2 --no-build-cache bundleRelease -Pcorehub.selfUpdate=false
+BUILD SUCCESSFUL in 1m 27s
+-rw-rw-r-- 11106104 app-release.aab
+$ jarsigner -verify -verbose:summary app-release.aab
+- Signed by "CN=local throwaway"
+jar verified.
+# المانيفست المدمج للإصدار: package="com.twuijri.corehub" versionCode="100001" targetSdkVersion="35"،
+# REQUEST_INSTALL_PACKAGES: 0 مرة؛ BuildConfig: SELF_UPDATE = false (FIREBASE = false: لا google-services.json محليًا)
+# خطوة الفحص في play-upload.yml شُغّلت محليًا على هذا الـAAB (بلا سطر Firebase):
+::warning::targetSdk is 35; Google Play takes new apps and updates only at API 36 or later since 31 August 2026 …
+jar verified.
+Play AAB: versionCode 100001, targetSdk 35, 11M
+
+$ pnpm lint
+All matched files use Prettier code style!
+$ pnpm scripts:test
+ℹ tests 90
+ℹ pass 90
+ℹ fail 0
+$ node scripts/icons/build-icons.mjs --check
+icons: 58 files up to date
+```
+
+لم يُشغَّل: `play-upload.yml` نفسه (لا حساب Play ولا `PLAY_SERVICE_ACCOUNT_JSON`)، ولا بناء بمفتاح الإصدار
+الحقيقي وFirebase (يحدث في CI عند التشغيل)، ولا actionlint (غير مثبّت). بقية اختبارات أندرويد
+وlint يشغّلها `android.yml` على GitHub. TypeScript لم يُمسّ، فلم يُشغَّل `pnpm typecheck`.
 
 ## المخاطر والرجوع
 - **عائق قبل أول رفع:** Play يشترط targetSdk 36 للتطبيقات الجديدة منذ 2026-08-31 (مهلة ممكنة حتى
