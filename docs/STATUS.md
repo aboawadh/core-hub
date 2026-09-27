@@ -556,6 +556,20 @@ its approval.
   chat's menu offers «Name it automatically» (`title: null`, the hub renames it) — since the explicit
   nulls of §114 (`docs/changes/2026-09-27-twuijri-client-explicit-null.md`). Android: JVM tests against a stand-in hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Background sheet on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-leftovers.md`,
+  §56 as the web's): what works for the person in every profile they may enter (`background.list`
+  with `profiles=all`) — chats, tasks, schedules, workflows, jobs, subagents — each with its kind,
+  profile (when there are several), state, time so far in Latin digits, **Open** where it lives and
+  **Stop** where it can be stopped (`background.stop` in the item's own profile); what finished in
+  the last day folded under «Finished (n)». An Activity button with the count sits beside the bell
+  in the top bar of the new chat, a chat and a room while something runs (as the web on a phone),
+  and the chat's «⋯» opens the sheet always. Read every 10 s while something runs, every minute
+  otherwise, only while the app is in front (no realtime subscription yet). Android: JVM tests and
+  Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Android dates in the app's language** (since 2026-09-27, the leftovers task): the process
+  default locale is now the in-app language with Latin digits (§113), so month names and date
+  order follow the app, not the phone (an Arabic app on an English phone wrote English months); the
+  phone's own language is still read from the system for «follow the phone» and dictation.
 - **Chat insight on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-chat-insight.md`,
   apps night batch 6): a small **context ring** in the chat's top bar when the window is known (the
   agent's report, else the catalogue's `context_window` and the last counted turn; never a made-up
@@ -721,7 +735,8 @@ its approval.
   use) and the enabled skills no run loaded. **Plugins**: the hub's list with kind, version and state;
   `plugins.list` is the only operation (no installer, switch or settings exists for hub plugins), and
   the empty state says so. **Webhooks** (notify, §59): the list in the profile you are in (the calls
-  carry `X-Hub-Profile`, as the web's do, since the operations are `x-scope: global`), on/off,
+  carry `X-Hub-Profile`, as the web's do; since the leftovers task the contract declares it on the
+  seven webhook operations, DECISIONS §115, and the phones pass it as the generated argument), on/off,
   **send test** followed to its outcome, the recent deliveries (followed while one waits) with
   **redeliver** where it may, **add/edit** (address with the hub's refusal in words, private
   addresses, events from the catalogue with a filter, every profile or these, message text, retries,
@@ -764,13 +779,15 @@ its approval.
   drawn, documents in the phone's viewer, sound and video streamed from a ticket; a text file opens
   in the shared editor, which saves against the file's etag and offers **Reload** when it changed on
   disk. **Share** (iOS: the share sheet, «Save to Files»), **save to the phone** (Android's Downloads),
-  **share a folder as a zip**, and **attach to a new chat** (the file lands in the new chat's tray the
-  way another app's share does). **Upload** files or photos and videos, one at a time with a progress
+  **share a folder as a zip**, and **attach to a chat** — a new one or one of the profile's eight
+  most recent (since the leftovers task, `docs/changes/2026-09-27-twuijri-apps-leftovers.md`): the
+  hub makes the attachment (`knowledge.attachWorkspaceFile`), nothing is downloaded or uploaded
+  again, and the chosen chat opens with the file ready in its composer (a hand-off kept one minute,
+  for that profile only, as the web's). **Upload** files or photos and videos, one at a time with a progress
   bar, checked against the hub's cap first, asking to replace a name already there. **New folder**,
   **new text file**, **rename**, **move**, **copy** (as a path) and **delete** after a question. The
   hub's refusals are said in one line of the page's own words (not an owner or admin, already there,
-  too large, not text, outside the profile's files…). Not built: the web's "attach to one of the
-  recent chats" (the phones' chat screens take handed files only when a chat is new) and resumable
+  too large, not text, outside the profile's files…). Not built: resumable
   upload of a big file (the contract has one multipart upload for these files, capped by the hub; the
   resumable flow belongs to chat attachments). The shared editor's conflict check now also reads the
   hub's `409` with `details.reason = changed` (it only knew a `changed` code, which the hub never
