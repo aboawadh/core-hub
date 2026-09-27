@@ -1,5 +1,5 @@
 # إدارة الغرف على الجوال (الدفعة 7)
-المسؤول: twuijri · الفرع: night/apps-rooms · الحالة: review
+المسؤول: twuijri · الفرع: night/apps-rooms · الحالة: done
 
 ## المشكلة والهدف
 قائمة الفجوات (الدفعة 7) قالت: الغرف في التطبيقين محادثة فقط — لا إعادة تسمية ولا حذف (`rooms.update/delete`)، ولا إضافة
@@ -79,6 +79,11 @@ $ pnpm contracts:check-clients   → check-clients  OK — 907 client file(s) sc
 $ gh workflow run ios.yml --ref night/apps-rooms   (run 36280564719, 4a62ee74)
 ✓ Build and test on the iOS simulator — Executed 235 tests, with 0 failures · TEST SUCCEEDED (RoomManageTests: 13 passed)
 ```
+CI على #181 بعد الدمج (الالتزام `6ab1c000`): كل الفحوص نجحت — Android build, unit tests, lint (5m38s)، Build and test on the iOS
+simulator (5m11s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Change record، Docker،
+Desktop، Installers ×3 (Installers ubuntu فشل أول مرة في اختبار اقتران سطح المكتب `desktop-pairing`، لا صلة له بالجوال، ونجح عند
+إعادة التشغيل)، db:generate + db:migrate.
+
 صورة الأندرويد: `apps/android/app/build/shots/rooms/android-manage.png` (نظرتُ فيها: الشريط المتوقف مع «One more round»، بطاقة
 الملخّص بزرّيها، ونموذج المقعد).
 
