@@ -83,4 +83,13 @@
     <string name="wfe_delete">حذف</string>
     <string name="wfe_model">النموذج (اختياري)</string>
     <string name="wfe_model_default">نموذج الوكيل نفسه</string>
+    <string name="wfe_triggers">المشغّلات</string>
+    <string name="wfe_triggers_read_only">عناوين ترسل إليها خدمات أخرى أحداثها. أضف المشغّل وسرّه وأحداثه من الويب.</string>
+    <string name="wfe_trigger_off">متوقف</string>
+    <string name="wfe_trigger_copy">انسخ العنوان</string>
+    <string name="wfe_trigger_secret_stored">السر محفوظ.</string>
+    <string name="wfe_trigger_secret_missing">لا سر بعد: يُرفض كل ما يصل.</string>
+    <string name="wfe_rules_all">نعم عندما تتحقق كل القواعد</string>
+    <string name="wfe_rules_any">نعم عندما تتحقق أي قاعدة</string>
+    <string name="wfe_rules_read_only">تبقى هذه القواعد كما هي عند الحفظ هنا؛ عدّلها من الويب.</string>
 </resources>
