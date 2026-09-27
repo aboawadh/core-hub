@@ -50,8 +50,11 @@ import kotlinx.coroutines.launch
  * rules are plain functions ([FormRules]) so a page's test can check them without drawing.
  */
 
-/** What a field holds. Values travel as text: a toggle is "true"/"false", a choice its option's value. */
-enum class FormKind { Text, Multiline, Number, Toggle, Choice, Secret }
+/**
+ * What a field holds. Values travel as text: a toggle is "true"/"false", a choice its option's
+ * value, a date and time `yyyy-MM-ddTHH:mm` in the phone's time zone ([FormRules.dateText]), empty for none.
+ */
+enum class FormKind { Text, Multiline, Number, Toggle, Choice, Secret, Date }
 
 data class FormOption(val value: String, val label: String)
 
@@ -79,11 +82,29 @@ sealed interface FormProblem {
     data class TooSmall(val limit: BigDecimal) : FormProblem
     data class TooLarge(val limit: BigDecimal) : FormProblem
     data object NotAnOption : FormProblem
+    data object NotADate : FormProblem
 }
 
 object FormRules {
     /** A number as a person types it: a comma is the decimal point too. */
     fun number(text: String): BigDecimal? = text.trim().replace(',', '.').toBigDecimalOrNull()
+
+    private val DATE_TIME = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm", java.util.Locale.ROOT)
+
+    /** A [FormKind.Date] value as a moment, read in [zone] (the phone's); null when it is not one. */
+    fun date(text: String, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): java.time.OffsetDateTime? {
+        val t = text.trim().replace(' ', 'T')
+        if (t.isEmpty()) return null
+        return runCatching { java.time.LocalDateTime.parse(t, DATE_TIME).atZone(zone).toOffsetDateTime() }.getOrNull()
+    }
+
+    /** A moment as a [FormKind.Date] value, to the minute, in [zone]; null gives the empty value. */
+    fun dateText(moment: java.time.OffsetDateTime?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String =
+        moment?.atZoneSameInstant(zone)?.format(DATE_TIME).orEmpty()
+
+    /** What "Tomorrow at 09:00" puts in a date field. */
+    fun tomorrowAtNine(now: java.time.ZonedDateTime = java.time.ZonedDateTime.now()): String =
+        now.toLocalDate().plusDays(1).atTime(9, 0).format(DATE_TIME)
 
     fun problem(field: FormField, value: String): FormProblem? {
         val t = value.trim()
@@ -101,6 +122,7 @@ object FormRules {
                 }
             }
             FormKind.Choice -> if (field.options.none { it.value == t }) FormProblem.NotAnOption else null
+            FormKind.Date -> if (date(t) == null) FormProblem.NotADate else null
             else -> null
         }
     }
@@ -118,6 +140,7 @@ fun formProblemText(problem: FormProblem): String = when (problem) {
     is FormProblem.TooSmall -> stringResource(R.string.kit_too_small, problem.limit.toPlainString())
     is FormProblem.TooLarge -> stringResource(R.string.kit_too_large, problem.limit.toPlainString())
     FormProblem.NotAnOption -> stringResource(R.string.kit_not_option)
+    FormProblem.NotADate -> stringResource(R.string.kit_not_date)
 }
 
 /**
@@ -194,6 +217,7 @@ fun FormFieldView(field: FormField, value: String, onValue: (String) -> Unit, pr
         when (field.kind) {
             FormKind.Toggle -> ToggleRow(field.label, value == "true", { onValue(it.toString()) }, subtitle = field.help, modifier = Modifier.testTag(tag))
             FormKind.Choice -> ChoiceField(field, label, value, onValue, error, tag)
+            FormKind.Date -> DateField(field, label, value, onValue, error, tag)
             FormKind.Secret -> {
                 var shown by remember { mutableStateOf(false) }
                 HubTextField(
@@ -222,6 +246,39 @@ fun FormFieldView(field: FormField, value: String, onValue: (String) -> Unit, pr
             )
         }
         if (field.help != null && field.kind != FormKind.Toggle) Text(field.help, fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+    }
+}
+
+/**
+ * A date and time typed as the trigger editor's are (`2026-10-01`, `09:00`, Latin digits), with
+ * "Tomorrow at 09:00" to start from and, unless required, Clear. Tags: `<tag>.date`, `<tag>.time`,
+ * `<tag>.tomorrow`, `<tag>.clear`.
+ */
+@Composable
+private fun DateField(field: FormField, label: String, value: String, onValue: (String) -> Unit, error: String?, tag: String) {
+    val t = LocalTokens.current
+    val day = value.substringBefore('T', value)
+    val time = if ('T' in value) value.substringAfter('T') else ""
+    fun join(d: String, h: String) = if (d.isBlank() && h.isBlank()) "" else "${d.trim()}T${h.trim()}"
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HubTextField(
+                day, { onValue(join(it, time.ifBlank { "09:00" })) }, Modifier.weight(3f), label = stringResource(R.string.kit_trigger_date),
+                placeholder = "2026-10-01", mono = true, size = ControlSize.Md, fieldTag = "$tag.date",
+            )
+            HubTextField(
+                time, { onValue(join(day, it)) }, Modifier.weight(2f), label = stringResource(R.string.kit_trigger_time),
+                placeholder = "09:00", mono = true, size = ControlSize.Md, fieldTag = "$tag.time",
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            hub.core.android.ui.kit.Chip(stringResource(R.string.kit_trigger_tomorrow), false, { onValue(FormRules.tomorrowAtNine()) }, size = ControlSize.Sm, modifier = Modifier.testTag("$tag.tomorrow"))
+            if (!field.required && value.isNotEmpty()) {
+                hub.core.android.ui.kit.Chip(stringResource(R.string.kit_date_clear), false, { onValue("") }, size = ControlSize.Sm, modifier = Modifier.testTag("$tag.clear"))
+            }
+        }
+        if (error != null) Text(error, fontSize = FontTokens.sizeXs.sp, color = t.danger)
     }
 }
 

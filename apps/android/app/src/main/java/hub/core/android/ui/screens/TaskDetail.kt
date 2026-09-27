@@ -73,6 +73,15 @@ import hub.core.client.model.TaskMove
 import hub.core.client.model.TaskPatch
 import hub.core.client.model.TaskPriority
 import hub.core.client.model.TaskStatus
+import hub.core.client.model.BulkResult
+import hub.core.client.model.ProjectStatus
+import hub.core.client.model.ProjectWrite
+import hub.core.client.model.Subtask
+import hub.core.client.model.SubtaskWrite
+import hub.core.client.model.TaskBulkUpdate
+import hub.core.client.model.TaskBulkUpdatePatch
+import hub.core.client.model.TasksCreateCommentRequest
+import hub.core.android.ui.components.FormRules
 import java.security.SecureRandom
 import java.time.OffsetDateTime
 import kotlinx.coroutines.launch
@@ -122,23 +131,29 @@ object TaskRules {
         (dependsOn.size - waitingOn.orEmpty().size).coerceAtLeast(0)
 
     /** The edit form filled from a task. */
-    fun editValues(title: String, description: String?, priority: TaskPriority, projectId: String): Map<String, String> =
-        mapOf("title" to title, "description" to description.orEmpty(), "priority" to priority.value, "project" to projectId)
+    fun editValues(title: String, description: String?, priority: TaskPriority, projectId: String, dueAt: OffsetDateTime? = null): Map<String, String> =
+        mapOf("title" to title, "description" to description.orEmpty(), "priority" to priority.value, "project" to projectId, "due" to FormRules.dateText(dueAt))
 
     /**
-     * Only what changed, or null when nothing did. A cleared description is sent as `null`
-     * (contract decision §114), which the hub stores as no description.
+     * Only what changed, or null when nothing did. A cleared description or due date is sent as
+     * `null` (contract decision §114), which the hub stores as none.
      */
     fun patch(original: Map<String, String>, values: Map<String, String>): TaskPatch? {
         val title = values["title"].orEmpty().trim().takeIf { it.isNotEmpty() && it != original["title"] }
         val description = values["description"].orEmpty().takeIf { it != original["description"].orEmpty() }
         val priority = values["priority"]?.takeIf { it != original["priority"] }?.let { raw -> TaskPriority.entries.firstOrNull { it.value == raw } }
         val project = values["project"]?.takeIf { it.isNotEmpty() && it != original["project"] }
-        if (title == null && description == null && priority == null && project == null) return null
+        val dueText = values["due"]?.takeIf { it != original["due"].orEmpty() }
+        val due = dueText?.let { FormRules.date(it) }
+        val dueCleared = dueText != null && dueText.isBlank()
+        if (title == null && description == null && priority == null && project == null && due == null && !dueCleared) return null
         val cleared = description != null && description.isBlank()
         return TaskPatch(
-            title = title, description = description?.takeUnless { cleared }, priority = priority, projectId = project,
-            sendNull = if (cleared) setOf(TaskPatch.Clearable.DESCRIPTION) else emptySet(),
+            title = title, description = description?.takeUnless { cleared }, priority = priority, projectId = project, dueAt = due,
+            sendNull = buildSet {
+                if (cleared) add(TaskPatch.Clearable.DESCRIPTION)
+                if (dueCleared) add(TaskPatch.Clearable.DUE_AT)
+            },
         )
     }
 
@@ -229,6 +244,33 @@ class TaskOps(private val apis: () -> HubApis?) {
     suspend fun assign(profile: String, id: String, request: TaskAssign): Result<TaskAssigned> = call { it.tasks.tasksAssignTask(profile, id, request) }
     suspend fun unassign(profile: String, id: String) = call { it.tasks.tasksUnassignTask(profile, id) }
     suspend fun stop(profile: String, id: String) = call { it.tasks.tasksStopTask(profile, id) }
+
+    // Tasks II (batch 5): the checklist, comments, and the profile's projects.
+    suspend fun addLine(profile: String, id: String, title: String) = call { it.tasks.tasksCreateSubtask(profile, id, SubtaskWrite(title = title)) }
+    suspend fun tickLine(profile: String, id: String, line: Subtask) =
+        call { it.tasks.tasksUpdateSubtask(profile, id, line.id, SubtaskWrite(status = SubtaskRules.toggled(line.status))) }
+    suspend fun deleteLine(profile: String, id: String, lineId: String) = call { it.tasks.tasksDeleteSubtask(profile, id, lineId) }
+
+    /** Each line whose place changed is told its new index, one after another. */
+    suspend fun reorderLines(profile: String, id: String, moves: List<Pair<String, Int>>) = call { api ->
+        moves.forEach { (line, index) -> api.tasks.tasksUpdateSubtask(profile, id, line, SubtaskWrite(index = index)) }
+    }
+    suspend fun comment(profile: String, id: String, content: String) =
+        call { it.tasks.tasksCreateComment(profile, id, TasksCreateCommentRequest(content = content)) }
+    suspend fun allProjects(profile: String) = call { api ->
+        api.tasks.tasksListProjects(profile).items to api.tasks.tasksListProjects(profile, status = ProjectStatus.ARCHIVED).items
+    }
+    suspend fun createProject(profile: String, write: ProjectWrite) = call { it.tasks.tasksCreateProject(profile, write) }
+    suspend fun updateProject(profile: String, projectId: String, write: ProjectWrite) = call { it.tasks.tasksUpdateProject(profile, projectId, write) }
+    suspend fun deleteProject(profile: String, projectId: String) = call { it.tasks.tasksDeleteProject(profile, projectId) }
+
+    /** The same change on every card, one call per profile (and hundred) they are in. */
+    suspend fun bulkUpdate(tasks: List<Task>, patch: TaskBulkUpdatePatch): Result<List<BulkResult>> = call { api ->
+        BulkRules.calls(tasks).map { (profile, ids) -> api.tasks.tasksBulkUpdateTasks(profile, TaskBulkUpdate(taskIds = ids, patch = patch)) }
+    }
+    suspend fun bulkDelete(tasks: List<Task>): Result<List<BulkResult>> = call { api ->
+        BulkRules.calls(tasks).map { (profile, ids) -> api.tasks.tasksBulkDeleteTasks(profile, BulkRules.idsParam(ids)) }
+    }
 
     /** Makes the task (once per [key], so a second Save after a failed start makes no second task), then starts it when asked. */
     suspend fun create(profile: String, values: Map<String, String>, key: String): Result<Task> = call { api ->
@@ -337,9 +379,36 @@ fun TaskDetailSheet(
                 onEdit = { mode = Mode.Edit },
                 onDelete = { deleting.ask(facts) },
                 onOpenChat = { id -> onDismiss(); onOpenChat(id, facts.profile) },
+                lists = {
+                    TaskLists(
+                        facts, detail, task, busy,
+                        onAutoStart = { on -> act { ops.update(facts.profile, facts.id, TaskPatch(autoStart = on)) } },
+                        onTick = { line -> act { ops.tickLine(facts.profile, facts.id, line) } },
+                        onAdd = { title ->
+                            ops.addLine(facts.profile, facts.id, title)
+                                .onSuccess { error = null; load(); onChanged() }.onFailure { error = it as? HubError }.isSuccess
+                        },
+                        onDeleteLine = { line -> act { ops.deleteLine(facts.profile, facts.id, line.id) } },
+                        onReorder = { order ->
+                            val lines = detail?.subtasks.orEmpty()
+                            val moves = SubtaskRules.reindex(lines, order)
+                            val byId = lines.associateBy { it.id }
+                            // The new order shows at once; the hub is told each line's new place.
+                            detail = detail?.copy(subtasks = order.mapIndexedNotNull { place, id -> byId[id]?.copy(index = place) })
+                            if (moves.isNotEmpty()) act { ops.reorderLines(facts.profile, facts.id, moves) }
+                        },
+                        onSaveList = { kind, items -> act { ops.update(facts.profile, facts.id, CheckLines.patch(kind, items)) } },
+                    )
+                },
+                comments = {
+                    CommentsPart(detail?.comments.orEmpty()) { words ->
+                        words.isNotEmpty() && ops.comment(facts.profile, facts.id, words)
+                            .onSuccess { error = null; load() }.onFailure { error = it as? HubError }.isSuccess
+                    }
+                },
             )
             Mode.Edit -> {
-                val initial = TaskRules.editValues(facts.title, facts.description, facts.priority, facts.projectId)
+                val initial = TaskRules.editValues(facts.title, facts.description, facts.priority, facts.projectId, facts.dueAt)
                 Text(stringResource(R.string.taskd_edit_title), fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.SemiBold)
                 FormBody(
                     editFields(projects.takeIf { list -> list.any { it.id == facts.projectId } }.orEmpty()), initial,
@@ -407,6 +476,7 @@ private fun editFields(projects: List<Project>): List<FormField> = buildList {
     add(FormField("title", stringResource(R.string.taskd_form_title), required = true))
     add(FormField("description", stringResource(R.string.taskd_form_description), FormKind.Multiline, help = stringResource(R.string.taskd_form_description_help)))
     add(FormField("priority", stringResource(R.string.taskd_form_priority), FormKind.Choice, required = true, options = priorityOptions()))
+    add(FormField("due", stringResource(R.string.taskd_due), FormKind.Date))
     // Another project only when the list came and holds this one.
     if (projects.isNotEmpty()) add(FormField("project", stringResource(R.string.taskd_form_project), FormKind.Choice, required = true, options = projects.map { FormOption(it.id, it.name) }))
 }
@@ -417,6 +487,37 @@ private fun assignFields(agents: List<Agent>): List<FormField> = listOf(
     FormField("instructions", stringResource(R.string.taskd_assign_instructions), FormKind.Multiline, help = stringResource(R.string.taskd_assign_instructions_help)),
     FormField("start", stringResource(R.string.taskd_form_start), FormKind.Toggle, help = stringResource(R.string.taskd_form_start_help)),
 )
+
+/**
+ * Tasks II: "Start automatically", the checklist, the definition of done and the constraints — or,
+ * for a Hermes card, Hermes's own history of it (Hermes briefs its own worker, §103/§104).
+ */
+@Composable
+private fun TaskLists(
+    facts: TaskFacts,
+    detail: TaskDetail?,
+    task: Task,
+    busy: Boolean,
+    onAutoStart: (Boolean) -> Unit,
+    onTick: (Subtask) -> Unit,
+    onAdd: suspend (String) -> Boolean,
+    onDeleteLine: (Subtask) -> Unit,
+    onReorder: (List<String>) -> Unit,
+    onSaveList: (CheckLines.Kind, List<hub.core.client.model.TaskCheckItem>) -> Unit,
+) {
+    if (facts.hermes) {
+        detail?.hermes?.let { HermesHistoryPart(it) }
+        return
+    }
+    hub.core.android.ui.kit.ToggleRow(
+        stringResource(R.string.taskl_auto_start), detail?.autoStart ?: task.autoStart, onAutoStart,
+        Modifier.testTag("task.auto_start"), subtitle = stringResource(R.string.taskl_auto_start_hint), enabled = !busy && detail != null,
+    )
+    SubtasksPart(detail?.subtasks.orEmpty(), detail != null && !busy, onTick, onAdd, onDeleteLine, onReorder)
+    val reviewing = CheckLines.canTick(facts.status)
+    CheckLinesPart(CheckLines.Kind.DONE, detail?.definitionOfDone ?: task.definitionOfDone.orEmpty(), reviewing, !busy) { onSaveList(CheckLines.Kind.DONE, it) }
+    CheckLinesPart(CheckLines.Kind.CONSTRAINTS, detail?.constraints ?: task.constraints.orEmpty(), reviewing, !busy) { onSaveList(CheckLines.Kind.CONSTRAINTS, it) }
+}
 
 /** The task itself, drawn from what is known of it; every action is the caller's. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -437,6 +538,10 @@ fun TaskDetailBody(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpenChat: (String) -> Unit,
+    /** Tasks II: the checklist and lists (or Hermes's history), drawn under the description. */
+    lists: @Composable () -> Unit = {},
+    /** Tasks II: what was said on it, drawn under its run. */
+    comments: @Composable () -> Unit = {},
 ) {
     val t = LocalTokens.current
     var moveOpen by remember { mutableStateOf(false) }
@@ -478,6 +583,7 @@ fun TaskDetailBody(
         } else {
             Text(stringResource(R.string.taskd_no_description), fontSize = FontTokens.sizeSm.sp, color = t.textFaint)
         }
+        lists()
 
         if (facts.dependsOn.isNotEmpty()) {
             val waiting = TaskRules.waiting(facts.status, facts.waitingOn)
@@ -501,6 +607,7 @@ fun TaskDetailBody(
                 Item(stringResource(R.string.tasks_open_chat), icon = Lucide.MessagesSquare, accent = true, chevron = true, tag = "task.open_chat", onClick = { onOpenChat(id) })
             }
         }
+        comments()
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val moves = TaskRules.moves(facts.status)

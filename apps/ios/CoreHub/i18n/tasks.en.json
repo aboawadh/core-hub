@@ -68,7 +68,7 @@
       "placeholder": "What must hold for it to be done",
       "add": "Add to the definition of done",
       "hint": "Sent to the agent with every run; the reviewer ticks each line.",
-      "ticked": "{done}/{total} ticked",
+      "ticked": "Ticked: {done}/{total}",
       "review_hint": "In review: tick each line that holds for the work. Swipe a line to delete it."
     },
     "constraints": {

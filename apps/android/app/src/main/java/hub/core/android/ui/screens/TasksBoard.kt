@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import hub.core.android.R
 import hub.core.android.generated.FontTokens
 import hub.core.android.generated.RadiusTokens
+import hub.core.android.ui.kit.HubCheckbox
 import hub.core.android.ui.components.InContentDirection
 import hub.core.android.ui.kit.Badge
 import hub.core.android.ui.kit.BadgeTone
@@ -255,7 +256,15 @@ private sealed interface Pending {
  * in its own (a reorder); the page scrolls when the card nears an edge.
  */
 @Composable
-fun TaskBoard(board: TaskColumns, badges: Boolean, profileName: (String) -> String, vm: TasksViewModel, onOpen: (Task) -> Unit) {
+fun TaskBoard(
+    board: TaskColumns,
+    badges: Boolean,
+    profileName: (String) -> String,
+    vm: TasksViewModel,
+    onOpen: (Task) -> Unit,
+    /** While the board is selecting (Tasks II): the ticked cards; a card is ticked, not lifted. */
+    selected: Set<String>? = null,
+) {
     val t = LocalTokens.current
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
@@ -366,7 +375,7 @@ fun TaskBoard(board: TaskColumns, badges: Boolean, profileName: (String) -> Stri
                                     Modifier
                                         .onGloballyPositioned { cardBounds[task.id] = it.boundsInRoot() }
                                         .alpha(if (lifted) 0.3f else 1f)
-                                        .pointerInput(task.id, task.status) {
+                                        .then(if (selected != null) Modifier else Modifier.pointerInput(task.id, task.status) {
                                             detectDragGesturesAfterLongPress(
                                                 onDragStart = { at ->
                                                     val bounds = cardBounds[task.id] ?: return@detectDragGesturesAfterLongPress
@@ -380,8 +389,9 @@ fun TaskBoard(board: TaskColumns, badges: Boolean, profileName: (String) -> Stri
                                                 onDragEnd = { drag?.let { dropNow(it) }; drag = null },
                                                 onDragCancel = { drag = null },
                                             )
-                                        },
+                                        }),
                                     onClick = { onOpen(task) },
+                                    selected = selected?.contains(task.id),
                                 )
                             }
                             if (column.id == BoardRules.ColumnId.DONE && archived > 0) {
@@ -433,10 +443,16 @@ fun TaskBoard(board: TaskColumns, badges: Boolean, profileName: (String) -> Stri
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 /** A task's card: its title, profile, stage, what it waits on or that it seems stuck, who has it, its latest line. */
 @Composable
-fun TaskCard(task: Task, badges: Boolean, profileName: (String) -> String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun TaskCard(task: Task, badges: Boolean, profileName: (String) -> String, modifier: Modifier = Modifier, onClick: () -> Unit, selected: Boolean? = null) {
     val t = LocalTokens.current
-    HubCard(modifier.testTag("task.card.${task.id}"), onClick = onClick, padding = 12.dp) {
+    HubCard(
+        modifier.testTag("task.card.${task.id}")
+            .then(if (selected == true) Modifier.border(1.5.dp, t.accent, RoundedCornerShape(RadiusTokens.lg.dp)) else Modifier),
+        onClick = onClick, padding = 12.dp,
+    ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // While selecting, the card's tick.
+            if (selected != null) HubCheckbox(selected, null, Modifier.testTag("task.tick.${task.id}"))
             InContentDirection(task.title) {
                 Text(task.title, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
@@ -460,6 +476,13 @@ fun TaskCard(task: Task, badges: Boolean, profileName: (String) -> String, modif
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     LucideIcon(Lucide.Bot, null, size = 12.dp, tint = t.textMuted)
                     Text(it.name, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1)
+                }
+            }
+            // The checklist, as the web's card counts it.
+            if (task.subtaskCounts.total > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag("task.subtasks.${task.id}")) {
+                    LucideIcon(Lucide.ListChecks, null, size = 12.dp, tint = t.textMuted)
+                    Text("${task.subtaskCounts.done}/${task.subtaskCounts.total}", fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                 }
             }
         }
