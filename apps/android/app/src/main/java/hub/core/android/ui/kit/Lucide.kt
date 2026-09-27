@@ -10,6 +10,7 @@ object Lucide {
     val ArchiveRestore = R.drawable.lucide_archive_restore
     val ArrowLeft = R.drawable.lucide_arrow_left
     val ArrowUp = R.drawable.lucide_arrow_up
+    val ArrowUpDown = R.drawable.lucide_arrow_up_down
     val Bell = R.drawable.lucide_bell
     val BellOff = R.drawable.lucide_bell_off
     val BookOpen = R.drawable.lucide_book_open
@@ -51,10 +52,13 @@ object Lucide {
     val File = R.drawable.lucide_file
     val FileCog = R.drawable.lucide_file_cog
     val FileDiff = R.drawable.lucide_file_diff
+    val FilePlus = R.drawable.lucide_file_plus
     val FileSearch = R.drawable.lucide_file_search
     val FileText = R.drawable.lucide_file_text
     val Film = R.drawable.lucide_film
     val Folder = R.drawable.lucide_folder
+    val FolderInput = R.drawable.lucide_folder_input
+    val FolderPlus = R.drawable.lucide_folder_plus
     val Gauge = R.drawable.lucide_gauge
     val GitFork = R.drawable.lucide_git_fork
     val Globe = R.drawable.lucide_globe
@@ -84,6 +88,7 @@ object Lucide {
     val Music = R.drawable.lucide_music
     val OctagonX = R.drawable.lucide_octagon_x
     val Palette = R.drawable.lucide_palette
+    val Paperclip = R.drawable.lucide_paperclip
     val Pause = R.drawable.lucide_pause
     val Pencil = R.drawable.lucide_pencil
     val Pin = R.drawable.lucide_pin
@@ -120,6 +125,7 @@ object Lucide {
     val Trash = R.drawable.lucide_trash
     val TriangleAlert = R.drawable.lucide_triangle_alert
     val Type = R.drawable.lucide_type
+    val Upload = R.drawable.lucide_upload
     val UserPlus = R.drawable.lucide_user_plus
     val UserRound = R.drawable.lucide_user_round
     val Users = R.drawable.lucide_users
