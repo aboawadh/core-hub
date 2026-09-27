@@ -3874,3 +3874,67 @@ field or step; what no field shows stays in the general message.
 Rejected: dropping `minLength` from `WorkflowWrite` (saving would accept an empty name at the
 contract and only the hub would refuse it, with a different status); leaving the contract and
 fixing only the clients (every released phone app would keep failing on a new hub).
+
+## 123. Inbound webhook triggers start a workflow; a condition can hold several rules
+
+Owner's goal (2026-09-28): outside systems — ClickUp first — send events into a Core Hub
+workflow, the workflow filters them, and only the ones that matter reach an agent step. Generic
+for every hub. The details below are proposed — owner to confirm.
+
+**Triggers.** A workflow has any number of inbound triggers (`listWorkflowTriggers`,
+`createWorkflowTrigger`, `updateWorkflowTrigger`, `deleteWorkflowTrigger`), each a stable
+public address on the hub, `POST /api/v1/workflow-hooks/{workflow_trigger_id}`
+(`receiveWorkflowTrigger`, `security: []`, `x-scope: global`). A trigger has a preset that says
+how a delivery proves its sender: `clickup` (`X-Signature` = hex HMAC-SHA256 of the raw body),
+`github` (`X-Hub-Signature-256`), `generic_hmac` (a chosen header, hex or base64, an optional
+prefix) and `token` (the secret itself in a chosen header). The body is read raw, at most 1 MiB,
+the signature is checked over those bytes with a constant-time comparison (both sides hashed
+first), and only then is the JSON read. The secret may be stored later than the trigger is made
+(ClickUp makes it when the webhook is registered with the address); it is sealed with the hub's
+data key ring, never returned (`secret_stored`, the web shows `[stored]`), replaceable. Until one
+is stored every delivery is refused.
+
+**Receiving**, in order: signature (`401`, logged `signature_rejected` without the body), repeat
+(a stable key per preset — ClickUp: `webhook_id` and the sorted `history_items[].id`; else a
+delivery-id header; else the SHA-256 of the body — remembered 7 days; a repeat is `200
+duplicate`), the trigger's event allow-list (`200 filtered`, logged `filtered_out`), then the
+run is queued and the answer is `202` at once; the steps go on after it. The run acts as the
+trigger's owner in the trigger's profile; its `{{trigger.*}}` holds `body`, `event`, `event_id`,
+`task_id`, a short allow-list of headers (`-` written `_`, never a signature, token or secret),
+`delivery_id` and `test`. Runs carry the trigger, the delivery, `event_id` and `task_id`
+(additive optional fields of `WorkflowRun`, new columns of `workflow_runs`), and
+`listWorkflowRuns` takes `event_id` and `task_id`.
+
+**The delivery log** (`listWorkflowTriggerDeliveries`): one line per delivery, `received`,
+`duplicate`, `signature_rejected`, `filtered_out`, `run_started`, then `run_succeeded` or
+`run_failed` when the run ends (settled by the engine's end-of-run hook, and again when read,
+for a run a restart ended); 7 days and at most 500 lines per trigger; a 1000-character body
+preview with secret-looking fields masked. **Send test event** (`testWorkflowTrigger`) builds a
+sample for the preset (ClickUp: a task event about a made-up task), signs it with the stored
+secret and runs the whole receiving path; nothing leaves the hub. `409 secret_missing` without
+a secret.
+
+**Several rules.** `WorkflowNode.rules` (optional, nullable): `{ match: all | any, items: [{ path,
+operator, value }] }` with the single-line condition's operators. With at least one rule the
+step answers from them and `input` is not read; old workflows are unchanged. `operator` is a
+plain string in the contract (so every generated client can carry `==`), checked when the
+workflow is saved (`rule_operator_invalid`, `rule_path_invalid`, `rule_value_missing`,
+`rule_regex_invalid`). An app that does not know the field sends a condition node without it;
+`updateWorkflow` then keeps the rules the saved node had (`null` removes them), so an older
+phone cannot erase them. A run whose condition said no with nothing to follow ends `succeeded`
+with `WorkflowRun.filtered = true` — not failed, no alert — and its delivery line says
+`filtered`.
+
+**Clients.** The web editor's side panel has a Triggers section (sender, address with copy,
+secret, events, signature settings, test event, delivery log with a link to each run) and the
+condition form a rules editor; the runs view finds runs by task or event id and marks filtered
+ones. The phones list a workflow's triggers read-only with the address to copy, show a
+condition's rules read-only and keep them on save; editing rules and triggers on the phones is a
+follow-up. The ClickUp registration is described in `docs/guides/clickup-webhook-trigger.md`.
+
+Not used: `workflows.trigger_kind = 'event'` and `event_key` stay as they were (they name the
+hub's own realtime events, not an outside sender; a workflow may have several triggers).
+Rejected: re-serialising the parsed body to check its signature (other bytes than the sender
+signed); putting the secret in the address (it would be in every proxy log); new values in
+`RunTrigger.kind` (an older app would meet an enum value it does not know — the run says
+`api` and carries the new optional fields).
