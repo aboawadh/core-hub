@@ -702,6 +702,14 @@ its approval.
   the global agent's conversation has its menu; and the **Display preferences are applied** (text size,
   reasoning, tool calls, compact, send while busy, where links open). The contract is unchanged.
   JVM tests against a scripted hub and Robolectric renders; **not yet tried on a phone or a real hub**.
+  Follow-up the same day (`docs/changes/2026-09-27-twuijri-android-self-sufficient-2.md`, as iOS's #202):
+  chats **dragged into order** (kept on the phone per view; Move up/down; dropped on a category to file
+  it), the **message queue** above the composer with «wait in line» (Send now, Steer, Remove; sent in
+  order as turns end), the composer's **`/` commands** with the **skill picker** after `/skill `,
+  **`/rt/jobs` heard for the session** (job pages wake on events, polling as fallback; Agents reads again
+  on `agent.updated`), the **trajectory timeline** with the web's rules (idle folded, parallel calls on
+  their own rows, reading direction, a bar opens its step) and the Session log as the hub sends it, and a
+  **model picker** for workflow agent steps.
 - **Explicit `null` from the phone clients** (since 2026-09-27, DECISIONS §114, proposed — owner to
   confirm; `docs/changes/2026-09-27-twuijri-client-explicit-null.md`): the generated Kotlin and Swift
   clients always send a required property that may be null (`null` when unset), and send an optional
