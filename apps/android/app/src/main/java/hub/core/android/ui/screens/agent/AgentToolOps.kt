@@ -90,7 +90,8 @@ class AgentToolOps(private val apis: () -> HubApis?, val profile: String, val ag
                 onUpdate(job)
                 if (AgentCardRules.terminal(job.status)) return job
             }
-            delay(everyMs)
+            // Its `/rt/jobs` event wakes the read at once; the poll is the fallback (JobsFeed).
+            hub.core.android.realtime.JobsFeed.wait(jobId, everyMs)
         }
     }
 }

@@ -444,7 +444,7 @@ class AdminTwoOps(val profile: String, private val apis: () -> AdminApis) {
                 onUpdate(job)
                 if (ProfileRules.finished(job)) return job
             }
-            delay(everyMs)
+            hub.core.android.realtime.JobsFeed.wait(jobId, everyMs)
         }
     }
 

@@ -81,4 +81,6 @@
     <string name="wfe_no_steps">لا خطوات بعد. أضف واحدة أدناه.</string>
     <string name="wfe_duplicate">نسخ</string>
     <string name="wfe_delete">حذف</string>
+    <string name="wfe_model">النموذج (اختياري)</string>
+    <string name="wfe_model_default">نموذج الوكيل نفسه</string>
 </resources>

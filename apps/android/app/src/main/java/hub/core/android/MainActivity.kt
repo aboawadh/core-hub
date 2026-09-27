@@ -252,6 +252,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 ChatScreen(
                     route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> },
                     onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                    onNewChat = { nav.go(Route.NewChat) },
                 )
             }
             is Route.ChannelChat -> {

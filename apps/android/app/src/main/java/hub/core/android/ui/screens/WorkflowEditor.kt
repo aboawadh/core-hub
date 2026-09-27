@@ -32,6 +32,7 @@ import hub.core.android.data.HubApis
 import hub.core.android.data.HubError
 import hub.core.android.data.hubCall
 import hub.core.android.generated.FontTokens
+import hub.core.android.graph
 import hub.core.android.ui.components.ErrorNotice
 import hub.core.android.ui.components.rememberAgents
 import hub.core.android.ui.kit.Badge
@@ -171,6 +172,13 @@ object WorkflowDraftRules {
         )
     }
 
+    /** An agent step's model: a catalogue key, or null for the agent's own; the provider goes with the key. */
+    fun withModel(node: WorkflowNode, model: String?): WorkflowNode = node.copy(model = model?.takeIf { it.isNotBlank() }, provider = null)
+
+    /** What the model button says: the model's label when the catalogue knows it, its id otherwise, null for the agent's own. */
+    fun modelLabel(model: String?, options: List<hub.core.android.chat.ChatControls.ModelOption>): String? =
+        hub.core.android.chat.ChatControls.modelLabel(model, options)
+
     fun idsValid(draft: WorkflowDraft): Boolean = draft.nodes.all { ID.matches(it.id) }
 
     /** Saving needs a name; the hub's problems block it too (the web's rule). */
@@ -301,6 +309,15 @@ fun WorkflowEditorSheet(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
     val agents = ChatAgents.startable(rememberAgents(where))
+    // The profile's chat models, for an agent step's own model (the web's StepPanel picker).
+    val graph = androidx.compose.ui.platform.LocalContext.current.graph
+    var models by remember(where) { mutableStateOf<List<hub.core.android.chat.ChatControls.ModelOption>>(emptyList()) }
+    var modelsLoaded by remember(where) { mutableStateOf(false) }
+    LaunchedEffect(where) {
+        val s = graph.store.current ?: return@LaunchedEffect
+        runCatching { hub.core.android.chat.ChatActions(graph.apis(s)).catalogue(where) }.onSuccess { models = it }
+        modelsLoaded = true
+    }
     // The hub judges the drawing as it changes (a pause first, so typing is not a request a key).
     LaunchedEffect(draft) {
         if (draft.nodes.isEmpty()) { validation = null; return@LaunchedEffect }
@@ -332,7 +349,7 @@ fun WorkflowEditorSheet(
             SectionTitle(stringResource(R.string.workflows_steps))
             if (draft.nodes.isEmpty()) Text(stringResource(R.string.wfe_no_steps), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
             draft.nodes.forEach { node ->
-                StepEditor(node, draft, agents.map { it.id to it.name }, onDraft = { draft = it })
+                StepEditor(node, draft, agents.map { it.id to it.name }, models, modelsLoaded, onDraft = { draft = it })
             }
             Text(stringResource(R.string.wfe_palette), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
             val titleOf: Map<WorkflowNode.Kind, String> = WorkflowNode.Kind.entries.associateWith { wfKindLabel(it) }
@@ -368,7 +385,14 @@ fun WorkflowEditorSheet(
 /** One step's form and the connections that leave it. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StepEditor(node: WorkflowNode, draft: WorkflowDraft, agents: List<Pair<String, String>>, onDraft: (WorkflowDraft) -> Unit) {
+private fun StepEditor(
+    node: WorkflowNode,
+    draft: WorkflowDraft,
+    agents: List<Pair<String, String>>,
+    models: List<hub.core.android.chat.ChatControls.ModelOption>,
+    modelsLoaded: Boolean,
+    onDraft: (WorkflowDraft) -> Unit,
+) {
     val t = LocalTokens.current
     fun change(transform: (WorkflowNode) -> WorkflowNode) = onDraft(WorkflowDraftRules.update(draft, node.id, transform))
     HubCard(Modifier.testTag("workflow.editor.step.${node.id}"), padding = 12.dp) {
@@ -390,6 +414,21 @@ private fun StepEditor(node: WorkflowNode, draft: WorkflowDraft, agents: List<Pa
                 if (agents.isEmpty()) Text(stringResource(R.string.wfe_agent_none), fontSize = FontTokens.sizeXs.sp, color = t.danger)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     agents.forEach { (id, name) -> Chip(name, node.agentId == id, { change { it.copy(agentId = id) } }, size = ControlSize.Sm) }
+                }
+                // The step's own model, or the agent's (null): chosen from the profile's chat models.
+                var picking by remember(node.id) { mutableStateOf(false) }
+                Text(stringResource(R.string.wfe_model), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+                HubButton(
+                    WorkflowDraftRules.modelLabel(node.model, models) ?: stringResource(R.string.wfe_model_default),
+                    { picking = true }, kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Layers,
+                    modifier = Modifier.testTag("workflow.editor.step.${node.id}.model"),
+                )
+                if (picking) {
+                    hub.core.android.ui.components.ModelPickerSheet(
+                        models, modelsLoaded, node.model, allowDefault = true,
+                        onChoose = { value -> picking = false; change { WorkflowDraftRules.withModel(it, value) } },
+                        onDismiss = { picking = false },
+                    )
                 }
                 HubTextField(
                     input, { v -> change { it.copy(input = v) } }, Modifier.fillMaxWidth(), label = stringResource(R.string.wfe_prompt),

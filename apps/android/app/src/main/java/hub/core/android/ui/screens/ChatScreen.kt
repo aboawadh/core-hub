@@ -2,6 +2,7 @@ package hub.core.android.ui.screens
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +74,8 @@ fun ChatScreen(
     onCreated: (String, String) -> Unit,
     /** Opens another chat (a fork from a message); `null` offers no fork. */
     onOpenChat: ((String, String) -> Unit)? = null,
+    /** `/new` and `/archive` leave this chat for the new-chat draft; null keeps the commands to what stays here. */
+    onNewChat: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val vm = rememberChatViewModel(sessionId, profile)
@@ -99,7 +102,12 @@ fun ChatScreen(
     val handedOff by context.graph.handOff.version.collectAsState()
     LaunchedEffect(handedOff, profile) { context.graph.handOff.take(profile).forEach(vm.tray::addReady) }
     val chat = ui.chat
-    val turns = remember(chat.messages) { Turns.group(chat.messages) }
+    // `/clear-screen` hides what was on the screen until «Show them» (nothing is deleted).
+    val turns = remember(chat.messages, ui.hiddenThrough) {
+        Turns.group(hub.core.android.chat.SlashCommands.afterClear(chat.messages, { it.seq }, ui.hiddenThrough))
+    }
+    // Leaving the conversation drops the messages still waiting on the phone (MessageQueue.kt).
+    androidx.compose.runtime.DisposableEffect(sessionId) { onDispose { vm.dropQueue() } }
     val listState = rememberLazyListState()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
     val youLabel = stringResource(R.string.chat_you)
@@ -165,6 +173,12 @@ fun ChatScreen(
                     item(key = "older") {
                         if (ui.loadingOlder) Text(stringResource(R.string.chat_loading_older), color = LocalTokens.current.textMuted)
                     }
+                    if (ui.hiddenThrough != null) {
+                        item(key = "cleared") {
+                            Notice(stringResource(R.string.slash_cleared) + " " + stringResource(R.string.slash_show_cleared), Tone.INFO,
+                                Modifier.clickable(onClick = vm::showCleared).testTag("chat.cleared"))
+                        }
+                    }
                     items(turns, key = { it.messages.first().id }) { turn ->
                         val agent = if (turn.fromPerson) null else hub.core.android.ui.components.AgentIdentity.of(
                             turn.messages.first().authorId, turn.authorName, agents, agentFallback,
@@ -197,12 +211,53 @@ fun ChatScreen(
         AttachmentChips(files, onRemove = vm.tray::remove)
         val uploading = files.any { it.state == AttachmentTray.State.Uploading }
         val ready = files.any { it.state is AttachmentTray.State.Ready }
-        val send = {
+        // The `/` commands this agent takes (SlashCommands.kt); a new chat's draft sends everything as typed.
+        val offered = if (sessionId == null) emptyList() else hub.core.android.chat.SlashCommands.available(chatAgent?.capabilities.orEmpty())
+            // A command this screen cannot carry out is not offered (the global agent's page has no fork, no new chat).
+            .filter { (it.name != "new" && it.name != "archive") || onNewChat != null }
+            .filter { it.name != "fork" || (onOpenChat != null && !globalAgent) }
+        var pickingModel by remember(sessionId) { mutableStateOf(false) }
+        val runCommand: (hub.core.android.chat.SlashCommands.Command, String) -> Boolean = run@{ command, arg ->
+            if (command.argument == hub.core.android.chat.SlashCommands.Argument.REQUIRED && arg.isBlank()) {
+                vm.say(ChatNotice.NeedsWords(command.name))
+                return@run false
+            }
+            when (command.name) {
+                "compress" -> vm.compress(arg)
+                "steer" -> vm.steer(arg)
+                "new" -> onNewChat?.invoke()
+                "fork" -> onOpenChat?.let { open -> vm.fork(null) { open(it.id, it.profile) } }
+                "archive" -> vm.change(hub.core.client.model.SessionPatch(archived = true)) { onNewChat?.invoke() }
+                "model" -> if (arg.isBlank()) pickingModel = true else {
+                    val value = hub.core.android.chat.SlashCommands.model(arg, ui.models)
+                    if (value == null) { vm.say(ChatNotice.UnknownModel(arg.trim())); return@run false }
+                    vm.setModel(value)
+                }
+                "clear-screen" -> vm.clearScreen()
+            }
+            true
+        }
+        val send = send@{
             val text = draft
+            val parsed = hub.core.android.chat.SlashCommands.parse(text, offered)
+            if (parsed != null && parsed.first.kind != hub.core.android.chat.SlashCommands.Kind.MESSAGE) {
+                if (runCommand(parsed.first, parsed.second)) draft = ""
+                return@send
+            }
+            if (parsed != null && parsed.first.argument == hub.core.android.chat.SlashCommands.Argument.REQUIRED && parsed.second.isBlank()) {
+                vm.say(ChatNotice.NeedsWords(parsed.first.name))
+                return@send
+            }
             val reply = replyTo?.id
             draft = ""
             replyTo = null
             vm.send(text, onCreated, reply)
+        }
+        if (pickingModel) {
+            hub.core.android.ui.components.ModelPickerSheet(
+                ui.models, ui.modelsLoaded, chat.session?.model, allowDefault = true,
+                onChoose = { value -> pickingModel = false; vm.setModel(value) }, onDismiss = { pickingModel = false },
+            )
         }
         // The words appear in the draft while they are spoken; with Auto and no keyboard to go
         // by, the conversation's own language is the one listened in.
@@ -214,6 +269,20 @@ fun ChatScreen(
             onSend = send,
         )
         DictationStrip(dictation)
+        // What waits for the live turn to end (MessageQueue.kt), and the `/` menu while one is typed.
+        MessageQueueStrip(ui.queue, onSendNow = vm::sendNow, onSteer = vm::steerWith, onRemove = vm::unqueue)
+        val typingSkill = hub.core.android.chat.SlashCommands.skillQuery(draft) != null
+        LaunchedEffect(typingSkill, chat.session?.agentId) { if (typingSkill) vm.loadSkills(chat.session?.agentId) }
+        if (sessionId != null) {
+            SlashMenu(
+                draft, offered, ui.skills,
+                onCommand = { command ->
+                    val next = hub.core.android.chat.SlashCommands.picked(command)
+                    if (next != null) draft = next else if (runCommand(command, "")) draft = ""
+                },
+                onSkill = { draft = hub.core.android.chat.SlashCommands.pickSkill(it) },
+            )
+        }
         replyTo?.let { hub.core.android.ui.components.ReplyStrip(it) { replyTo = null } }
         // The composer's chips (apps batch 1): a new chat's folder and model, a chat's model, the
         // agent's approvals, and Steer while a reply runs.

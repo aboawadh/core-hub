@@ -1,5 +1,17 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.drag
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import android.app.Activity
@@ -315,14 +327,48 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
         shell.extras.watch(true)
         onDispose { shell.extras.watch(false) }
     }
-    val pinned = chats.items.filter { it.pinned }
+    // The order the person dragged the chats into, for this view (ChatOrder.kt), over the hub's.
+    val graph = LocalContext.current.graph
+    val manual by graph.chatOrder.order.collectAsState()
+    LaunchedEffect(chats.profileFilter) { graph.chatOrder.use(ChatOrder.scope(chats.profileFilter)) }
+    val arranged = ChatOrder.arrange(chats.items, manual)
+    val pinned = arranged.filter { it.pinned }
     val conversations = ChatGroupsRules.visible(extras.conversations, extras.showHidden, chats.archive, chats.query)
     val groups = ChatGroupsRules.group(
-        chats.items.filter { !it.pinned }, extras.categories, conversations,
+        arranged.filter { !it.pinned }, extras.categories, conversations,
         keepEmpty = chats.query.isBlank() && chats.archive != ArchiveFilter.ARCHIVED,
     )
     val move: (Session) -> Unit = { dialogs.moving = it }
-    LazyColumn(Modifier.fillMaxSize().testTag("chats.list"), contentPadding = PaddingValues(bottom = 8.dp)) {
+    // Dragging a chat (a long press, then move): where it lands decides what happens.
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val drag = remember { ChatDrag() }
+    val groupOfKey: Map<Any, String> = buildMap {
+        put("pinned", "pinned")
+        pinned.forEach { put("p" + it.id, "pinned") }
+        groups.forEach { g ->
+            put(g.key, g.key)
+            g.items.forEach { s -> put(if (g is ChatGroup.Rest) s.id else g.key + ":" + s.id, g.key) }
+        }
+    }
+    val sessionOfKey: Map<Any, String> = buildMap {
+        pinned.forEach { put("p" + it.id, it.id) }
+        groups.forEach { g -> g.items.forEach { s -> put(if (g is ChatGroup.Rest) s.id else g.key + ":" + s.id, s.id) } }
+    }
+    val categoryProfiles = extras.categories.associate { it.id to it.profile }
+    val onDrop: (Session, String, Any, List<String>, Float) -> Unit = { session, group, key, shown, dy ->
+        val placed = listState.layoutInfo.visibleItemsInfo.map { ChatOrder.Placed(it.key, it.offset, it.size) }
+        val target = ChatOrder.landing(placed, key, dy)
+        when (val outcome = ChatOrder.outcome(session, group, target?.let(groupOfKey::get), categoryProfiles)) {
+            is ChatOrder.Outcome.Move -> shell.extras.write({ it.move(session, outcome.categoryId) }, after = shell::reloadChats)
+            ChatOrder.Outcome.Reorder -> sessionOfKey[target]?.let { other -> ChatOrder.drop(session.id, other, shown)?.let(graph.chatOrder::save) }
+            ChatOrder.Outcome.None -> Unit
+        }
+    }
+    val rowOf: @Composable (Session, String, Any, List<String>) -> Unit = { session, group, key, shown ->
+        ChatRow(session, badges, shell, nav, onOpen, move, drag = drag, dragKey = key, shown = shown, onDrop = { dy -> onDrop(session, group, key, shown, dy) },
+            onStep = { offset -> ChatOrder.step(session.id, offset, shown)?.let(graph.chatOrder::save) })
+    }
+    LazyColumn(Modifier.fillMaxSize().testTag("chats.list"), state = listState, contentPadding = PaddingValues(bottom = 8.dp)) {
         item(key = "header") { header() }
         item(key = "search") { ChatsSearch(shell) }
         if (selected.isNotEmpty()) item(key = "batch") { BatchBar(shell, selected.size) }
@@ -339,12 +385,13 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
         }
         if (pinned.isNotEmpty()) {
             item(key = "pinned") { SectionLabel(stringResource(R.string.chats_pinned)) }
-            items(pinned, key = { "p" + it.id }) { ChatRow(it, badges, shell, nav, onOpen, move) }
+            val shownPinned = pinned.map { it.id }
+            items(pinned, key = { "p" + it.id }) { rowOf(it, "pinned", "p" + it.id, shownPinned) }
         }
         chatGroups(
             groups, extras, extras.categories, shell, nav, dialogs, badges, isAdmin = session?.user?.isAdmin == true,
-            folded = chats.query.isBlank(), onOpen = onOpen,
-        ) { ChatRow(it, badges, shell, nav, onOpen, move) }
+            folded = chats.query.isBlank(), onOpen = onOpen, row = rowOf,
+        )
         if (chats.nextCursor != null) {
             item(key = "more") {
                 LaunchedEffect(chats.items.size) { shell.loadMore() }
@@ -462,7 +509,19 @@ private val contentStyle = TextStyle(textDirection = TextDirection.Content)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav: Navigator, onOpen: () -> Unit, onMove: ((Session) -> Unit)? = null) {
+private fun ChatRow(
+    session: Session,
+    badge: Boolean,
+    shell: ShellViewModel,
+    nav: Navigator,
+    onOpen: () -> Unit,
+    onMove: ((Session) -> Unit)? = null,
+    drag: ChatDrag? = null,
+    dragKey: Any = session.id,
+    shown: List<String> = emptyList(),
+    onDrop: (Float) -> Unit = {},
+    onStep: (Int) -> Unit = {},
+) {
     val t = LocalTokens.current
     val picked by shell.selected.collectAsState()
     val selecting = picked.isNotEmpty()
@@ -472,17 +531,58 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     val deleting = hub.core.android.ui.components.rememberConfirmDelete<Session>()
-    Box {
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val lifted = drag?.key == dragKey
+    val tap = {
+        if (selecting) shell.toggleSelected(session.id)
+        else { nav.go(Route.Chat(session.id, session.profile)); onOpen() }
+    }
+    val longPress = { if (selecting) shell.toggleSelected(session.id) else menu = true }
+    // The gesture outlives a recomposition: it always calls the latest of these (the group's order moves).
+    val onTap by androidx.compose.runtime.rememberUpdatedState(tap)
+    val onLong by androidx.compose.runtime.rememberUpdatedState(longPress)
+    val dropped by androidx.compose.runtime.rememberUpdatedState(onDrop)
+    Box(
+        Modifier.zIndex(if (lifted) 1f else 0f)
+            .graphicsLayer { translationY = if (lifted) drag?.dy ?: 0f else 0f; shadowElevation = if (lifted) 8f else 0f },
+    ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(ItemShape)
-            .background(if (selected) t.surface2 else Color.Transparent, ItemShape)
-            .combinedClickable(
-                onClick = {
-                    if (selecting) shell.toggleSelected(session.id)
-                    else { nav.go(Route.Chat(session.id, session.profile)); onOpen() }
-                },
-                onLongClick = { if (selecting) shell.toggleSelected(session.id) else menu = true },
-            )
+            .background(if (selected || lifted) t.surface2 else Color.Transparent, ItemShape)
+            // A tap opens; a long press opens the menu, or — moved before letting go — drags the chat (ChatOrder.kt).
+            .pointerInput(session.id, selecting, dragKey) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val long = awaitLongPressOrCancellation(down.id)
+                    if (long == null) {
+                        val ev = currentEvent
+                        if (ev.changes.all { it.changedToUp() } && ev.changes.none { it.isConsumed }) onTap()
+                        return@awaitEachGesture
+                    }
+                    if (selecting || drag == null) {
+                        onLong()
+                        return@awaitEachGesture
+                    }
+                    haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    drag.key = dragKey
+                    drag.dy = 0f
+                    var moved = 0f
+                    val finished = drag(long.id) { change ->
+                        val step = change.positionChange().y
+                        moved += kotlin.math.abs(step)
+                        drag.dy += step
+                        change.consume()
+                    }
+                    val dy = drag.dy
+                    drag.key = null
+                    drag.dy = 0f
+                    if (moved < ChatOrder.DRAG_SLOP_PX) onLong() else if (finished) dropped(dy)
+                }
+            }
+            .semantics {
+                onClick { tap(); true }
+                onLongClick { longPress(); true }
+            }
             .padding(horizontal = 8.dp, vertical = 7.dp)
             .testTag("chat.row.${session.id}"),
         verticalAlignment = Alignment.CenterVertically,
@@ -526,6 +626,13 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
             if (onMove != null) {
                 MenuItem(stringResource(R.string.cat_move_to), { menu = false; onMove(session) }, Modifier.testTag("chat.row.move"), icon = Lucide.Tag)
             }
+            // The same order a drag makes, without dragging (and for TalkBack).
+            if (ChatOrder.step(session.id, -1, shown) != null) {
+                MenuItem(stringResource(R.string.order_move_up), { menu = false; onStep(-1) }, Modifier.testTag("chat.row.up"), icon = Lucide.ChevronUp)
+            }
+            if (ChatOrder.step(session.id, 1, shown) != null) {
+                MenuItem(stringResource(R.string.order_move_down), { menu = false; onStep(1) }, Modifier.testTag("chat.row.down"), icon = Lucide.ChevronDown)
+            }
             MenuDivider()
             MenuItem(
                 stringResource(R.string.chat_controls_delete), { menu = false; deleting.ask(session) },
@@ -546,6 +653,12 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
         onDeleted = { gone -> if ((nav.current as? Route.Chat)?.sessionId == gone.id) nav.go(Route.NewChat) },
         body = stringResource(R.string.chat_controls_delete_body),
     )
+}
+
+/** The chat being dragged, and how far. */
+class ChatDrag {
+    var key by mutableStateOf<Any?>(null)
+    var dy by androidx.compose.runtime.mutableFloatStateOf(0f)
 }
 
 /**

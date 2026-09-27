@@ -81,4 +81,6 @@
     <string name="wfe_no_steps">No steps yet. Add one below.</string>
     <string name="wfe_duplicate">Duplicate</string>
     <string name="wfe_delete">Delete</string>
+    <string name="wfe_model">Model (optional)</string>
+    <string name="wfe_model_default">The agent\'s own model</string>
 </resources>

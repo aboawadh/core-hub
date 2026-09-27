@@ -384,6 +384,8 @@ fun noticeText(notice: ChatNotice): String = when (notice) {
     ChatNotice.Compressing -> stringResource(R.string.chat_controls_compressing)
     ChatNotice.Steered -> stringResource(R.string.chat_controls_steered)
     ChatNotice.SteerQueued -> stringResource(R.string.chat_controls_steer_queued)
+    is ChatNotice.NeedsWords -> stringResource(R.string.slash_needs_argument, "/" + notice.command)
+    is ChatNotice.UnknownModel -> stringResource(R.string.slash_model_unknown, notice.model)
     is ChatNotice.Compressed -> when (val outcome = notice.outcome) {
         is ChatControls.Compression.Compressed ->
             if (outcome.before != null && outcome.after != null) {
