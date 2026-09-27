@@ -162,6 +162,10 @@ $ pnpm nav:check
 nav:check  OK — 39 destinations, 2 pre-auth screens (login, setup), 44 terms, ar/en complete, routes for web, ios, android, desktop
 ```
 
+CI على الـPR (#201، التشغيلات 36338666767 و36338666790 و36338666813 و36338666792): كل الفحوص ناجحة — منها «Android build,
+unit tests, lint» (7m17s)، و«Build and test on the iOS simulator» (5m59s، لم يتأثر بتغيير navigation.json)، والويب والخادم
+وسطح المكتب والمثبّتات.
+
 **لم أشغّله**: التطبيق على جوال أو محاكٍ، ولا أمام هب حقيقي (هرمز، واتساب، الطرفية، المراكز المرتبطة). المحاكي غير متاح
 (لا صورة نظام للجوال، والذاكرة لا تتحمّل). لم يُغيَّر TypeScript، فلم أشغّل `pnpm typecheck`.
 
