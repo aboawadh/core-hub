@@ -23,7 +23,15 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { HUB_ORIGIN_ENV } from './hub-tools/block.js';
@@ -46,7 +54,12 @@ import {
   type GatewayStatus,
 } from './hermes-gateways.js';
 import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
-import { shareHermesInstall, type SharedInstall } from './hermes-shared-install.js';
+import { resolveHermesPython, type PythonCommand } from './hermes-python.js';
+import {
+  personalHermesRoot,
+  shareHermesInstall,
+  type SharedInstall,
+} from './hermes-shared-install.js';
 import { IMAGE_WHATSAPP_BRIDGE, prepareWhatsAppBridge } from './whatsapp-bridge.js';
 import { HubError } from '../../lib/errors.js';
 
@@ -142,6 +155,10 @@ const WARM_UP_ATTEMPTS = 60;
 /** How many of the managed gateway's last lines are kept for the reason it stopped. */
 const LAST_LINES_KEPT = 20;
 const LAST_LINE_MAX = 300;
+/** How long Hermes's own updater may take (a dependency rebuild included). */
+const SELF_UPDATE_TIMEOUT_MS = 30 * 60_000;
+/** Terminal colour codes (ESC [ … letter) in an updater's output. */
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g');
 const TUI_RETIRE_INTERVAL_MS = 5_000;
 /** How long a channel change waits for another before its gateway follows (`channelsChanged`). */
 const CHANNEL_SETTLE_MS = 1_000;
@@ -210,6 +227,9 @@ export class HermesRuntime {
    * once at `start()` — before any Hermes process of this hub starts.
    */
   private shared: SharedInstall | null = null;
+  /** Hermes's Python for short programs (`hermes-python.ts`), found at start and restart. */
+  private python: PythonCommand | null = null;
+  private pythonFor: string | null = null;
   /** The last lines the managed gateway wrote, for the reason shown when it stops or stalls. */
   private readonly lastLines: string[] = [];
   private stopping = false;
@@ -700,6 +720,98 @@ export class HermesRuntime {
   }
 
   /**
+   * How to run a short program on Hermes's own Python and packages, or `null` when this host's
+   * Hermes offers none (`hermes-python.ts`). Found in the background at `start()` and after a
+   * restart; `null` until then.
+   */
+  pythonCommand(): PythonCommand | null {
+    return this.pythonFor && this.pythonFor === this.executable() ? this.python : null;
+  }
+
+  /** Finds Hermes's Python for the executable on this host now. Never throws. */
+  async resolvePython(): Promise<PythonCommand | null> {
+    const hermes = this.executable();
+    if (!hermes) return null;
+    // The runtime's environment, so Hermes answers for this home's dependency state.
+    const found = await resolveHermesPython(hermes, this.cliEnv()).catch(() => null);
+    this.python = found;
+    this.pythonFor = hermes;
+    if (!found) this.log.info({ hermes }, "hermes: no way to run Hermes's Python on this host");
+    return found;
+  }
+
+  /**
+   * Whether the Hermes on this host is the person's own install — a Hermes home of theirs that
+   * is not this hub's (the desktop app's local mode, a hub run beside Hermes) — which Hermes's
+   * own updater may update when the person asks (`AgentInstall.self_update`). Never in the
+   * image, where Hermes's home is the hub's and Hermes comes with the image.
+   */
+  personalInstall(): boolean {
+    if (!this.executable()) return false;
+    const root = personalHermesRoot(this.options.host.inherited ?? {});
+    if (!root) return false;
+    try {
+      if (!statSync(root).isDirectory()) return false;
+      return realpathSync(root) !== realpathSync(this.home);
+    } catch (error) {
+      // No home of the hub's yet: a different folder by definition.
+      return (error as NodeJS.ErrnoException).code === 'ENOENT' && existsSync(root);
+    }
+  }
+
+  /**
+   * Hermes's own updater on the person's install (`hermes update --yes`: no prompt, config
+   * migrations accepted), in their environment — never this hub's `HERMES_HOME` — with each
+   * line of its output to `onLine`. Rejects with Hermes's last line when it fails.
+   */
+  selfUpdate(onLine: (line: string) => void, timeoutMs = SELF_UPDATE_TIMEOUT_MS): Promise<void> {
+    const hermes = this.executable();
+    if (!hermes || !this.personalInstall()) {
+      return Promise.reject(
+        new Error('the Hermes on this computer is not one Core Hub may update'),
+      );
+    }
+    const env: NodeJS.ProcessEnv = {
+      ...(this.options.host.inherited ?? {}),
+      ...(this.options.host.pathValue ? { PATH: this.options.host.pathValue } : {}),
+      PYTHONUNBUFFERED: '1',
+      NO_COLOR: '1',
+    };
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn(hermes, ['update', '--yes'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+        windowsHide: true,
+      });
+      const said: string[] = [];
+      const take = (stream: NodeJS.ReadableStream | null) => {
+        if (!stream) return;
+        createInterface({ input: stream }).on('line', (line) => {
+          const text = line.replace(ANSI, '').trim();
+          if (!text) return;
+          said.push(text);
+          if (said.length > LAST_LINES_KEPT) said.shift();
+          onLine(text);
+        });
+      };
+      take(child.stdout);
+      take(child.stderr);
+      const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs);
+      timer.unref?.();
+      child.once('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.once('close', (code, signal) => {
+        clearTimeout(timer);
+        if (code === 0) return resolve();
+        const why = said.at(-1) ?? `exit ${signal ?? String(code)}`;
+        reject(new Error(`hermes update failed: ${why}`));
+      });
+    });
+  }
+
+  /**
    * The `hermes` executable on this host, or `null` when there is none.
    *
    * Looked up on demand rather than kept from `start()`, because an external gateway never
@@ -715,7 +827,10 @@ export class HermesRuntime {
     if (this.mode !== 'undecided') return this.mode;
     // Every Hermes command of this hub runs in its home, an external gateway or not (kanban,
     // profiles, plugins): the install state goes in first.
-    if (whichSync('hermes', this.options.host)) this.shareInstall();
+    if (whichSync('hermes', this.options.host)) {
+      this.shareInstall();
+      void this.resolvePython();
+    }
     if (await this.healthy()) {
       this.mode = 'external';
       this.setState('running', null);
@@ -750,6 +865,8 @@ export class HermesRuntime {
     if (this.mode !== 'managed') {
       throw new Error(`hermes runtime is ${this.mode}, not managed by this hub`);
     }
+    // Hermes may have been updated in place (`selfUpdate`): its Python is looked for again.
+    void this.resolvePython();
     // Every messaging gateway: the keys and endpoints a restart makes live are theirs too.
     const others = this.profileGateways.restartAll();
     const child = this.child;

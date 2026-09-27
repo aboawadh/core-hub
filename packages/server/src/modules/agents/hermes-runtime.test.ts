@@ -679,3 +679,83 @@ describe("Hermes runtime: on the person's own Hermes install (desktop local mode
     );
   });
 });
+
+describe("Hermes runtime: updating the person's own Hermes (owner's question, 2026-09-27)", () => {
+  /** A `hermes` that records how it was run, then says `said` and exits with `code`. */
+  function recordingHermes(said: string, code: number): { dir: string; record: string } {
+    const dir = tempDir();
+    const record = path.join(dir, 'ran.txt');
+    const file = path.join(dir, 'hermes');
+    writeFileSync(
+      file,
+      `#!/bin/sh\necho "$* HERMES_HOME=\${HERMES_HOME:-unset}" > '${record}'\necho '${said}'\nexit ${code}\n`,
+    );
+    chmodSync(file, 0o755);
+    return { dir, record };
+  }
+
+  it("runs `hermes update --yes` in the person's environment, never with the hub's Hermes home", async () => {
+    const home = realpathSync(tempDir());
+    mkdirSync(path.join(home, '.hermes'));
+    const { dir, record } = recordingHermes('✓ Update complete!', 0);
+    const { logger } = capturingLogger();
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: `${dir}:/usr/bin:/bin`, inherited: { HOME: home } },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl: fakeSpawner().spawnImpl,
+      healthIntervalMs: 0,
+    });
+    expect(runtime.personalInstall()).toBe(true);
+    const lines: string[] = [];
+    await runtime.selfUpdate((line) => lines.push(line));
+    expect(readFileSync(record, 'utf8').trim()).toBe('update --yes HERMES_HOME=unset');
+    expect(lines).toEqual(['✓ Update complete!']);
+  });
+
+  it("says Hermes's last line when its updater fails", async () => {
+    const home = realpathSync(tempDir());
+    mkdirSync(path.join(home, '.hermes'));
+    const { dir } = recordingHermes('✗ an update is still running', 1);
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: `${dir}:/usr/bin:/bin`, inherited: { HOME: home } },
+      log: capturingLogger().logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl: fakeSpawner().spawnImpl,
+      healthIntervalMs: 0,
+    });
+    await expect(runtime.selfUpdate(() => undefined)).rejects.toThrow(
+      'hermes update failed: ✗ an update is still running',
+    );
+  });
+
+  it('never updates the Hermes the image carries (its home is the hub home), nor with no Hermes home', async () => {
+    const dataDir = tempDir();
+    const { dir } = recordingHermes('x', 0);
+    const image = new HermesRuntime({
+      dataDir,
+      host: {
+        pathValue: dir,
+        inherited: { HOME: tempDir(), HERMES_HOME: path.join(dataDir, 'hermes') },
+      },
+      log: capturingLogger().logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl: fakeSpawner().spawnImpl,
+      healthIntervalMs: 0,
+    });
+    mkdirSync(path.join(dataDir, 'hermes'), { recursive: true });
+    expect(image.personalInstall()).toBe(false);
+    await expect(image.selfUpdate(() => undefined)).rejects.toThrow(/not one Core Hub may update/);
+    const none = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: dir, inherited: { HOME: tempDir() } },
+      log: capturingLogger().logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl: fakeSpawner().spawnImpl,
+      healthIntervalMs: 0,
+    });
+    expect(none.personalInstall()).toBe(false);
+  });
+});

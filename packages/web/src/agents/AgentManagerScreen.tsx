@@ -20,6 +20,7 @@ import { useI18n } from '../i18n/context.js';
 import { agentRoute, termKey } from '../navigation/manifest.js';
 import { AppShell } from '../shell/AppShell.js';
 import { useProfileName } from '../shell/profiles.js';
+import { useConfirm } from '../ui/ConfirmDialog.js';
 import type { Agent, Job } from '../types.js';
 import {
   Avatar,
@@ -114,7 +115,10 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
   const managed = agent.install.source === 'managed' || agent.install.source === 'none';
   const installed = configurable(agent);
 
-  const act = async (kind: 'install' | 'uninstall' | 'restart') => {
+  const { ask, dialog } = useConfirm();
+  const admin = user?.role === 'owner' || user?.role === 'admin';
+
+  const act = async (kind: 'install' | 'uninstall' | 'restart' | 'update') => {
     setError(null);
     try {
       const params = { agent_id: agent.id };
@@ -123,12 +127,25 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
           ? await client.request('post', '/agents/{agent_id}/install', { params })
           : kind === 'uninstall'
             ? await client.request('delete', '/agents/{agent_id}/install', { params })
-            : await client.request('post', '/agents/{agent_id}/restart', { params });
+            : kind === 'update'
+              ? await client.request('post', '/agents/{agent_id}/update', { params })
+              : await client.request('post', '/agents/{agent_id}/restart', { params });
       setJobId(data.job_id);
       void queryClient.invalidateQueries({ queryKey: ['agents', profile] });
     } catch (err) {
       setError(err);
     }
+  };
+  // A Hermes the person installed, older than the hub is tested with: said, never blocking; its
+  // own updater runs only after the person agrees, since it updates Hermes for the whole computer.
+  const updateHermes = async () => {
+    const yes = await ask({
+      title: t('agents.update_hermes_title'),
+      body: t('agents.update_hermes_body'),
+      confirmLabel: t('agents.update_hermes'),
+      tone: 'default',
+    });
+    if (yes) await act('update');
   };
   // The card's chips: every agent page but Settings, which is the button in the footer.
   const menu = agentSections(agent, user?.role ?? 'member').filter(
@@ -204,6 +221,26 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
             ))}
           </ul>
         </div>
+      )}
+      {agent.install.below_minimum && agent.install.minimum_version && (
+        <Notice tone="warning" className="wrap-anywhere" testId="agent-below-minimum">
+          <p>
+            {t('agents.below_minimum', {
+              version: agent.install.version ?? '—',
+              minimum: agent.install.minimum_version,
+            })}
+          </p>
+          {agent.install.self_update && admin && (
+            <Button
+              className="mt-2"
+              disabled={running}
+              onClick={() => void updateHermes()}
+              data-testid="agent-update-hermes"
+            >
+              {t('agents.update_hermes')}
+            </Button>
+          )}
+        </Notice>
       )}
       {agent.install.error && (
         <Notice tone="danger" className="wrap-anywhere" testId="agent-install-error">
@@ -302,6 +339,7 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
           </nav>
         </>
       )}
+      {dialog}
     </Card>
   );
 }

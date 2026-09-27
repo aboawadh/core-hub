@@ -31,7 +31,7 @@
  * test process, so the service is kept per Socket.IO server (one per app), the same way
  * `auth` keeps its context.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -138,7 +138,7 @@ import {
   createPackageRegistry,
   type PackageRegistry,
 } from './update-policy.js';
-import { AgentsService, type AgentPatchInput } from './service.js';
+import { AgentsService, type AgentPatchInput, type HermesUpdater } from './service.js';
 import {
   ChannelError,
   clearChannel,
@@ -309,6 +309,8 @@ export {
 /** Test seams: a fake PATH, a fake adapter set, a fake installer. Set before the app boots. */
 export interface AgentsOverrides {
   adapters?: AdapterSet;
+  /** Hermes's own updater for `agents.upgrade` (a scripted one in tests). */
+  hermesUpdate?: HermesUpdater;
   installer?: AgentInstaller;
   pathValue?: string;
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
@@ -739,6 +741,16 @@ function contextOf(app: FastifyInstance): AgentsContext {
       const row = defaultWorkspace(requireSqlite(hub.database));
       return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
     },
+    // A Hermes the person installed on this computer is updated by its own updater when they
+    // ask from its card; the image's Hermes comes with the image (`personalInstall`).
+    hermesUpdate: own.hermesUpdate ?? {
+      available: () => runtime.personalInstall(),
+      run: (onLine) => runtime.selfUpdate(onLine),
+      restart: async () => {
+        if (runtime.status().mode === 'managed') await runtime.restart();
+        runtime.refreshTui();
+      },
+    },
   });
   const leases = new RunLeases();
   const runner = new AgentRunner({ service, adapters, log: app.log, leases });
@@ -824,12 +836,10 @@ function contextOf(app: FastifyInstance): AgentsContext {
     hermesPython: () => {
       if (own.hermesPython) return own.hermesPython;
       const { mode, home } = runtime.status();
-      const command = runtime.executable();
-      if (mode !== 'managed' || !home || !command) return null;
-      // The interpreter of Hermes's own venv, beside its `hermes` entry point (as the TUI
-      // gateway is started).
-      const python = path.join(path.dirname(command), 'python');
-      if (!existsSync(python)) return null;
+      if (mode !== 'managed' || !home) return null;
+      // Hermes's own interpreter and packages, however it was installed (`hermes-python.ts`).
+      const python = runtime.pythonCommand();
+      if (!python) return null;
       return hermesPythonRunner({ python, env: () => runtime.cliEnv() });
     },
     pairingPollMs: own.pairingPollMs ?? 1000,

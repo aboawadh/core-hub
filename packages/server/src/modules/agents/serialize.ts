@@ -103,6 +103,12 @@ export interface RuntimeState {
   gateways?: MessagingGatewayView[];
 }
 
+/** `version` (build metadata ignored) is older than `minimum`; an unknown version is not. */
+export function belowMinimum(version: string | null, minimum: string): boolean {
+  if (!version) return false;
+  return compareVersions(version.split('+')[0]!, minimum) < 0;
+}
+
 export function serializeAgent(
   row: AgentRow,
   options: {
@@ -122,6 +128,8 @@ export function serializeAgent(
      * agent whose name is a word rather than a brand (`service.ts` §`displayName`).
      */
     name?: string;
+    /** `agents.upgrade` runs this agent's own updater (`AgentInstall.self_update`). */
+    selfUpdate?: boolean;
   },
 ): ContractAgent {
   const enabled = options.settings?.enabled ?? true;
@@ -164,6 +172,15 @@ export function serializeAgent(
       auto_update_supported: row.packageName !== null,
       // The agent keeps its own vendor account, and the hub can start its sign-in.
       ...(entry?.signIn ? { sign_in: true } : {}),
+      // An agent the person installed may be of any age: the oldest the hub works with, and
+      // whether this one is older (said on the card, nothing blocked).
+      ...(entry?.minimumVersion
+        ? {
+            minimum_version: entry.minimumVersion,
+            below_minimum: belowMinimum(row.version, entry.minimumVersion),
+          }
+        : {}),
+      ...(options.selfUpdate ? { self_update: true } : {}),
       checked_at: iso(row.checkedAt),
       error: row.lastError,
     },
