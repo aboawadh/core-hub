@@ -3825,3 +3825,26 @@ be of any age. `AgentInstall` gains three optional fields, absent from older hub
 `self_update` is refused as before. A newer Hermes than the pin is not flagged (the one Hermes's
 installer puts on a computer today is past it and was tested for real,
 `docs/changes/2026-09-27-twuijri-desktop-local-existing-hermes.md`).
+
+## 120. The Android app goes to Google Play as its own build, with self-update off and the GitHub APK's key
+
+Owner's decision (2026-09-27): publish the Android app on Google Play from a personal developer
+account. The details below are proposed — owner to confirm. Nothing in the contract changes.
+
+The Play build is the release AAB built with `-Pcorehub.selfUpdate=false`: no request to GitHub and
+no `REQUEST_INSTALL_PACKAGES` (Play updates the app and forbids self-updating). It is signed with the
+same keystore as the GitHub APK, and the recommended Play App Signing choice is to upload that key
+as the app signing key, so an install from GitHub and one from Play carry one signature and a
+GitHub user can move to Play as an update. Its versionCode is 100000 + the upload workflow's run
+number, above every GitHub APK code. `.github/workflows/play-upload.yml` (by hand only) builds it
+and sends it and/or the listing in `apps/android/fastlane/metadata/android` with fastlane supply;
+a release is a draft unless the run asks otherwise, and nothing is promoted or rolled out by the
+workflow. The listing, graphics and screenshots live in the repository and are checked against
+Play's limits (`apps/android/scripts/play-listing.mjs`); the screenshots are the real app on the
+demo hub. The Data safety answers declare what the app sends to the person's own hub, because
+Play counts any data sent off the device as collected (docs/store/google/README.md).
+
+Rejected: a Google-generated app signing key (two signatures: a phone could not move between the
+GitHub APK and Play without losing its sign-in); keeping the self-updater in the Play build;
+r0adkll/upload-google-play (uploads the bundle but not the listing and images); "No data
+collected" on Play (the Firebase library alone sends a token and an installation id to Google).

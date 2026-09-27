@@ -238,8 +238,12 @@ installers stay unsigned (`desktop.yml`).
 
   Until these are filled, step 7 fails with the list of what is missing; after that each upload
   is submitted by itself.
-- **Play**: nothing yet; the signed AAB is ready for an internal-testing track when the owner
-  decides. The listing's 512 px icon is `apps/android/store/icon-512.png`.
+- **Play**: the listing, graphics and screenshots are in `apps/android/fastlane/metadata/android`,
+  and Actions → *Google Play upload* (`play-upload.yml`, by hand) builds the Play AAB
+  (`-Pcorehub.selfUpdate=false`, the same release key) and sends it and/or the listing with
+  fastlane supply, as a draft by default. It needs the secret `PLAY_SERVICE_ACCOUNT_JSON`. Every
+  Play Console answer (Data safety, content rating, App access, Play App Signing, the closed test):
+  [docs/store/google/README.md](store/google/README.md).
 
 ## App Store submission
 

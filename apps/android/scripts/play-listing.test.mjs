@@ -67,9 +67,15 @@ test('images with the wrong size, alpha or count are refused', () => {
   // The iPhone 6.9" size (1320 × 2868) is taller than Play's 2:1.
   assert.ok(problems.some((p) => /over twice the short one/.test(p)));
   assert.ok(problems.some((p) => /01\.png: not a 24-bit PNG without alpha/.test(p)));
-  assert.deepEqual(checkImages('ar', { ...good, icon: undefined }), ['ar/images/icon.png: missing']);
-  const tooMany = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`${i}.png`, png(1080, 1920, 2)]));
-  assert.ok(checkImages('ar', { ...good, screenshots: tooMany }).some((p) => /9 screenshot/.test(p)));
+  assert.deepEqual(checkImages('ar', { ...good, icon: undefined }), [
+    'ar/images/icon.png: missing',
+  ]);
+  const tooMany = Object.fromEntries(
+    Array.from({ length: 9 }, (_, i) => [`${i}.png`, png(1080, 1920, 2)]),
+  );
+  assert.ok(
+    checkImages('ar', { ...good, screenshots: tooMany }).some((p) => /9 screenshot/.test(p)),
+  );
   const small = { '01.png': png(300, 600, 2), '02.png': png(1080, 1920, 2) };
   assert.ok(checkImages('ar', { ...good, screenshots: small }).some((p) => /320–3840/.test(p)));
 });

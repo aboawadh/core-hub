@@ -43,7 +43,8 @@ export function checkTexts(locale, texts) {
     }
     const length = characters(text);
     if (length > max) problems.push(`${locale}/${file}: ${length} characters, the limit is ${max}`);
-    if (/<\/?[a-z][^>]*>/i.test(text)) problems.push(`${locale}/${file}: HTML tags; Play wants plain text`);
+    if (/<\/?[a-z][^>]*>/i.test(text))
+      problems.push(`${locale}/${file}: HTML tags; Play wants plain text`);
   }
   return problems;
 }
@@ -74,10 +75,14 @@ export function checkImages(locale, { icon, feature, screenshots }) {
     const info = pngInfo(buffer);
     if (!info) return problems.push(`${where(name)}: not a PNG`);
     if (info.width !== width || info.height !== height) {
-      problems.push(`${where(name)}: ${info.width} × ${info.height}, Play wants ${width} × ${height}`);
+      problems.push(
+        `${where(name)}: ${info.width} × ${info.height}, Play wants ${width} × ${height}`,
+      );
     }
     if (info.depth !== 8 || !types.includes(info.colorType)) {
-      problems.push(`${where(name)}: not a ${what} PNG (depth ${info.depth}, colour type ${info.colorType})`);
+      problems.push(
+        `${where(name)}: not a ${what} PNG (depth ${info.depth}, colour type ${info.colorType})`,
+      );
     }
   };
   exact('icon.png', icon, 512, 512, [RGBA], '32-bit');
@@ -96,13 +101,19 @@ export function checkImages(locale, { icon, feature, screenshots }) {
     const short = Math.min(info.width, info.height);
     const long = Math.max(info.width, info.height);
     if (short < 320 || long > 3840) {
-      problems.push(`${where(file)}: ${info.width} × ${info.height}, each side must be 320–3840 px`);
+      problems.push(
+        `${where(file)}: ${info.width} × ${info.height}, each side must be 320–3840 px`,
+      );
     }
     if (long > 2 * short) {
-      problems.push(`${where(file)}: ${info.width} × ${info.height}, the long side is over twice the short one`);
+      problems.push(
+        `${where(file)}: ${info.width} × ${info.height}, the long side is over twice the short one`,
+      );
     }
     if (info.depth !== 8 || info.colorType !== RGB) {
-      problems.push(`${where(file)}: not a 24-bit PNG without alpha (colour type ${info.colorType})`);
+      problems.push(
+        `${where(file)}: not a 24-bit PNG without alpha (colour type ${info.colorType})`,
+      );
     }
   }
   return problems;
@@ -152,7 +163,9 @@ function takeShots() {
     const to = path.join(metadataDir, locale, 'images', 'phoneScreenshots');
     rmSync(to, { recursive: true, force: true });
     mkdirSync(to, { recursive: true });
-    for (const name of readdirSync(from).filter((n) => n.endsWith('.png')).sort()) {
+    for (const name of readdirSync(from)
+      .filter((n) => n.endsWith('.png'))
+      .sort()) {
       copyFileSync(path.join(from, name), path.join(to, name));
     }
   }
@@ -166,7 +179,8 @@ function main() {
     const { texts, images } = loadLocale(locale);
     problems.push(...checkTexts(locale, texts), ...checkImages(locale, images));
     if (summary) {
-      for (const [file, max] of TEXTS) console.log(`${locale}/${file}: ${characters(texts[file] ?? '')}/${max}`);
+      for (const [file, max] of TEXTS)
+        console.log(`${locale}/${file}: ${characters(texts[file] ?? '')}/${max}`);
       for (const [name, buffer] of Object.entries(images.screenshots)) {
         const info = pngInfo(buffer);
         console.log(`${locale}/images/phoneScreenshots/${name}: ${info?.width} × ${info?.height}`);

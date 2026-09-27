@@ -1,0 +1,218 @@
+name: Google Play upload
+
+# Sends the Android app to Google Play (docs/store/google/README.md): the release AAB built for
+# Play — self-update off (`-Pcorehub.selfUpdate=false`), since Play updates the app and forbids an
+# app installing its own updates — signed with the same release key as the GitHub APK
+# (android-signed.yml), and/or the store listing in apps/android/fastlane/metadata/android, with
+# fastlane supply. Only by hand. A release goes to the chosen track as a draft unless `status`
+# says otherwise; nothing here promotes, rolls out or submits by itself. The GitHub APK build
+# (android-signed.yml, publish-release.yml) is untouched.
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'What to send: the AAB with its release notes, the listing (texts and images) only, or both'
+        type: choice
+        options: [bundle, listing, both]
+        default: bundle
+      track:
+        description: 'Play track for the AAB (a closed test is alpha, or a named track)'
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
+      status:
+        description: 'Release status on that track (a draft app, never published, accepts only draft)'
+        type: choice
+        options: [draft, completed, inProgress, halted]
+        default: draft
+      version_code:
+        description: 'versionCode for the AAB; empty = 100000 + this workflow run number'
+        required: false
+      keep_aab:
+        description: 'Keep the signed AAB as a workflow artifact (anyone can download it; for the first manual upload)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: play-upload
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  play:
+    name: Upload to Google Play
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PACKAGE: com.twuijri.corehub
+      UPLOAD: ${{ inputs.upload }}
+      TRACK: ${{ inputs.track }}
+      STATUS: ${{ inputs.status }}
+      BUILD: ${{ inputs.upload != 'listing' }}
+    steps:
+      # Before anything is built: the Play key, and for a build the signing key and Firebase.
+      - name: The secrets are set
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          ANDROID_TEST_KEYSTORE_B64: ${{ secrets.ANDROID_TEST_KEYSTORE_B64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo '::error title=PLAY_SERVICE_ACCOUNT_JSON is not set::Add the Google Play service account key (the JSON file, as downloaded) as the repository secret PLAY_SERVICE_ACCOUNT_JSON: Settings → Secrets and variables → Actions. How to make it: docs/store/google/README.md → "Service account for uploads".'
+            missing=1
+          elif ! printf %s "$PLAY_SERVICE_ACCOUNT_JSON" | jq -e '.type == "service_account" and (.client_email | type == "string")' > /dev/null 2>&1; then
+            echo '::error title=PLAY_SERVICE_ACCOUNT_JSON is not a service account key::The secret must be the whole JSON key file of a Google Cloud service account ("type": "service_account").'
+            missing=1
+          fi
+          if [ "$BUILD" = true ]; then
+            test -n "$ANDROID_TEST_KEYSTORE_B64" || { echo '::error::ANDROID_TEST_KEYSTORE_B64 (the release keystore the GitHub APK is signed with) is not set'; missing=1; }
+            test -n "$GOOGLE_SERVICES_JSON" || { echo '::error::GOOGLE_SERVICES_JSON is not set'; missing=1; }
+          fi
+          exit "$missing"
+      - uses: actions/checkout@v4
+      # A closed or open test and production take main only; the internal track takes any branch.
+      - name: Only main goes past the internal track
+        if: env.BUILD == 'true' && inputs.track != 'internal' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::The $TRACK track takes builds of main only; this run is on $GITHUB_REF."
+          exit 1
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: The listing is within Google Play's limits
+        run: node apps/android/scripts/play-listing.mjs --summary
+
+      - uses: actions/setup-java@v4
+        if: env.BUILD == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+      # No Gradle cache: nothing built next to the Firebase file or the keystore is kept.
+      - uses: gradle/actions/setup-gradle@v4
+        if: env.BUILD == 'true'
+        with:
+          cache-disabled: true
+      - if: env.BUILD == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Generate the Kotlin client from the contract
+        if: env.BUILD == 'true'
+        run: pnpm --filter @corehub/contracts generate:native
+      # The same keystore and Firebase project as android-signed.yml; values are never printed.
+      - name: Write the keystore and the Firebase configuration
+        if: env.BUILD == 'true'
+        env:
+          ANDROID_TEST_KEYSTORE_B64: ${{ secrets.ANDROID_TEST_KEYSTORE_B64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf %s "$ANDROID_TEST_KEYSTORE_B64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/corehub-release.jks"
+          if [[ "$GOOGLE_SERVICES_JSON" =~ ^[[:space:]]*\{ ]]; then
+            printf %s "$GOOGLE_SERVICES_JSON" > apps/android/app/google-services.json
+          else
+            printf %s "$GOOGLE_SERVICES_JSON" | base64 --decode --ignore-garbage > apps/android/app/google-services.json
+          fi
+          echo "COREHUB_ANDROID_KEYSTORE=$RUNNER_TEMP/corehub-release.jks" >> "$GITHUB_ENV"
+      # Play refuses a versionCode it has seen. 100000 + this workflow's run number always grows,
+      # and stays above the GitHub APK's (100 + or 1000 + that workflow's run number), so a phone
+      # with the GitHub APK can move to the Play build as an update (same signature).
+      - name: Build number
+        if: env.BUILD == 'true'
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          code=${VERSION_CODE:-$((GITHUB_RUN_NUMBER + 100000))}
+          [[ "$code" =~ ^[1-9][0-9]*$ ]] && [ "$code" -le 2100000000 ] || { echo "::error::version_code must be a whole number from 1 to 2100000000, not \"$code\""; exit 1; }
+          echo "COREHUB_ANDROID_VERSION_CODE=$code" | tee -a "$GITHUB_ENV"
+      - name: Build the signed AAB for Play (self-update off)
+        if: env.BUILD == 'true'
+        working-directory: apps/android
+        env:
+          COREHUB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_TEST_KEYSTORE_PASSWORD }}
+          COREHUB_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
+          COREHUB_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
+        run: ./gradlew --max-workers=2 --no-build-cache bundleRelease -Pcorehub.selfUpdate=false
+      - name: Check the package, self-update and the signature
+        if: env.BUILD == 'true'
+        run: |
+          set -euo pipefail
+          aab=apps/android/app/build/outputs/bundle/release/app-release.aab
+          manifest=apps/android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml
+          grep -q "package=\"$PACKAGE\"" "$manifest"
+          grep -q "android:versionCode=\"$COREHUB_ANDROID_VERSION_CODE\"" "$manifest"
+          if grep -q REQUEST_INSTALL_PACKAGES "$manifest"; then
+            echo '::error::The Play build asks for REQUEST_INSTALL_PACKAGES: self-update is not off.'
+            exit 1
+          fi
+          grep -rq 'SELF_UPDATE = false' apps/android/app/build/generated/source/buildConfig/release/
+          grep -rq 'FIREBASE = true' apps/android/app/build/generated/source/buildConfig/release/
+          # Play's target API level rule (new apps and updates from 31 August 2026: API 36).
+          target=$(grep -o 'android:targetSdkVersion="[0-9]*"' "$manifest" | grep -o '[0-9]*')
+          if [ "$target" -lt 36 ]; then
+            echo "::warning::targetSdk is $target; Google Play takes new apps and updates only at API 36 or later since 31 August 2026 (an extension to 1 November 2026 can be requested in Play Console)."
+          fi
+          # jarsigner exits 0 on an unsigned bundle too, so its words are what count.
+          jarsigner -verify "$aab" > "$RUNNER_TEMP/aab-verify.txt" 2>&1 || true
+          grep -m1 'jar verified' "$RUNNER_TEMP/aab-verify.txt"
+          echo "Play AAB: versionCode $COREHUB_ANDROID_VERSION_CODE, targetSdk $target, $(du -h "$aab" | cut -f1)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: env.BUILD == 'true' && inputs.keep_aab
+        with:
+          name: corehub-android-play-aab
+          path: apps/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - name: fastlane
+        run: |
+          gem install fastlane --no-document
+          fastlane --version | tail -n 1
+      - name: Write the Play service account key
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          umask 077
+          printf %s "$PLAY_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/play-service-account.json"
+      - name: Upload with supply
+        env:
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          FASTLANE_HIDE_TIMESTAMP: '1'
+        run: |
+          set -euo pipefail
+          args=(
+            --package_name "$PACKAGE"
+            --json_key "$RUNNER_TEMP/play-service-account.json"
+            --metadata_path apps/android/fastlane/metadata/android
+            --track "$TRACK"
+            --release_status "$STATUS"
+            --skip_upload_apk true
+            --sync_image_upload true
+          )
+          case "$UPLOAD" in
+            bundle)
+              args+=(--aab apps/android/app/build/outputs/bundle/release/app-release.aab
+                --skip_upload_metadata true --skip_upload_images true --skip_upload_screenshots true) ;;
+            listing)
+              args+=(--skip_upload_aab true --skip_upload_changelogs true) ;;
+            both)
+              args+=(--aab apps/android/app/build/outputs/bundle/release/app-release.aab) ;;
+          esac
+          fastlane supply "${args[@]}"
+          {
+            echo "Sent to Google Play: $UPLOAD"
+            if [ "$BUILD" = true ]; then echo "Track $TRACK, status $STATUS, versionCode $COREHUB_ANDROID_VERSION_CODE"; fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Remove the keys and the Firebase file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/corehub-release.jks" "$RUNNER_TEMP/play-service-account.json" apps/android/app/google-services.json
