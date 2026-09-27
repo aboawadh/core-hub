@@ -87,7 +87,7 @@ internal fun RuntimeCard(profile: String, isAdmin: Boolean, reloadKey: Any?) {
     val scope = rememberCoroutineScope()
     var report by remember(profile) { mutableStateOf<RuntimeReport?>(null) }
     var error by remember(profile) { mutableStateOf<HubError?>(null) }
-    var tick by remember { mutableStateOf(0) }
+    var tick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LaunchedEffect(profile, reloadKey, tick) {
         val s = graph.store.current ?: return@LaunchedEffect
         hubCall { graph.apis(s).models.modelsGetRuntime(profile) }.onSuccess { report = it; error = null }.onFailure { error = it as HubError }

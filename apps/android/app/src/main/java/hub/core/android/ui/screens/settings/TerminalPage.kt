@@ -100,7 +100,7 @@ object TerminalAvailability {
 private class Tab(val id: String, val n: Int, screen: TerminalScreen) {
     var screen by mutableStateOf(screen)
     var ended by mutableStateOf<String?>(null)
-    var version by mutableStateOf(0L)
+    var version by androidx.compose.runtime.mutableLongStateOf(0L)
 }
 
 @Composable
@@ -196,6 +196,7 @@ private fun TerminalPage(profile: String) {
     }
     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp).testTag("terminal.page"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Notice(stringResource(R.string.terminal_warning), Tone.WARNING)
+        Text(stringResource(R.string.terminal_warning_detail), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
         if (!st.pty) Notice(stringResource(R.string.terminal_no_pty), Tone.INFO)
         Text(
             stringResource(R.string.terminal_idle, (st.idleTimeoutSeconds / 60).toString(), st.maxSessions.toString()),

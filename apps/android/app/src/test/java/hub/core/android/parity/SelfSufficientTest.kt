@@ -397,9 +397,9 @@ class SelfSufficientTest {
 
     @Test fun `fetch in add provider - the preset, the address and a typed key, and image-only models are not chat defaults`() {
         assertNull(ProbeRules.request(null, "  ", "", ProviderKind.LLM))
-        val r = ProbeRules.request("openrouter", " https://openrouter.ai/api/v1 ", " ", ProviderKind.LLM)!!
+        val r = ProbeRules.request("openrouter", " https://llm.example/v1 ", " ", ProviderKind.LLM)!!
         assertEquals("openrouter", r.preset)
-        assertEquals("https://openrouter.ai/api/v1", r.baseUrl)
+        assertEquals("https://llm.example/v1", r.baseUrl)
         assertNull(r.apiKey)
         val result = json.decodeFromString(
             ProviderProbeResult.serializer(),

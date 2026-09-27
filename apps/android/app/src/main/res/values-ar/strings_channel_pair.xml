@@ -9,7 +9,6 @@
     <string name="chpair_failed">فشل الربط.</string>
     <string name="chpair_cancelled">أُوقف الربط.</string>
     <string name="chpair_again">ابدأ من جديد</string>
-    <string name="chpair_close">إغلاق</string>
     <string name="chpair_done_now">تم الربط. يردّ الوكيل عليه الآن؛ أوّل من يراسله ينتظر موافقتك هنا.</string>
     <string name="chpair_done_as_now">تم الربط باسم %1$s. يردّ الوكيل عليه الآن؛ أوّل من يراسله ينتظر موافقتك هنا.</string>
     <string name="chpair_done_self_now">تم الربط. افتح «مراسلة نفسي» في واتساب على جوّالك واكتب للوكيل.</string>

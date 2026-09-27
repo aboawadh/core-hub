@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +70,21 @@ import hub.core.client.model.SessionCategoryInput
  */
 
 private val contentStyle = TextStyle(textDirection = TextDirection.Content)
+
+/** A colour's name, for TalkBack (the web's sessions.categories.colours.*). */
+@Composable
+private fun colourName(id: String): String = stringResource(
+    when (id) {
+        "blue" -> R.string.cat_colours_blue
+        "green" -> R.string.cat_colours_green
+        "amber" -> R.string.cat_colours_amber
+        "red" -> R.string.cat_colours_red
+        "purple" -> R.string.cat_colours_purple
+        "pink" -> R.string.cat_colours_pink
+        "teal" -> R.string.cat_colours_teal
+        else -> R.string.cat_colours_slate
+    },
+)
 
 /** A category's colour as drawn, or null for none. */
 fun categoryColour(hex: String?): Color? =
@@ -362,8 +379,10 @@ fun ChatGroupsDialogsView(dialogs: ChatGroupsDialogs, categories: List<SessionCa
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ChatGroupsRules.COLOURS.forEach { (id, hex) ->
                     val chosen = category.color.equals(hex, ignoreCase = true)
+                    val name = colourName(id)
                     Box(
                         Modifier.size(36.dp).clip(CircleShape).background(categoryColour(hex)!!, CircleShape)
+                            .semantics { contentDescription = name }
                             .border(if (chosen) 3.dp else 0.dp, t.text, CircleShape)
                             .clickable {
                                 dialogs.colouring = null

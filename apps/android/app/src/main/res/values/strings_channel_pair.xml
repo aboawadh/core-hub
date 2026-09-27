@@ -9,7 +9,6 @@
     <string name="chpair_failed">The pairing failed.</string>
     <string name="chpair_cancelled">The pairing was stopped.</string>
     <string name="chpair_again">Start again</string>
-    <string name="chpair_close">Close</string>
     <string name="chpair_done_now">Linked. The agent answers on it now; the first person to message it waits for your approval here.</string>
     <string name="chpair_done_as_now">Linked as %1$s. The agent answers on it now; the first person to message it waits for your approval here.</string>
     <string name="chpair_done_self_now">Linked. Open “Message yourself” in WhatsApp on your phone and write to the agent.</string>

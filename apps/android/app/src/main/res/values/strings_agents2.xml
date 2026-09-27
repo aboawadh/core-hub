@@ -179,7 +179,6 @@
     <string name="agents2_ch_edit">Fields</string>
     <string name="agents2_ch_restarting">Restarting Hermes…</string>
     <string name="agents2_ch_restarted">Hermes restarted.</string>
-    <string name="agents2_ch_qr_note">%1$s pairs by scanning a code with the phone that has the account, and this phone cannot scan its own screen. Pair it from a computer or a tablet: open this page on the web there.</string>
     <string name="agents2_chs_title">Telegram settings</string>
     <string name="agents2_chs_applies_now">Saving restarts this profile\'s gateway, so changes apply at once.</string>
     <string name="agents2_chs_applies_restart">In the default profile, changes apply after Hermes restarts.</string>

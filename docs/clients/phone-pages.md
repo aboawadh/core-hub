@@ -15,7 +15,7 @@ an entry that names it, says whether the phone draws it, and draws it:
 | Settings pages | `CoreHub/Settings/Pages/<Name>Page.swift`, `Settings/Models/`, `Settings/LiveTools.swift` | `ui/screens/settings/<Name>Page.kt`, plus `ModelsScreen.kt`, `AdminPages.kt`, `ToolsScreens.kt` |
 | Agent pages | `CoreHub/Screens/Agent/Agent<Name>Page.swift` | `ui/screens/agent/Agent<Name>Page.kt` (shared helpers in `AgentPageKit.kt`) |
 | The lists | `PageRegistry.settings` / `.agent` | `PageRegistry.settings` / `.agent` |
-| Fallback | `NotNativePage` (the “coming later” screen) | `OnTheWebPage` (opens the same page on the web) |
+| Fallback | `NotNativePage` (the “coming later” screen) | `OnTheWebPage` (opens the same page on the web; since 2026-09-27 no Android page draws it — every section works on its own, and a new page should too) |
 
 The lists are complete and in the manifest's order; you do not edit them. A page that is not native
 yet has an entry with `native: false` (Swift) / `native = false` (Kotlin) that draws the fallback:

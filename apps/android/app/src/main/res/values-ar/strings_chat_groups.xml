@@ -3,7 +3,6 @@
 <resources>
     <string name="chcv_telegram">تيليجرام</string>
     <string name="chcv_whatsapp">واتساب</string>
-    <string name="chcv_other">القنوات: %1$s</string>
     <string name="chcv_readonly_banner">محادثة من %1$s — للقراءة فقط؛ الرد يكون من %2$s</string>
     <string name="chcv_unreachable">تعذّرت قراءة محادثات القنوات من هرمز الآن؛ المعروض هو آخر ما جُلب.</string>
     <string name="chcv_untitled">محادثة على %1$s</string>
@@ -21,12 +20,9 @@
     <string name="chcv_delete_title">حذف «%1$s» من هرمز؟</string>
     <string name="chcv_delete_body">تُحذف المحادثة ورسائلها من هرمز للجميع، نهائيًا، ولا يمكن استرجاعها. المحادثة نفسها في %1$s لا تتأثر.</string>
     <string name="chcv_delete_confirm">حذف نهائي</string>
-    <string name="chcv_hidden_toast">أُخفيت «%1$s» من قائمتك</string>
-    <string name="chcv_hidden_toast_body">أنت وحدك لا تراها. «إظهار المحادثات المخفية» في آخر القائمة يعيدها.</string>
     <string name="chcv_show_hidden">إظهار المحادثات المخفية (%1$s)</string>
     <string name="chcv_hide_hidden">إيقاف إظهار المحادثات المخفية</string>
     <string name="chcv_actions">إجراءات المحادثة</string>
-    <string name="chcv_action_failed">تعذّر تغيير المحادثة</string>
     <string name="chcv_show_older">محادثات قنوات أقدم</string>
     <string name="chcv_load_older">حمّل رسائل أقدم</string>
     <string name="chcv_picture">صورة أُرسلت في القناة</string>
@@ -43,7 +39,6 @@
     <string name="cat_confirm_delete">حذف التصنيف «%1$s»؟</string>
     <string name="cat_confirm_delete_body">تبقى محادثاته، وتعود إلى القائمة بلا تصنيف.</string>
     <string name="cat_more">المزيد لـ %1$s</string>
-    <string name="cat_count">المحادثات: %1$s</string>
     <string name="cat_move_to">نقل إلى تصنيف</string>
     <string name="cat_move_title">نقل «%1$s» إلى تصنيف</string>
     <string name="cat_move_hint">تصنيفات البروفايل %1$s.</string>

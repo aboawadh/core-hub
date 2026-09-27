@@ -3,7 +3,6 @@
 <resources>
     <string name="chcv_telegram">Telegram</string>
     <string name="chcv_whatsapp">WhatsApp</string>
-    <string name="chcv_other">Channels: %1$s</string>
     <string name="chcv_readonly_banner">A conversation from %1$s — read-only; replies are made in %2$s</string>
     <string name="chcv_unreachable">Couldn\'t read the channel conversations from Hermes just now; showing what was last read.</string>
     <string name="chcv_untitled">A %1$s conversation</string>
@@ -21,12 +20,9 @@
     <string name="chcv_delete_title">Delete “%1$s” from Hermes?</string>
     <string name="chcv_delete_body">The conversation and its messages are removed from Hermes for everyone, permanently. This cannot be undone. The chat in %1$s itself is not affected.</string>
     <string name="chcv_delete_confirm">Delete permanently</string>
-    <string name="chcv_hidden_toast">“%1$s” is hidden from your list</string>
-    <string name="chcv_hidden_toast_body">Only you stop seeing it. “Show hidden chats” at the end of the list brings it back.</string>
     <string name="chcv_show_hidden">Show hidden chats (%1$s)</string>
     <string name="chcv_hide_hidden">Stop showing hidden chats</string>
     <string name="chcv_actions">Conversation actions</string>
-    <string name="chcv_action_failed">Couldn\'t change the conversation</string>
     <string name="chcv_show_older">Older channel conversations</string>
     <string name="chcv_load_older">Load older messages</string>
     <string name="chcv_picture">Picture sent on the channel</string>
@@ -43,7 +39,6 @@
     <string name="cat_confirm_delete">Delete the category \"%1$s\"?</string>
     <string name="cat_confirm_delete_body">Its chats stay: they go back to the list without a category.</string>
     <string name="cat_more">More for %1$s</string>
-    <string name="cat_count">%1$s chats</string>
     <string name="cat_move_to">Move to category</string>
     <string name="cat_move_title">Move \"%1$s\" to a category</string>
     <string name="cat_move_hint">Categories of the profile %1$s.</string>

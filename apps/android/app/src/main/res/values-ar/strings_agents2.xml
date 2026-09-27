@@ -179,7 +179,6 @@
     <string name="agents2_ch_edit">الحقول</string>
     <string name="agents2_ch_restarting">يُعاد تشغيل هرمز…</string>
     <string name="agents2_ch_restarted">أُعيد تشغيل هرمز.</string>
-    <string name="agents2_ch_qr_note">%1$s يُقرن بمسح رمز بالهاتف الذي فيه الحساب، وهذا الهاتف لا يمسح شاشته. اقرنه من حاسوب أو جهاز لوحي: افتح هذه الصفحة على الويب هناك.</string>
     <string name="agents2_chs_title">إعدادات تيليجرام</string>
     <string name="agents2_chs_applies_now">الحفظ يعيد تشغيل بوابة هذا البروفايل، فتسري التغييرات فورًا.</string>
     <string name="agents2_chs_applies_restart">في البروفايل الافتراضي تسري التغييرات بعد إعادة تشغيل هرمز.</string>

@@ -126,7 +126,7 @@ internal fun ChannelPairPanel(profile: String, agentId: String, platform: String
     var jobId by remember { mutableStateOf<String?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    var attempt by remember { mutableStateOf(0) }
+    var attempt by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     fun start(chosen: ChannelLoginRequest.Mode) {
         mode = chosen
         job = null
