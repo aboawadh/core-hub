@@ -23,6 +23,11 @@ on:
         description: 'Custom domain for the relay (a hostname on a zone the token covers). Empty: the repository variable PUSH_RELAY_DOMAIN, else workers.dev only.'
         required: false
         default: ''
+      set_secrets:
+        description: "Put the APNs and FCM keys from this repository's secrets into the relay, and make its hub key once if it has none"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: push-relay-${{ github.ref }}
@@ -91,6 +96,32 @@ jobs:
         run: $WRANGLER d1 migrations apply corehub-push-relay --remote
       - name: Deploy
         run: $WRANGLER deploy
+      # The keys go from the repository's secrets straight into the Worker's secrets (stdin, never
+      # the command line or the log). HUB_SECRET_KEY is made once and never replaced: changing it
+      # would cut off every registered hub. ADMIN_TOKEN is left to the owner (unset = no admin).
+      - name: The relay's secrets, from the repository's
+        if: inputs.set_secrets
+        env:
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APNS_TEAM_ID }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+        run: |
+          put() { printf '%s' "$2" | $WRANGLER secret put "$1" >/dev/null && echo "set $1"; }
+          for name in APNS_KEY_P8 APNS_KEY_ID APNS_TEAM_ID FCM_SERVICE_ACCOUNT_JSON; do
+            test -n "${!name}" || { echo "::error::the repository secret $name is not set"; exit 1; }
+          done
+          put APNS_KEY_P8 "$APNS_KEY_P8"
+          put APNS_KEY_ID "$APNS_KEY_ID"
+          put APNS_TEAM_ID "$APNS_TEAM_ID"
+          put APNS_BUNDLE_ID 'com.twuijri.corehub'
+          put APNS_ENV 'production'
+          put FCM_SERVICE_ACCOUNT_JSON "$FCM_SERVICE_ACCOUNT_JSON"
+          if $WRANGLER secret list --format json | jq -e '.[] | select(.name == "HUB_SECRET_KEY")' >/dev/null; then
+            echo 'HUB_SECRET_KEY already set: kept'
+          else
+            put HUB_SECRET_KEY "$(openssl rand -base64 32)"
+          fi
       - name: Health
         if: env.DOMAIN != ''
         run: |
