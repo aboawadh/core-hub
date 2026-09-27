@@ -205,6 +205,9 @@ class AppGraph(
     /** Pictures and files another app shared, copied into the cache, waiting for the new chat's tray. */
     val sharedFiles = MutableStateFlow<List<hub.core.android.phone.Share.SharedFile>>(emptyList())
 
+    /** Profile files made attachments on the hub, waiting for the chat the Files page opens. */
+    val handOff = hub.core.android.chat.AttachmentHandOff()
+
     /** The files of messages, fetched once into the cache and opened from there (chat/HubFiles.kt). */
     val files = hub.core.android.chat.FileDownloads(
         hub.core.android.chat.HubFileFetcher(http.authed, java.io.File(appContext.cacheDir, "attachments")),

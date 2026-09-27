@@ -30,7 +30,7 @@
     "save_to_phone": "Save to phone",
     "share": "Share",
     "share_zip": "Share as zip",
-    "attach": "Attach to a new chat",
+    "attach": "Attach to chat…",
     "rename": "Rename",
     "rename_title": "Rename «{a}»",
     "move": "Move",
@@ -63,6 +63,12 @@
     "root_refused": "The top folder itself cannot be changed.",
     "into_itself": "A folder cannot go inside itself.",
     "gone": "It is not there any more.",
-    "failed": "That did not work: {a}"
+    "failed": "That did not work: {a}",
+    "attach_title": "Attach «{a}» to a chat",
+    "attach_body": "The hub copies the file into the chat: it waits in the composer, ready to go with your next message. Later edits here do not change what was attached.",
+    "attach_new": "New chat",
+    "attach_recent": "Recent chats in this profile",
+    "attach_untitled": "Untitled chat",
+    "attach_none": "No chats in this profile yet."
   }
 }

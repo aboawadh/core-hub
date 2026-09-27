@@ -59,6 +59,7 @@ fun ChatMenuButton(
     var failed by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     val deleting = rememberConfirmDelete<String>()
+    val background = rememberBackground()
     val actions = ChatControls.actions(
         pinned = session?.pinned == true,
         archived = session?.archived == true,
@@ -71,6 +72,8 @@ fun ChatMenuButton(
         HubMenu(open, { open = false }) {
             // The chat's insight (apps batch 6): context, runs, subagents, changed files, files.
             hub.core.android.ui.components.ChatInsightMenuItems(sessionId, profile) { open = false }
+            // What works in the background, in every profile (the top bar shows it only while something runs).
+            MenuItem(stringResource(R.string.background_title), { open = false; background.show() }, Modifier.testTag("chat.background"), icon = Lucide.Activity)
             MenuDivider()
             actions.forEach { action ->
                 val tag = Modifier.testTag("chat.${action.name.lowercase()}")

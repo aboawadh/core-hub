@@ -6,6 +6,9 @@ import hub.core.android.data.HubError
 import hub.core.android.data.apiBase
 import hub.core.android.data.hubCall
 import hub.core.client.api.KnowledgeApi
+import hub.core.client.api.SessionsApi
+import hub.core.client.model.Attachment
+import hub.core.client.model.Session
 import hub.core.client.model.WorkspaceFileEntry
 import hub.core.client.model.WorkspaceFileTransfer
 import hub.core.client.model.WorkspaceFolder
@@ -104,6 +107,15 @@ object FilesRules {
         return "\u2066$number ${units[unit]}\u2069"
     }
 
+    /** How many of the profile's recent chats «Attach to chat» offers besides a new one (as the web). */
+    const val RECENT_CHATS = 8
+
+    /**
+     * The chats «Attach to chat» offers: this profile's recent ones as the hub lists them, without
+     * the global agent's conversation (it is not in the chats list, §46), at most [RECENT_CHATS].
+     */
+    fun recentChats(sessions: List<Session>): List<Session> = sessions.filter(ChatsList::visible).take(RECENT_CHATS)
+
     /** A file the phone need not even send: over the hub's upload cap. */
     fun tooLarge(size: Long, maxUploadBytes: Long?): Boolean = maxUploadBytes != null && maxUploadBytes > 0 && size > maxUploadBytes
 
@@ -172,6 +184,7 @@ object FilesRules {
 class FilesApis(hub: String, private val client: OkHttpClient) {
     private val base = apiBase(hub)
     val knowledge = KnowledgeApi(base, client)
+    val sessions = SessionsApi(base, client)
 
     /** The same client, telling [onProgress] how much of a request's body has gone. */
     fun uploading(onProgress: (Progress) -> Unit): KnowledgeApi = KnowledgeApi(
@@ -207,6 +220,18 @@ class FilesOps(private val profile: String, private val apis: () -> FilesApis) {
     /** Puts [file] (named as it should be named there) into [folder]; [overwrite] replaces a file of that name. */
     suspend fun upload(folder: String, file: File, overwrite: Boolean = false, onProgress: (Progress) -> Unit = {}): Result<WorkspaceFileEntry> =
         hubCall { apis().uploading(onProgress).knowledgeUploadWorkspaceFile(profile, file, folder, overwrite.takeIf { it }) }
+
+    /**
+     * The file as an attachment of this profile, copied on the hub (`knowledge.attachWorkspaceFile`):
+     * nothing is fetched to the phone or sent back; a chat's composer takes it ready ([hub.core.android.chat.AttachmentHandOff]).
+     */
+    suspend fun attach(path: String): Result<Attachment> =
+        hubCall { apis().knowledge.knowledgeAttachWorkspaceFile(profile, WorkspacePathBody(path)) }
+
+    /** The chats «Attach to chat» offers ([FilesRules.recentChats]). */
+    suspend fun recentChats(): Result<List<Session>> = hubCall {
+        FilesRules.recentChats(apis().sessions.sessionsList(profile, archived = SessionsApi.ArchivedSessionsList.FALSE, limit = 20).items)
+    }
 
     /** A folder as one zip in [into], named after it (the top folder after the profile). */
     suspend fun zip(path: String, into: File): Result<File> = hubCall {
