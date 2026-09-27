@@ -58,6 +58,7 @@ fun ChatMenuButton(
     var open by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var trajectory by remember { mutableStateOf(false) }
     val deleting = rememberConfirmDelete<String>()
     val background = rememberBackground()
     val actions = ChatControls.actions(
@@ -73,6 +74,8 @@ fun ChatMenuButton(
             // The chat's insight (apps batch 6): context, runs, subagents, changed files, files.
             hub.core.android.ui.components.ChatInsightMenuItems(sessionId, profile) { open = false }
             // What works in the background, in every profile (the top bar shows it only while something runs).
+            // The conversation as a timeline of steps (the web's Trajectory tab, TrajectorySheet.kt).
+            MenuItem(stringResource(R.string.traj_tab), { open = false; trajectory = true }, Modifier.testTag("chat.trajectory"), icon = Lucide.Route)
             MenuItem(stringResource(R.string.background_title), { open = false; background.show() }, Modifier.testTag("chat.background"), icon = Lucide.Activity)
             MenuDivider()
             actions.forEach { action ->
@@ -120,6 +123,7 @@ fun ChatMenuButton(
             }
         }
     }
+    if (trajectory) TrajectorySheet(sessionId, profile) { trajectory = false }
     if (renaming) {
         RenameDialog(session?.title.orEmpty(), onDismiss = { renaming = false }) { typed ->
             renaming = false

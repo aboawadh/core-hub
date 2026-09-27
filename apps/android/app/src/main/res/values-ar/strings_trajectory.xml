@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مسار المحادثة (§43)، أصلي منذ 2026-09-27؛ نصوص الويب trajectory.* -->
+<resources>
+    <string name="traj_tab">المسار</string>
+    <string name="traj_timeline">الخط الزمني</string>
+    <string name="traj_lane_input">المُدخل</string>
+    <string name="traj_lane_model">النموذج</string>
+    <string name="traj_lane_tools">الأدوات</string>
+    <string name="traj_lane_subagents">الوكلاء الفرعيون</string>
+    <string name="traj_kind_input">مُدخل</string>
+    <string name="traj_kind_turn">دور</string>
+    <string name="traj_kind_reasoning">تفكير</string>
+    <string name="traj_kind_tool">استدعاء أداة</string>
+    <string name="traj_kind_subagent">وكيل فرعي</string>
+    <string name="traj_status_running">يعمل</string>
+    <string name="traj_status_failed">فشل</string>
+    <string name="traj_status_cancelled">أُوقف</string>
+    <string name="traj_status_succeeded">تم</string>
+    <string name="traj_tool_call_only">استدعاء أداة فقط</string>
+    <string name="traj_no_text">بلا نص</string>
+    <string name="traj_no_details">لم يُسجَّل شيء آخر لهذه الخطوة.</string>
+    <string name="traj_first_token_here">أول كلمة بعد %1$s</string>
+    <string name="traj_filter_duration">المدة</string>
+    <string name="traj_filter_turns">الأدوار</string>
+    <string name="traj_filter_calls">الاستدعاءات</string>
+    <string name="traj_search">ابحث في الخطوات</string>
+    <string name="traj_no_match">لا خطوة تطابق هذه التصفية.</string>
+    <string name="traj_download">سجل الجلسة</string>
+    <string name="traj_empty_title">لم يحدث شيء بعد</string>
+    <string name="traj_empty_body">أرسل رسالة وستظهر هنا كل خطوة يخطوها الوكيل.</string>
+    <string name="traj_untimed">هذه المحادثة أقدم من تسجيل أزمنة الخطوات في الخادم، فلا خط زمني لها — الخطوات وحدها.</string>
+    <string name="traj_partial">الأدوار الأولى سُجّلت قبل أن يحفظ الخادم أزمنة الخطوات؛ الخط الزمني يعرض ما بعدها.</string>
+    <string name="traj_unit_ms">ملّي ث</string>
+    <string name="traj_unit_s">ث</string>
+    <string name="traj_unit_min">د</string>
+    <string name="traj_metric_turns">الأدوار</string>
+    <string name="traj_metric_steps">الخطوات</string>
+    <string name="traj_metric_model_time">وقت النموذج</string>
+    <string name="traj_metric_tool_time">وقت الأدوات</string>
+    <string name="traj_metric_first_token">متوسط الوقت حتى أول كلمة</string>
+    <string name="traj_metric_tokens_per_second">رمز/ث</string>
+    <string name="traj_metric_cache_hit">من الذاكرة المؤقتة</string>
+    <string name="traj_metric_input_tokens">رموز الإدخال</string>
+    <string name="traj_metric_output_tokens">رموز الإخراج</string>
+    <string name="traj_model">النموذج: %1$s</string>
+    <string name="traj_fallback">انتقل احتياطيًا من %1$s</string>
+</resources>
