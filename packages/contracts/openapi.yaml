@@ -6553,6 +6553,190 @@ paths:
           $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /agents/{agent_id}/mcp-servers/{server_name}/oauth:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/McpServerName'
+    post:
+      operationId: agents.startMcpOAuth
+      tags: [agents]
+      summary: Start connecting an MCP server by OAuth (admin)
+      description: >-
+        Asks Hermes to start its browser sign-in for a remote (`http`/`sse`) server in the
+        profile in `X-Hub-Profile` (Hermes's own `POST /api/mcp/servers/{name}/auth`, ADR 0015;
+        contract decision §122). Before asking, the hub writes the server's
+        `oauth.redirect_uri` in the profile's `config.yaml` as its own callback,
+        `agents.mcpOAuthCallback`, at `hub_url` when the client sends it (the address the
+        person reaches the hub on, a tunnel's included) and otherwise at the address this
+        request arrived on; an `oauth.redirect_uri` the person set to anything else is left
+        alone. The client opens `authorization_url` in a browser and polls
+        `agents.getMcpOAuthFlow` until `status` is no longer `pending`. Hermes keeps the tokens
+        in the profile's own home; no token passes through the hub, and each profile connects
+        separately. A stdio server, or one that signs in with its own headers, is Hermes's
+        refusal: `409 conflict` with `details.reason = hermes_refused`. Only where the hub
+        supervises Hermes: otherwise `409 state_invalid` with `details.reason =
+        hermes_not_supervised`; Hermes's API not starting is `503`.
+      x-roles: [owner, admin]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpOAuthStart'
+            example:
+              hub_url: https://hub.example
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sign-in, waiting for the person in the browser.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpOAuthFlow'
+              example:
+                id: 01JDM5Q0G5Z3K8N2T7V4XWBHCD
+                server_name: clickup
+                status: pending
+                authorization_url: https://auth.example/authorize?client_id=abc&state=s1
+                redirect_uri: https://hub.example/api/v1/mcp-oauth/callback/clickup
+                error: null
+                tools: []
+                expires_at: '2026-09-27T10:15:00Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: agents.disconnectMcpOAuth
+      tags: [agents]
+      summary: Forget an MCP server's OAuth sign-in in this profile (admin)
+      description: >-
+        Deletes the sign-in Hermes keeps for the server in the profile's own home (its token,
+        client registration and server metadata files under `mcp-tokens/`; Hermes has no API
+        for this), and answers the server with `oauth.status = not_connected`. A Hermes that
+        already holds the connection open keeps it until its gateway restarts. Other profiles
+        are untouched (contract decision §122).
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The server, no longer signed in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServer'
+              example:
+                name: clickup
+                transport: http
+                enabled: true
+                connected: false
+                tools: []
+                error: null
+                config:
+                  url: https://mcp.clickup.example/mcp
+                  auth: '[stored]'
+                updated_at: '2026-09-27T10:20:00Z'
+                oauth:
+                  required: true
+                  status: not_connected
+                  expires_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /agents/{agent_id}/mcp-servers/{server_name}/oauth/{flow_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/McpServerName'
+      - $ref: '#/components/parameters/McpOAuthFlowId'
+    get:
+      operationId: agents.getMcpOAuthFlow
+      tags: [agents]
+      summary: How an MCP OAuth sign-in stands (admin)
+      description: >-
+        Hermes's state of the sign-in, as the contract's: `pending` until the browser comes
+        back, then `approved` (with the tools Hermes listed once signed in), `failed` (`error`
+        in Hermes's words), `cancelled`, or `expired` once Hermes has forgotten it (fifteen
+        minutes, or a restart). A sign-in started in another profile is `404`.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sign-in.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpOAuthFlow'
+              example:
+                id: 01JDM5Q0G5Z3K8N2T7V4XWBHCD
+                server_name: clickup
+                status: approved
+                authorization_url: https://auth.example/authorize?client_id=abc&state=s1
+                redirect_uri: https://hub.example/api/v1/mcp-oauth/callback/clickup
+                error: null
+                tools:
+                  - name: get_tasks
+                    description: List the tasks of a list.
+                expires_at: '2026-09-27T10:15:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: agents.cancelMcpOAuthFlow
+      tags: [agents]
+      summary: Stop waiting for an MCP OAuth sign-in (admin)
+      description: >-
+        Tells Hermes to give up on the sign-in, so a new one can start at once. Idempotent: a
+        sign-in that already ended is answered as it stands.
+      x-roles: [owner, admin]
+      x-rt-events: []
+      responses:
+        '200':
+          description: The sign-in as it ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpOAuthFlow'
+              example:
+                id: 01JDM5Q0G5Z3K8N2T7V4XWBHCD
+                server_name: clickup
+                status: cancelled
+                authorization_url: https://auth.example/authorize?client_id=abc&state=s1
+                redirect_uri: https://hub.example/api/v1/mcp-oauth/callback/clickup
+                error: Cancelled by user
+                tools: []
+                expires_at: '2026-09-27T10:15:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   # ---------------------------------------------------------------- the hub's own tools
   /agents/{agent_id}/hub-tools:
     parameters:
@@ -6627,6 +6811,49 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /mcp-oauth/callback/{server_name}:
+    parameters:
+      - $ref: '#/components/parameters/McpServerName'
+    get:
+      operationId: agents.mcpOAuthCallback
+      tags: [agents]
+      summary: Where an OAuth provider sends the browser back after an MCP sign-in
+      description: >-
+        Not a client API: the `redirect_uri` `agents.startMcpOAuth` writes. Public, because the
+        browser arrives from the provider without the hub's session; the query is handed to
+        Hermes's own callback (`GET /api/mcp/oauth/callback/{server_name}`), which accepts it
+        only with the `state` of a sign-in it started. Answers a short page in the browser's
+        language saying whether the sign-in was received, always `200`; the outcome itself is
+        read by polling `agents.getMcpOAuthFlow`. The query is never logged (contract decision
+        §122).
+      security: []
+      x-scope: global
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      x-rt-events: []
+      responses:
+        '200':
+          description: A page for the person, in their language.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /hub-mcp:
     post:
       operationId: agents.hubMcp
@@ -17753,6 +17980,13 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9._-]{1,60}$'
+    McpOAuthFlowId:
+      name: flow_id
+      in: path
+      required: true
+      example: 01JDM5Q0G5Z3K8N2T7V4XWBHCD
+      schema:
+        $ref: '#/components/schemas/Ulid'
     PresetId:
       name: preset_id
       in: path
@@ -21649,6 +21883,68 @@ components:
           description: Stored verbatim; secret-looking values read as `[stored]`.
           additionalProperties: true
         updated_at:
+          $ref: '#/components/schemas/Timestamp'
+        oauth:
+          $ref: '#/components/schemas/McpOAuthState'
+    McpOAuthState:
+      type: object
+      description: >-
+        Whether a remote server is signed in by OAuth in this profile (contract decision §122),
+        read from the metadata of the files Hermes keeps under the profile's `mcp-tokens/` —
+        never a token. Present on `http` and `sse` servers from hubs that know it; absent on
+        stdio servers and from older hubs. `required` is the server's `auth: oauth`; a server
+        without it may still sign in (Hermes then sets it). `connected` — Hermes holds a token
+        that is still valid or that it can renew; `expired` — the token ran out and cannot be
+        renewed; `not_connected` — no sign-in in this profile; `error` — the stored sign-in
+        cannot be read.
+      required: [required, status]
+      properties:
+        required:
+          type: boolean
+        status:
+          type: string
+          enum: [connected, expired, not_connected, error]
+        expires_at:
+          description: When the current access token runs out, when Hermes recorded it.
+          type: [string, 'null']
+          format: date-time
+    McpOAuthStart:
+      type: object
+      properties:
+        hub_url:
+          type: string
+          maxLength: 2048
+          description: >-
+            The address the person reaches the hub on (`https://hub.example`, a tunnel's
+            included), for the redirect URI. Only `http(s)` without credentials; anything else
+            is `400`. Absent: the address the request arrived on.
+    McpOAuthFlow:
+      type: object
+      description: >-
+        One OAuth sign-in to an MCP server (contract decision §122). Nothing here is a token:
+        `authorization_url` is the provider's page the person opens, and the tokens stay with
+        Hermes in the profile's home.
+      required: [id, server_name, status, authorization_url, redirect_uri, error, tools, expires_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        server_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, failed, cancelled, expired]
+        authorization_url:
+          type: [string, 'null']
+        redirect_uri:
+          type: string
+        error:
+          type: [string, 'null']
+        tools:
+          type: array
+          description: The tools Hermes listed once signed in; empty until `approved`.
+          items:
+            $ref: '#/components/schemas/McpTool'
+        expires_at:
           $ref: '#/components/schemas/Timestamp'
     McpServerWrite:
       type: object

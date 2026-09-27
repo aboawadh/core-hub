@@ -20,12 +20,12 @@ import type { PushMessage, PushOutcome, PushSender } from './senders.js';
 import type { Sealer } from './push.js';
 
 /**
- * The relay every hub uses unless `COREHUB_PUSH_RELAY_URL` says otherwise. Empty until the
- * owner deploys the relay: then set it here to the relay's `https://` address (its custom
- * domain or its `workers.dev` address; packages/push-relay/README.md), and every hub built
- * from then on pushes to phones with nothing to set.
+ * The relay every hub uses unless `COREHUB_PUSH_RELAY_URL` says otherwise (or
+ * `COREHUB_PUSH_RELAY=off`). The owner's relay on its free `workers.dev` address (owner,
+ * 2026-09-28), not a custom domain, so a domain change never cuts phones off; every hub built
+ * from then on pushes to phones with nothing to set (packages/push-relay/README.md).
  */
-export const DEFAULT_RELAY_URL = '';
+export const DEFAULT_RELAY_URL = 'https://corehub-push-relay.twuijri.workers.dev';
 
 export type RelayPlatform = 'apns' | 'fcm';
 export type StoredRelayState = (typeof PUSH_RELAY_STATES)[number];

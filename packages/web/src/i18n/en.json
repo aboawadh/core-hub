@@ -2232,6 +2232,29 @@
       "ok": "Hermes connected — {count} tools, {seconds} s.",
       "no_tools": "The server lists no tools.",
       "failed": "Hermes could not connect:"
+    },
+    "oauth": {
+      "status": {
+        "connected": "Connected",
+        "expired": "Expired",
+        "not_connected": "Not connected",
+        "error": "Sign-in unreadable"
+      },
+      "connect": "Connect OAuth",
+      "reconnect": "Reconnect OAuth",
+      "disconnect": "Disconnect",
+      "disconnect_title": "Disconnect {name}?",
+      "disconnect_body": "Hermes forgets the sign-in to this server in this profile. Other profiles keep theirs. A conversation already using the server keeps it until the agent restarts.",
+      "per_profile": "Each profile connects separately.",
+      "starting": "Asking Hermes to start the sign-in…",
+      "waiting": "Finish signing in on the page that opened in a new tab; this page updates by itself.",
+      "open_page": "Open the sign-in page",
+      "approved": "Connected — Hermes lists {count} tools.",
+      "test_now": "Test now",
+      "failed": "The sign-in did not finish:",
+      "cancelled": "The sign-in was cancelled.",
+      "expired": "The sign-in ran out before it finished. Start it again.",
+      "test_needs": "This server needs a sign-in."
     }
   },
   "hub_tools": {
