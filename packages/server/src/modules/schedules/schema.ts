@@ -71,6 +71,21 @@ export const WORKFLOW_RUN_TERMINAL_STATUSES = [
   'cancelled',
   'timed_out',
 ] as const;
+/** How an inbound trigger's delivery proves where it came from (DECISIONS §123). */
+export const WORKFLOW_TRIGGER_PRESETS = ['clickup', 'github', 'generic_hmac', 'token'] as const;
+export type WorkflowTriggerPreset = (typeof WORKFLOW_TRIGGER_PRESETS)[number];
+export const SIGNATURE_ENCODINGS = ['hex', 'base64'] as const;
+/** What became of one delivery to a trigger. */
+export const WORKFLOW_DELIVERY_STATUSES = [
+  'received',
+  'duplicate',
+  'signature_rejected',
+  'filtered_out',
+  'run_started',
+  'run_succeeded',
+  'run_failed',
+] as const;
+export type WorkflowDeliveryStatus = (typeof WORKFLOW_DELIVERY_STATUSES)[number];
 export const NODE_TYPES = [
   'agent_run',
   'approval',
@@ -128,7 +143,18 @@ export type WorkflowNode = {
    */
   input?: string | null;
   approval_required?: boolean;
+  /**
+   * `condition`: several rules (DECISIONS §123). With at least one rule the step answers
+   * from them and `input` is not read; absent or `null`, `input` is the one comparison.
+   */
+  rules?: WorkflowRules | null;
   position?: { x: number; y: number };
+};
+
+/** A condition step's rules, in the contract's words (`WorkflowRules`). */
+export type WorkflowRules = {
+  match: 'all' | 'any';
+  items: Array<{ path: string; operator: string; value: string | null }>;
 };
 
 export type WorkflowEdge = {
@@ -291,12 +317,100 @@ export const workflowRuns = sqliteTable(
     error: text('error'),
     startedAt: timestampMs('started_at'),
     finishedAt: timestampMs('finished_at'),
+    /**
+     * A run a trigger's delivery started (DECISIONS §123): the trigger, and the event's own
+     * ids, so the runs about one task or one event can be found. `trigger_ref` holds the
+     * delivery's id.
+     */
+    workflowTriggerId: ulid('workflow_trigger_id'),
+    eventId: text('event_id', { length: 200 }),
+    taskId: text('task_id', { length: 200 }),
   },
   (t) => [
     index('workflow_runs_workflow_idx').on(t.workflowId, t.createdAt),
+    index('workflow_runs_event_idx').on(t.workflowId, t.eventId),
+    index('workflow_runs_task_idx').on(t.workflowId, t.taskId),
     index('workflow_runs_workspace_status_idx').on(t.workspace, t.status),
     check('workflow_runs_trigger_kind_check', inList(t.triggerKind, WORKFLOW_RUN_TRIGGERS)),
     check('workflow_runs_status_check', inList(t.status, WORKFLOW_RUN_STATUSES)),
+  ],
+);
+
+/**
+ * An inbound webhook trigger of a workflow (DECISIONS §123): an address on the hub an outside
+ * system posts events to. The secret is sealed with the hub's data key ring, like the hub's
+ * other secrets, and never leaves the hub.
+ */
+export const workflowTriggers = sqliteTable(
+  'workflow_triggers',
+  {
+    ...scopedColumns(),
+    workflowId: ulid('workflow_id')
+      .notNull()
+      .references(() => workflows.id, { onDelete: 'cascade' }),
+    name: text('name', { length: 120 }).notNull(),
+    preset: text('preset', { enum: WORKFLOW_TRIGGER_PRESETS }).notNull(),
+    enabled: bool('enabled').notNull().default(true),
+    /** The events it takes; empty takes every event. */
+    events: json<string[]>('events').notNull().default(EMPTY_ARRAY),
+    /** ENCRYPTED. The sealed secret (base64 AES-256-GCM with its tag); null while none is set. */
+    secretCiphertext: text('secret_ciphertext'),
+    secretNonce: text('secret_nonce'),
+    secretKeyId: text('secret_key_id', { length: 64 }),
+    /** `generic_hmac` and `token`: the header read (null: the preset's default). */
+    signatureHeader: text('signature_header', { length: 120 }),
+    signatureEncoding: text('signature_encoding', { enum: SIGNATURE_ENCODINGS }),
+    signaturePrefix: text('signature_prefix', { length: 40 }),
+    lastDeliveryAt: timestampMs('last_delivery_at'),
+  },
+  (t) => [
+    index('workflow_triggers_workflow_idx').on(t.workflowId),
+    check('workflow_triggers_preset_check', inList(t.preset, WORKFLOW_TRIGGER_PRESETS)),
+  ],
+);
+
+/** What reached a trigger and what became of it: the trigger's delivery log (7 days, 500 lines). */
+export const workflowTriggerDeliveries = sqliteTable(
+  'workflow_trigger_deliveries',
+  {
+    ...scopedColumns(),
+    triggerId: ulid('trigger_id')
+      .notNull()
+      .references(() => workflowTriggers.id, { onDelete: 'cascade' }),
+    workflowId: ulid('workflow_id').notNull(),
+    status: text('status', { enum: WORKFLOW_DELIVERY_STATUSES }).notNull(),
+    event: text('event', { length: 200 }),
+    eventId: text('event_id', { length: 200 }),
+    taskId: text('task_id', { length: 200 }),
+    workflowRunId: ulid('workflow_run_id'),
+    /** The run ended because a condition said no. */
+    filtered: bool('filtered').notNull().default(false),
+    /** Sent by "Send test event". */
+    test: bool('test').notNull().default(false),
+    error: text('error'),
+    /** The first characters of the body, secret-looking fields masked; never a signature. */
+    bodyPreview: text('body_preview'),
+  },
+  (t) => [
+    index('workflow_trigger_deliveries_trigger_idx').on(t.triggerId, t.createdAt),
+    index('workflow_trigger_deliveries_run_idx').on(t.workflowRunId),
+    check('workflow_trigger_deliveries_status_check', inList(t.status, WORKFLOW_DELIVERY_STATUSES)),
+  ],
+);
+
+/** The deliveries a trigger has taken, by their stable key, so a repeat starts nothing (7 days). */
+export const workflowTriggerSeen = sqliteTable(
+  'workflow_trigger_seen',
+  {
+    ...scopedColumns(),
+    triggerId: ulid('trigger_id')
+      .notNull()
+      .references(() => workflowTriggers.id, { onDelete: 'cascade' }),
+    key: text('key', { length: 200 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('workflow_trigger_seen_key_uq').on(t.triggerId, t.key),
+    index('workflow_trigger_seen_created_idx').on(t.createdAt),
   ],
 );
 

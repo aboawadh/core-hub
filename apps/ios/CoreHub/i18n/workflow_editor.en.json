@@ -111,6 +111,26 @@
       "title": "Limits",
       "hint": "What every run of this workflow may use. An empty field has no limit; a run may still set its own.",
       "none": "No limit"
+    },
+    "triggers": {
+      "title": "Triggers",
+      "read_only": "Addresses other services send events to. Add a trigger, its secret and its events on the web.",
+      "presets": {
+        "clickup": "ClickUp",
+        "github": "GitHub",
+        "generic_hmac": "Signed webhook",
+        "token": "Webhook with a token"
+      },
+      "off": "Off",
+      "copy": "Copy",
+      "copied": "Copied",
+      "secret_stored": "A secret is stored.",
+      "secret_missing": "No secret yet: every delivery is refused."
+    },
+    "rules": {
+      "all": "Yes when every rule holds",
+      "any": "Yes when any rule holds",
+      "read_only": "These rules are kept as they are when you save here; edit them on the web."
     }
   }
 }

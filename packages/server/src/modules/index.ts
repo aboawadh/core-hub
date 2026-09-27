@@ -610,6 +610,8 @@ registerWorkflowPorts((app) => {
     noticePushPort(app),
   );
   return {
+    // An inbound trigger's secret is sealed with the hub's one data key ring (§123).
+    sealer: dataKeyRingFor(app),
     agentTurn: async (scope, input, control) => {
       if (!control) {
         const turn = sessionTurnsFor(app);

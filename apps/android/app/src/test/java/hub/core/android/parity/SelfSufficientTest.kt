@@ -558,6 +558,23 @@ class SelfSufficientTest {
         assertEquals("home", requests[2].getHeader("X-Hub-Profile"))
     }
 
+    @Test fun `workflows - a condition's rules are shown and kept when the phone saves`() {
+        val json = hub.core.client.infrastructure.Serializer.kotlinxSerializationJson
+        val rules = json.decodeFromString(
+            hub.core.client.model.WorkflowRules.serializer(),
+            """{"match":"any","items":[{"path":"trigger.event","operator":"==","value":"taskCreated"},{"path":"trigger.task_id","operator":"exists","value":null}]}""",
+        )
+        val (match, lines) = WorkflowDraftRules.ruleLines(rules)
+        assertEquals("any", match)
+        assertEquals(listOf("trigger.event == \"taskCreated\"", "trigger.task_id exists"), lines)
+        assertTrue(WorkflowDraftRules.ruleLines(null).second.isEmpty())
+        var d = WorkflowDraftRules.add(WorkflowDraft(name = "Filter"), WorkflowNode.Kind.CONDITION, "Only new")
+        d = WorkflowDraftRules.update(d, "condition_1") { it.copy(rules = rules) }
+        assertEquals(rules, WorkflowDraftRules.toWrite(d).nodes!![0].rules)
+        assertEquals(rules, WorkflowDraftRules.toCheck(d).nodes!![0].rules)
+        assertEquals("https://hub.example/hooks/T1", WorkflowDraftRules.triggerUrl("https://hub.example/", "/hooks/T1"))
+    }
+
     @Test fun `workflows - the drawing is checked by the hub, and a run starts again from a step`() = runTest {
         val ops = WorkflowEditOps { HubApis(base, OkHttpClient()) }
         val d = WorkflowDraftRules.add(WorkflowDraft(name = "W"), WorkflowNode.Kind.AGENT, "Research")
