@@ -1,5 +1,5 @@
 # الوكلاء I على الجوال: المهارات والذاكرة والإضافات وبطاقات الوكلاء (الدفعة 8)
-المسؤول: twuijri · الفرع: night/apps-agents-1 · الحالة: review
+المسؤول: twuijri · الفرع: night/apps-agents-1 · الحالة: done
 
 ## المشكلة والهدف
 قائمة الفجوات (الدفعة 8) قالت: صفحات الوكيل في التطبيقين تعرض ولا تدير — المهارات قائمة ومفتاح فقط (لا فتح ولا تحرير ولا حذف
@@ -80,6 +80,11 @@ $ gh workflow run ios.yml --ref night/apps-agents-1   (run 36282775630)
 ✓ Build and test on the iOS simulator — Executed 244 tests, with 0 failures · ** TEST SUCCEEDED **
   (AgentToolRulesTests: 9 passed)
 ```
+
+CI على #181 بعد الدمج (الالتزام `66eb20c8`): كل الفحوص نجحت — Android build, unit tests, lint (8m9s)، Lint/typecheck/contracts/client
+tests/build، Server unit tests ×3، Web smoke journeys، Change record، Docker، Desktop، Installers ×3، db:generate + db:migrate؛
+و«Generate the Swift client» فشل أول مرة لانقطاع الشبكة (تنزيل pnpm من npm تجاوز 30 ث) ونجح عند إعادة التشغيل، ثم Build and test
+on the iOS simulator نجح.
 
 ## المخاطر والرجوع
 - متابعة المهمة بالقراءة كل 1.5 ث لا بالمقبس؛ تتوقف حين تغادر الصفحة (ينتهي نطاق الواجهة) والمهمة تكمل في المركز.
