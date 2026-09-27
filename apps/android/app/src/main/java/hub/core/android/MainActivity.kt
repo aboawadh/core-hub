@@ -181,7 +181,19 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         AppPaths.resolve(path)?.let { AppPaths.route(it, session!!.profile) }?.let(nav::go)
         onPathHandled()
     }
-    MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
+    // Links to this hub's own pages in a reply open here (nav/HubLinks.kt); a room invite opens Join.
+    val openInApp: (String) -> Boolean = open@{ uri ->
+        val s = graph.store.current ?: return@open false
+        when (val link = hub.core.android.nav.HubLinks.target(uri, s.hub, s.profile)) {
+            is hub.core.android.nav.InAppLink.Page -> { nav.go(link.route); true }
+            is hub.core.android.nav.InAppLink.Join -> { hub.core.android.nav.HubLinks.joinCode.value = link.code; true }
+            null -> false
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(hub.core.android.nav.LocalOpenInApp provides openInApp) {
+        MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
+    }
+    hub.core.android.ui.screens.JoinFromLink(nav)
 }
 
 /** What each route draws. Pages not built on the phone yet say so plainly. */
