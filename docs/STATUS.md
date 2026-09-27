@@ -295,7 +295,7 @@ its approval.
   from `hermes --version`'s first line instead of waiting out its update check (it showed
   "Command failed"), says why the gateway stopped or is still starting in Hermes's own last line,
   a chat turn that cannot reach it says the same, and long errors wrap on the card. Since
-  2026-09-27 also **the oldest Hermes the hub works with** (DECISIONS §118, proposed — owner to
+  2026-09-27 also **the oldest Hermes the hub works with** (DECISIONS §119, proposed — owner to
   confirm): `0.21.3` (v2026.9.14, the image's pin); a person's own Hermes that is older is said on
   its card without blocking anything, and an owner or admin can update it from there with
   Hermes's own `hermes update --yes` after a confirmation, then the hub restarts the Hermes it runs. Since
@@ -942,7 +942,12 @@ A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of
   MCP over this path are backlog §2.16 — and it inlines a text attachment or
   sends an image to a model that accepts one, refusing anything else by name
   (`docs/domain/models.md` §الاتصال المباشر). Its conversation lives in the
-  server process, so a restart starts a fresh context.
+  server process, so a restart starts a fresh context. Since 2026-09-27 it also
+  runs on **providers signed in through Hermes** (DECISIONS §118, proposed —
+  owner to confirm): the ChatGPT subscription, Nous Portal, xAI Grok and MiniMax.
+  Each turn borrows the sign-in from Hermes's own Python in the profile's Hermes
+  home, holds it for that turn only, and sends it on the wire Hermes uses for
+  that provider; a hub without Hermes's Python refuses such a turn by name.
 
 Either way a model provider must be configured before anything can answer;
 until then a run fails with the provider's own message and a named code, never
@@ -954,6 +959,12 @@ data volume (ADR 0006).
   The direct path is proven end to end against a scripted provider, in the
   container as well as the test suite; a real provider key is still the owner's
   own check.
+- The direct agent on a signed-in provider (2026-09-27, §118) is proven against a
+  stand-in for Hermes's credential store and scripted backends streaming the real
+  wire shapes (Codex and xAI `/responses`, Nous `chat/completions`, MiniMax
+  Messages); the credential program was run against the pinned Hermes v2026.9.14
+  source with no sign-in (each provider answers `not_signed_in` in Hermes's words).
+  Not yet a turn on a real signed-in account.
 - The catalog's pinned versions actually installing and starting on a machine. On 2026-09-25
   Qwen Code 0.24.5, Kimi Code 2.1.1 and Pi 0.87.1 with `pi-acp` 0.0.34 were installed with
   the hub's own npm command on a developer machine and each answered ACP `initialize`; not

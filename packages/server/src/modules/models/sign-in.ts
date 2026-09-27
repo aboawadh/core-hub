@@ -15,6 +15,11 @@
  */
 import { HubError } from '../../lib/errors.js';
 import { CODEX_CLIENT_VERSION, liveModels, type HermesPythonRun } from './live-models.js';
+import {
+  signedInCredential,
+  type CredentialAsk,
+  type SignedInCredentialResult,
+} from './signed-in-chat.js';
 
 /** What starting a sign-in gave back: the code to show and where to enter it. */
 export interface SignInStarted {
@@ -46,6 +51,16 @@ export interface SignInRuntime {
   models(provider: string, profile: string | null): Promise<SignInModels>;
   /** Forget the provider's credential in that profile. Best effort. */
   signOut(provider: string, profile: string | null): Promise<void>;
+  /**
+   * The credential one `direct` turn borrows from Hermes (DECISIONS §118), asked of Hermes's own
+   * Python in the home the provider was signed in to. Held for that turn only; never stored.
+   * Absent on a runtime that cannot lend one — the turn is then refused by name.
+   */
+  credential?(
+    provider: string,
+    profile: string | null,
+    ask: CredentialAsk,
+  ): Promise<SignedInCredentialResult>;
 }
 
 /** A signed-in provider's models and where they came from (decision §83). */
@@ -204,6 +219,19 @@ export function hermesSignInRuntime(
         reason = asked.reason;
       }
       return { models: await hermesList(provider, profile), source: 'fallback', reason };
+    },
+
+    async credential(provider, profile, ask) {
+      const python = live?.python() ?? null;
+      const home = live?.home(profile) ?? null;
+      if (!python || !home) {
+        return {
+          ok: false,
+          reason: 'hermes_unavailable',
+          detail: 'Hermes’s Python is not available on this hub',
+        };
+      }
+      return signedInCredential(python, home, provider, ask);
     },
 
     async signOut(provider, profile) {

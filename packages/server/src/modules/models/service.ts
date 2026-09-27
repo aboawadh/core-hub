@@ -26,6 +26,7 @@ import type { WorkspaceScope } from '../auth/index.js';
 import type { AuditService, JobRow, JobRunner } from '../audit/index.js';
 import { providerAdapter } from './adapters/index.js';
 import type {
+  ChatEvent,
   ChatFailureReason,
   ChatMessage,
   DiscoveredModel,
@@ -96,6 +97,7 @@ import { ModelsStore } from './store.js';
 import { joinAudio, type AudioPart } from './speech/audio.js';
 import { splitForSpeech } from './speech/split.js';
 import { signInStatusOf, type SignInRuntime, type SignInStatus } from './sign-in.js';
+import { signedInChat } from './signed-in-chat.js';
 import {
   modelKeyOf,
   serializeEnsemble,
@@ -219,6 +221,12 @@ export interface ModelsServiceOptions {
    * none: that profile then uses the shared providers only.
    */
   profileWorkspace?: (profile: string) => string | null;
+  /**
+   * The slug of a profile by its workspace id, or null for the default profile (whose Hermes home
+   * is the root) and for one the hub no longer has. Used to find the Hermes home a profile's own
+   * signed-in provider lives in when a `direct` turn borrows its credential (DECISIONS §118).
+   */
+  profileSlug?: (workspaceId: string) => string | null;
   /**
    * The runtime that signs in to a provider account (contract decision §55): Hermes's server,
    * where the hub supervises Hermes. `null` (or absent) elsewhere — the sign-in is then refused
@@ -2759,23 +2767,10 @@ export class ModelsService {
       };
       return;
     }
-    if (provider.authKind === 'oauth') {
-      // Signed in through Hermes (decision §55): the credential is Hermes's, not the hub's.
-      yield {
-        type: 'failed',
-        code: 'provider_not_configured',
-        message: `${provider.label} is signed in through Hermes; only the Hermes agent can use it`,
-        retryable: false,
-      };
-      return;
-    }
     const entry = this.entryOf(provider);
-    const ctx = this.contextOf({ id: workspace } as WorkspaceScope, provider);
-    const adapter = providerAdapter(entry?.protocol ?? 'openai');
     const row = this.store.model(provider.id, request.model);
     const modelLabel = row?.alias ?? row?.label ?? request.model;
-
-    for await (const event of adapter.chat(ctx, {
+    const chatRequest = {
       model: request.model,
       messages: request.messages,
       ...(request.reasoningEffort !== undefined
@@ -2783,7 +2778,44 @@ export class ModelsService {
         : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(row?.maxOutputTokens ? { maxOutputTokens: row.maxOutputTokens } : {}),
-    })) {
+    };
+    let stream: AsyncIterable<ChatEvent>;
+    if (provider.authKind === 'oauth') {
+      // Signed in through Hermes (§55): the credential stays Hermes's, and the turn borrows it
+      // from Hermes's own Python for this turn only (§118).
+      const refused = this.signedInRefusal(provider, entry);
+      if (refused) {
+        yield refused;
+        return;
+      }
+      const runtime = this.options.signIn?.() ?? null;
+      const hermesProvider = entry!.hermesProvider!;
+      const profile = this.signedInProfileOf(workspace, provider);
+      stream = signedInChat(
+        {
+          label: provider.label,
+          fetchImpl: this.fetchImpl,
+          resolve: (force) =>
+            runtime?.credential
+              ? runtime.credential(hermesProvider, profile, {
+                  model: request.model,
+                  effort: request.reasoningEffort ?? null,
+                  force,
+                })
+              : Promise.resolve({
+                  ok: false as const,
+                  reason: 'hermes_unavailable' as const,
+                  detail: 'this hub does not supervise Hermes',
+                }),
+        },
+        chatRequest,
+      );
+    } else {
+      const ctx = this.contextOf({ id: workspace } as WorkspaceScope, provider);
+      stream = providerAdapter(entry?.protocol ?? 'openai').chat(ctx, chatRequest);
+    }
+
+    for await (const event of stream) {
       if (event.type === 'usage') {
         yield {
           ...event,
@@ -2805,6 +2837,43 @@ export class ModelsService {
       }
       yield event;
     }
+  }
+
+  /**
+   * Why a provider signed in through Hermes cannot take a `direct` turn at all, before Hermes is
+   * asked (§118): one Hermes cannot sign in to, or one whose sign-in was never approved.
+   */
+  private signedInRefusal(
+    provider: ProviderRow,
+    entry: ProviderCatalogueEntry | undefined,
+  ): Extract<AttemptEvent, { type: 'failed' }> | null {
+    if (!entry?.signIn || !entry.hermesProvider) {
+      return {
+        type: 'failed',
+        code: 'provider_not_configured',
+        message: `${provider.label} has no sign-in the direct agent can borrow`,
+        retryable: false,
+      };
+    }
+    if (provider.status !== 'ok') {
+      return {
+        type: 'failed',
+        code: 'provider_not_configured',
+        message: `${provider.label} is not signed in yet; sign in under Models → Providers`,
+        retryable: false,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * The Hermes profile a signed-in provider's credential lives in (§55, §118): the root for a
+   * shared provider and for the default profile's own, else that profile's.
+   */
+  private signedInProfileOf(workspace: string, row: ProviderRow): string | null {
+    if (row.shared) return null;
+    if (row.workspace === this.hub({ id: workspace }).id) return null;
+    return this.options.profileSlug?.(row.workspace) ?? null;
   }
 
   /**

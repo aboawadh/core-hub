@@ -19,7 +19,7 @@
 - `hermes update --yes` موجود في الاثنين: تحديث بلا أسئلة (يقبل ترحيل الإعدادات).
 
 ## القرار والموافقات
-مقترح — للمالك أن يؤكد (DECISIONS §118):
+مقترح — للمالك أن يؤكد (DECISIONS §119):
 - **الحد الأدنى `0.21.3`** (v2026.9.14): النسخة التي تثبّتها الصورة وتجري عليها كل اختبارات هرمز الحقيقية
   (`*.real.test.ts`)، ومنها قُرئت أوامر هرمز التي يستعملها المركز. حدّ محافظ لا كسر معروف.
 - **الأقدم يعمل، والبطاقة تقول ذلك**: `AgentInstall.minimum_version` و`below_minimum` (اختياريان). لا شيء يُمنع.
@@ -42,10 +42,10 @@
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 `AgentInstall`: `minimum_version`، `below_minimum`، `self_update` (اختيارية، غائبة في المراكز الأقدم). وصف
-`agents.upgrade` أُضيف إليه حالة `self_update`. DECISIONS §118.
+`agents.upgrade` أُضيف إليه حالة `self_update`. DECISIONS §119.
 
 ## الملفات والتأثير
-- `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§118).
+- `packages/contracts/openapi.yaml`، `docs/contracts/DECISIONS.md` (§119).
 - `packages/server/src/modules/agents/catalog/{types,hermes}.ts`: `minimumVersion` لهرمز.
 - `packages/server/src/modules/agents/serialize.ts`: الحقول الجديدة و`belowMinimum()`.
 - `packages/server/src/modules/agents/service.ts`: `HermesUpdater` ومهمة `hermesSelfUpdate` داخل `upgrade`.

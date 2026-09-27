@@ -250,6 +250,11 @@ function contextOf(app: FastifyInstance): ModelsService {
       const row = findWorkspace(db, profile);
       return row && !row.isDefault ? row.id : null;
     },
+    // …and back: the Hermes profile a profile's own signed-in provider lives in (§118).
+    profileSlug: (workspaceId) => {
+      const row = findWorkspace(db, workspaceId);
+      return row && !row.isDefault ? row.slug : null;
+    },
     ...(own.fetchImpl ? { fetchImpl: own.fetchImpl } : {}),
     catalog: own.catalog ?? catalog,
     hostEnv,

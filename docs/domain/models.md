@@ -287,6 +287,23 @@ own, so this module streams its turns. `ProviderAdapter` gained a fifth verb bes
   cli-proxy-api, a typed-in URL), `anthropic`, `google`, and `ollama` through its own
   `/v1` surface (ADR 0012's reasoning, applied to us). `elevenlabs` refuses: a speech
   provider has no chat surface, and saying so is better than posting to one.
+- **Providers signed in through Hermes** (DECISIONS §118). Their credential is Hermes's
+  (§55), so each turn borrows it: Hermes's own Python, in the Hermes home the provider was
+  signed in to, runs `signed-in-chat.ts`'s program, which asks Hermes's resolver and prints
+  the wire, base URL, wire model id, headers (the credential is `Authorization`) and
+  reasoning field. The hub holds that for the one turn, never stores or logs it, and cuts
+  the token out of any error text. The wire per provider is Hermes's own:
+
+  | provider | wire | notes |
+  |---|---|---|
+  | `openai-codex` | Codex backend `POST /responses` (`adapters/responses.ts`) | Hermes's identity headers, `ChatGPT-Account-ID` from the token, `reasoning {effort, summary: auto}` clamped by Hermes, no `max_output_tokens`, `-900k` stripped |
+  | `xai-oauth` | xAI `POST /responses` | effort only for a Grok model that takes one |
+  | `nous` | `chat/completions` (the `openai` adapter) | Anthropic Messages only when Hermes's `nous_api_mode` names it |
+  | `minimax-oauth` | Anthropic `/v1/messages` (the `anthropic` adapter) | `Authorization: Bearer`, no `x-api-key` |
+
+  A 401 before any text asks Hermes once more with a forced refresh and resends once. No
+  Hermes Python on this hub: `agent_unavailable`, named. Sign-in never approved:
+  `provider_not_configured`. Hermes holding no usable sign-in: `provider_unauthorized`.
 - **Nothing throws.** Every refusal is a final `failed` event carrying the provider's
   own sentence and one of the contract's error codes: `provider_not_configured` (no key
   stored for a provider that requires one, or no model chosen), `provider_unauthorized`
