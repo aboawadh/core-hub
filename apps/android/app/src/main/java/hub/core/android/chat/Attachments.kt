@@ -143,6 +143,16 @@ class AttachmentTray(
         }
     }
 
+    /**
+     * A file already on the hub (a profile file made an attachment, [AttachmentHandOff]): it shows
+     * ready at once and goes with the next message like one picked here.
+     */
+    fun addReady(attachment: Attachment) {
+        if (_items.value.any { (it.state as? State.Ready)?.attachment?.id == attachment.id }) return
+        val isImage = attachment.kind == Attachment.Kind.IMAGE
+        _items.update { it + Item(UUID.randomUUID().toString(), attachment.name, isImage, null, State.Ready(attachment)) }
+    }
+
     /** A file that could not even be read on the phone. */
     fun addUnreadable(name: String) {
         _items.update { it + Item(UUID.randomUUID().toString(), name, false, null, State.Failed(null, tooLarge = false)) }
@@ -158,6 +168,46 @@ class AttachmentTray(
 
     /** After sending: the files now belong to the message. */
     fun clear() = _items.update { emptyList() }
+}
+
+/**
+ * Files handed to the next composer that opens (the web's `attachments/handoff.ts`): «Attach to
+ * chat» on the Files page makes an attachment of a profile file on the hub
+ * (`knowledge.attachWorkspaceFile`), puts it here and opens a chat; that chat's composer takes it
+ * into its tray, ready to send. One slot, kept with its profile so a composer in another profile
+ * never picks it up, and dropped after [TTL_MS] so a chat opened much later is not surprised.
+ */
+class AttachmentHandOff(private val clock: () -> Long = System::currentTimeMillis) {
+    private class Slot(val profile: String, val attachments: List<Attachment>, val at: Long)
+
+    private val slot = MutableStateFlow<Slot?>(null)
+
+    /** Bumps when something is put, so an open composer can look again. */
+    val version: StateFlow<Int> get() = _version.asStateFlow()
+    private val _version = MutableStateFlow(0)
+
+    /** Puts [attachments] in the slot for the composer that opens next in [profile]. */
+    fun put(profile: String, attachments: List<Attachment>) {
+        slot.value = Slot(profile, attachments.toList(), clock())
+        _version.update { it + 1 }
+    }
+
+    /** What was handed to [profile], once; empty when nothing was (or it expired). */
+    fun take(profile: String): List<Attachment> {
+        val current = slot.value ?: return emptyList()
+        if (clock() - current.at > TTL_MS) {
+            slot.value = null
+            return emptyList()
+        }
+        if (current.profile != profile) return emptyList()
+        slot.value = null
+        return current.attachments
+    }
+
+    companion object {
+        /** How long a handed-off file waits for its composer (the web's `HANDOFF_TTL_MS`). */
+        const val TTL_MS = 60_000L
+    }
 }
 
 /** The hub's attachment calls the uploader uses, so its rules are tested without a network. */

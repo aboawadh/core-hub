@@ -1,5 +1,7 @@
 // The Rooms segment's list (the selector's profile, like the web's) with its two actions, New
 // room and Join by code (navigation.json `rooms.actions`). A pasted invite link works as a code.
+// Active and archived rooms sit behind a switch, as on the web; a long press on a room renames,
+// archives or deletes it (its manager) or leaves it (anyone else).
 import CoreHubClient
 import SwiftUI
 
@@ -11,6 +13,11 @@ struct RoomsList: View {
     @State private var making = false
     @State private var joining = false
     @State private var generation = 0
+    @State private var archived = false
+    @State private var renaming: Room?
+    @State private var deleting: Room?
+    @State private var leaving: Room?
+    @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
@@ -21,15 +28,26 @@ struct RoomsList: View {
                     .accessibilityIdentifier("rooms.join")
             }
             .font(.system(size: FontSize.sizeSm, weight: .medium))
-            AsyncContent(key: "\(app.currentProfile)#\(generation)") {
+            Picker(l10n("rooms.manage.filter"), selection: $archived) {
+                Text(l10n("rooms.manage.active")).tag(false)
+                Text(l10n("rooms.manage.archived")).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .accessibilityIdentifier("rooms.filter")
+            if let failure {
+                NoticeView(text: failure, tone: .danger).onTapGesture { self.failure = nil }
+            }
+            AsyncContent(key: "\(app.currentProfile)#\(archived)#\(generation)") {
                 let profile = app.currentProfile
+                let showArchived = archived
                 return try await app.api.call {
-                    try await RoomsAPI.roomsList(xHubProfile: profile, archived: false, limit: 100, apiConfiguration: $0)
+                    try await RoomsAPI.roomsList(xHubProfile: profile, archived: showArchived, limit: 100, apiConfiguration: $0)
                 }.items
             } content: { rooms, _ in
                 VStack(alignment: .leading, spacing: 2) {
                     if rooms.isEmpty {
-                        Text(l10n("rooms.empty")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
+                        Text(l10n(archived ? "rooms.manage.none_archived" : "rooms.empty")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
                     }
                     ForEach(rooms, id: \.id) { room in
                         Button { open(room) } label: {
@@ -50,12 +68,43 @@ struct RoomsList: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            ForEach(RoomManage.rowActions(canManage: room.canManage, archived: room.archivedAt != nil), id: \.self) { action in
+                                Button(role: RoomActionLabel.destructive(action) ? .destructive : nil) {
+                                    act(action, on: room)
+                                } label: {
+                                    RoomActionLabel.label(action, l10n)
+                                }
+                            }
+                        }
                         .accessibilityIdentifier("room.row.\(room.id)")
                     }
                 }
             }
         }
         .accessibilityIdentifier("screen.rooms")
+        .sheet(isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            if let room = renaming {
+                RoomRenameSheet(current: room.name) { patch in
+                    try await update(room, patch)
+                }
+            }
+        }
+        .confirmDelete($deleting, name: \.name, delete: { room in
+            let profile = room.profile
+            try await app.api.call { try await RoomsAPI.roomsDelete(xHubProfile: profile, roomId: room.id, apiConfiguration: $0) }
+        }, deleted: { _ in generation += 1 })
+        .alert(
+            l10n("rooms.manage.leave_title"),
+            isPresented: Binding(get: { leaving != nil }, set: { if !$0 { leaving = nil } }),
+            presenting: leaving
+        ) { room in
+            Button(l10n("common.cancel"), role: .cancel) {}
+            Button(l10n("rooms.manage.leave"), role: .destructive) { Task { await leave(room) } }
+                .accessibilityIdentifier("dialog.confirm")
+        } message: { room in
+            Text(l10n("rooms.manage.leave_body", ["name": room.name]))
+        }
         .sheet(isPresented: $making) {
             NavigationStack {
                 NewRoomSheet { room in
@@ -73,6 +122,50 @@ struct RoomsList: View {
                     open(room)
                 }
             }
+        }
+    }
+
+    private func act(_ action: RoomManage.Action, on room: Room) {
+        failure = nil
+        switch action {
+        case .rename: renaming = room
+        case .archive, .unarchive:
+            Task {
+                do {
+                    try await update(room, RoomPatch(archived: action == .archive))
+                } catch {
+                    failure = HubFailure(error).describe(l10n)
+                }
+            }
+        case .delete: deleting = room
+        case .leave: leaving = room
+        case .settings, .clearContext: open(room)
+        }
+    }
+
+    private func update(_ room: Room, _ patch: RoomPatch) async throws {
+        let profile = room.profile
+        _ = try await app.api.call {
+            try await RoomsAPI.roomsUpdate(xHubProfile: profile, roomId: room.id, roomPatch: patch, apiConfiguration: $0)
+        }
+        generation += 1
+    }
+
+    /// Leaving is removing yourself: the room's list of people says which member you are.
+    private func leave(_ room: Room) async {
+        guard let me = app.credentials?.userID else { return }
+        let profile = room.profile
+        do {
+            let members = try await app.api.call {
+                try await RoomsAPI.roomsListMembers(xHubProfile: profile, roomId: room.id, apiConfiguration: $0)
+            }.items
+            guard let mine = members.first(where: { $0.userId == me }) else { return }
+            try await app.api.call {
+                try await RoomsAPI.roomsRemoveMember(xHubProfile: profile, roomId: room.id, memberId: mine.id, apiConfiguration: $0)
+            }
+            generation += 1
+        } catch {
+            failure = HubFailure(error).describe(l10n)
         }
     }
 }

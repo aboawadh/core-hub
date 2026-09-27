@@ -1,0 +1,612 @@
+{
+  "agents2": {
+    "mcp": {
+      "new": "New server",
+      "name": "Name",
+      "name_bad": "Letters, digits and . _ - only",
+      "invalid_json": "Not valid JSON yet.",
+      "none": "No servers",
+      "none_body": "MCP servers give the agent tools beyond its own. Add one here.",
+      "restart_note": "This page writes to the agent's config file. Hermes connects to these servers when it starts, so restart it for a change to take effect.",
+      "editor_note": "Every MCP server has its own fields. It is edited as it is, and nothing we do not recognise is dropped. A credential reads as [stored]; leaving it keeps the one on file.",
+      "delete_title": "Delete {name}?",
+      "delete_body": "It goes from the config file. Nothing is removed from the server itself.",
+      "testing": "Testing…",
+      "test_ok": "Hermes connected — {count} tools, {seconds} s.",
+      "no_tools": "The server lists no tools.",
+      "test_failed": "Hermes could not connect:",
+      "edit": "Edit",
+      "kind": "How it connects",
+      "kind_command": "A command",
+      "kind_url": "An address",
+      "command": "Command",
+      "command_hint": "The program Hermes starts, like npx or uvx.",
+      "args": "Arguments",
+      "args_hint": "One per line.",
+      "env": "Environment variables",
+      "url": "Address",
+      "url_hint": "Where the server listens, starting with https://.",
+      "headers": "Headers",
+      "row_name": "Name",
+      "row_value": "Value",
+      "row_add": "Add",
+      "row_remove": "Remove",
+      "stored": "Stored — leave it empty to keep it",
+      "command_required": "Enter the command.",
+      "url_bad": "Enter an address starting with http:// or https://.",
+      "row_bad": "Every row needs a name without spaces.",
+      "as_json": "Edit as JSON",
+      "as_form": "Edit as a form",
+      "kept": "Other keys in this server are kept as they are: {keys}.",
+      "off": "Off"
+    },
+    "hub": {
+      "title": "Core Hub tools",
+      "subtitle": "Core Hub offers itself to this agent as an MCP server, so the agent can work with the board, schedules, conversations and files of this profile.",
+      "enabled": "Offer Core Hub tools",
+      "acts_as": "Every call acts for the person whose conversation it is, in this profile only, with that person's permissions — never as an admin. Only the hub's own conversations can use them; a message arriving from a channel cannot.",
+      "allow_writes": "Allow changes",
+      "writes_only": "Only changes: nothing here reads.",
+      "recent": "Recent calls",
+      "no_calls": "No calls yet.",
+      "call_ok": "done",
+      "call_failed": "refused",
+      "group": {
+        "tasks": "Tasks",
+        "schedules": "Schedules",
+        "conversations": "Conversations",
+        "notifications": "Notifications",
+        "workflows": "Workflows",
+        "files": "Files",
+        "devices": "Your computers"
+      },
+      "group_about": {
+        "tasks": "List the board's tasks; with changes allowed, create, move, assign and comment on them.",
+        "schedules": "List schedules; with changes allowed, create one, pause it or run it now.",
+        "conversations": "List and search this profile's conversations and read a summary of one.",
+        "notifications": "Tell the person something: a notice in their inbox.",
+        "workflows": "List workflows; with changes allowed, run one.",
+        "files": "Read the files in this profile's folder; with changes allowed, write them.",
+        "devices": "Use the shared folders and the programs on the person's own computers that run the Core Hub app (each computer asks its person first). With changes allowed, write files and run programs there."
+      },
+      "unavailable": {
+        "runtime_absent": "There is no Hermes beside this hub to give the tools to.",
+        "hermes_profile_absent": "Hermes has no folder for this profile yet. Start a conversation in it first."
+      },
+      "reason": {
+        "hub_tools_no_live_run": "no conversation was running, so there was nobody to act for",
+        "hub_tools_run_ambiguous": "several people had conversations running and the hub could not tell whose it was",
+        "hub_tools_tool_off": "that tool is switched off here",
+        "path_outside_profile": "the path was outside the profile's folder",
+        "forbidden": "the person may not do that",
+        "not_found": "not found",
+        "validation_failed": "the arguments were not valid",
+        "hub_tools_sender_not_linked": "the message came from a messaging account nobody linked",
+        "hub_tools_sender_no_access": "the person who linked that account may not use this profile",
+        "hub_tools_group_chat": "the message came from a group chat"
+      }
+    },
+    "pending": {
+      "title": "Waiting for review",
+      "subtitle": "What the agent wrote to its memory or its skills, not saved yet",
+      "empty": "Nothing is waiting for review.",
+      "kind_memory": "Agent's memory",
+      "kind_user": "What it knows about you",
+      "kind_skill": "Skill",
+      "origin_review": "Hermes's own review",
+      "origin_chat": "During a conversation",
+      "approve": "Approve",
+      "reject": "Reject"
+    },
+    "signin": {
+      "title": "Sign in to the {name} account",
+      "hint": "{name} uses its own account rather than a provider key. Signing in here stores it for every profile on this hub.",
+      "action": "Sign in",
+      "approved": "Signed in. New conversations with {name} use this account.",
+      "steps": "Open the sign-in page, sign in to your account there, and enter this code:",
+      "open": "Open the sign-in page",
+      "code": "Code",
+      "copy": "Copy the code",
+      "waiting": "Waiting for you to approve it on the provider’s page…",
+      "denied": "The sign-in was declined.",
+      "expired": "The code ran out before it was used.",
+      "failed": "The sign-in did not finish.",
+      "retry": "Start again",
+      "copied": "Code copied"
+    },
+    "compression": {
+      "title": "Context compression",
+      "subtitle": "How Hermes shortens long conversations in this profile. Applied from the next message.",
+      "enabled": "Compress automatically",
+      "enabled_hint": "When a conversation fills the window up to the threshold, Hermes summarises its older part.",
+      "threshold": "Threshold (% of the window)",
+      "threshold_hint": "Hermes raises anything under 75% to 75% for models whose window is under 512K tokens.",
+      "target": "Kept word for word (% of the threshold)",
+      "target_hint": "The recent part left as it is. Hermes keeps it between 10% and 80%.",
+      "protect_first": "First messages always kept",
+      "protect_last": "Recent messages always kept",
+      "context_length": "Context window override (tokens)",
+      "context_length_hint": "Only when the model’s own window is reported wrong. Empty = the model’s own.",
+      "saved": "Saved. Hermes applies it from the next message.",
+      "invalid": "Enter a whole number in range (at least 1024 for the window)."
+    },
+    "settings": {
+      "applies_next_message": "Applies from the next message.",
+      "restart_required": "Changing these restarts the agent.",
+      "saved": "Saved.",
+      "saved_next_message": "Saved in Hermes's settings; applies from the next message.",
+      "saved_restart_needed": "Saved in Hermes's settings; applies once Hermes restarts.",
+      "saved_restarting": "Saved; Hermes is restarting now so it applies.",
+      "hint_list": "One item per line.",
+      "hint_json": "Valid JSON.",
+      "json_bad": "Not valid JSON yet."
+    },
+    "ch": {
+      "exclusive": "one identity",
+      "not_configured": "not configured",
+      "fields_n": "{count} fields",
+      "clear": "Forget identity",
+      "clear_title": "Forget the {name} identity?",
+      "clear_body": "The tokens and secrets are removed and the channel is switched off. Its other settings stay.",
+      "editor_note": "The fields come from the agent's file, not from a form we wrote. A secret reads as [stored]; leaving it keeps the one on file.",
+      "secret_hint": "Leave it to keep the one already stored.",
+      "no_fields": "This channel has no fields yet.",
+      "linked": "linked",
+      "not_linked": "not linked",
+      "linked_as": "Linked as {account}",
+      "applies_now": "In this profile the hub restarts the messaging gateway itself, so a change takes effect at once.",
+      "restart_note": "Hermes connects to these platforms when it starts: restart it for a change to take effect.",
+      "restart_needed": "Hermes needs a restart to connect {name}.",
+      "restart_now": "Restart now",
+      "unlink_body": "The agent stops answering this number, its session is deleted from this profile and the channel is switched off. Approved senders stay. Remove the device on the phone too: WhatsApp → Linked devices.",
+      "status": {
+        "online": "online",
+        "offline": "offline",
+        "error": "error"
+      },
+      "gateway": {
+        "running": "gateway running",
+        "starting": "gateway starting",
+        "stopped": "no gateway running",
+        "error": "gateway failing"
+      },
+      "telegram_unlink_body": "The token is removed from this profile and the agent stops answering on the bot. The bot itself stays in Telegram (delete it with @BotFather if you want). The people you allowed stay listed.",
+      "platform_unlink_body": "The {name} details are removed from this profile and the agent stops answering there. The account itself stays on the platform, and the allowed people and settings stay.",
+      "unlink_title": "Unlink {name}?",
+      "waiting_review": "{count} waiting — Review",
+      "pair": "Pair by QR",
+      "link": "Link",
+      "mode": {
+        "badge_bot": "Bot",
+        "badge_self": "Message yourself",
+        "change": "Change mode",
+        "change_title": "How WhatsApp is used",
+        "change_note": "The phone stays linked. The hub restarts Hermes’s WhatsApp connection so the change applies at once.",
+        "save": "Save",
+        "title": "How will this number be used?",
+        "bot": "Bot (a number for the agent)",
+        "bot_hint": "People message this number and the agent answers them. Someone writing for the first time gets a pairing code and waits for your approval.",
+        "self": "Me (Message yourself)",
+        "self_hint": "Your personal number: you talk to the agent in WhatsApp's “Message yourself” chat. Nobody else who messages you reaches the agent or gets a pairing reply."
+      },
+      "reply": {
+        "open": "Reply header",
+        "title": "Reply header",
+        "note": "In “Message yourself” your messages and the agent’s come from one number, so every reply of the agent starts with this header.",
+        "agent_name": "The agent’s name ({name})",
+        "agent_name_plain": "The agent’s name",
+        "custom": "Custom text",
+        "custom_label": "Header text",
+        "custom_hint": "One line, up to 64 characters.",
+        "preview": "A reply will start like this:",
+        "preview_body": "the agent’s reply…",
+        "hermes_now": "Now: Hermes’s own header («☤ Hermes Agent»). Saving puts your choice in its place.",
+        "no_none": "Hermes always puts a header over replies here, so it can be changed but not removed.",
+        "save": "Save"
+      },
+      "edit": "Fields",
+      "restarting": "Restarting Hermes…",
+      "restarted": "Hermes restarted.",
+      "qr_note": "{platform} pairs by scanning a code with the phone that has the account, and this phone cannot scan its own screen. Pair it from a computer or a tablet: open this page on the web there."
+    },
+    "chs": {
+      "title": "Telegram settings",
+      "applies_now": "Saving restarts this profile's gateway, so changes apply at once.",
+      "applies_restart": "In the default profile, changes apply after Hermes restarts.",
+      "section": {
+        "access": "Who may message the bot",
+        "replies": "Replies",
+        "groups": "Groups and channels",
+        "media": "Media & voice",
+        "advanced": "Advanced"
+      },
+      "media_note": "These are the profile's own settings: they change WhatsApp and every other channel of this profile too.",
+      "shared": "Also changes WhatsApp and other channels",
+      "default_is": "Default: {value}",
+      "default_none": "Default: none",
+      "on": "on",
+      "off": "off",
+      "reset": "Back to default",
+      "discard": "Discard changes",
+      "list_placeholder": "123456789, 987654321",
+      "invalid": "This value is not accepted. Check the format.",
+      "saved_now": "Saved. The gateway restarts with the new settings.",
+      "saved_restart": "Saved. Restart Hermes from its card for them to apply.",
+      "option": {
+        "allowed_users": {
+          "label": "People who skip approval",
+          "help": "Telegram user IDs that may message the bot without a pairing code. Find yours by messaging @userinfobot."
+        },
+        "unauthorized_dm_behavior": {
+          "label": "When a stranger messages the bot",
+          "help": "Send them a pairing code to approve here, or ignore them silently."
+        },
+        "show_reasoning": {
+          "label": "Show the model's thinking",
+          "help": "Before each answer, add the model's reasoning as a separate block."
+        },
+        "reasoning_style": {
+          "label": "How the thinking looks",
+          "help": "The format of the thinking block."
+        },
+        "tool_progress": {
+          "label": "Show what the agent is doing",
+          "help": "Messages about the tools the agent uses while it works."
+        },
+        "cleanup_progress": {
+          "label": "Remove progress messages when done",
+          "help": "Delete the “working…” and tool messages after a successful answer."
+        },
+        "streaming": {
+          "label": "Write the answer as it comes",
+          "help": "Show the answer while it is being written, by editing one message, instead of sending it at the end."
+        },
+        "reply_to_mode": {
+          "label": "Reply as a quote",
+          "help": "Whether answers quote the message they answer."
+        },
+        "reactions": {
+          "label": "Reactions",
+          "help": "React with 👀 while working and ✅ or ❌ when done."
+        },
+        "typing_indicator": {
+          "label": "“Typing…” indicator",
+          "help": "Show “typing…” while the agent works."
+        },
+        "disable_link_previews": {
+          "label": "No link previews",
+          "help": "Send links without Telegram's preview card."
+        },
+        "notifications": {
+          "label": "Notification sound",
+          "help": "Which bot messages make the phone ring."
+        },
+        "require_mention": {
+          "label": "Answer in groups only when mentioned",
+          "help": "In a group, the bot answers only messages that @mention it or reply to it. Private chats are not affected."
+        },
+        "allowed_chats": {
+          "label": "Only these groups",
+          "help": "Group chat IDs the bot answers in (IDs of groups start with -100). Empty: any group it is added to."
+        },
+        "free_response_chats": {
+          "label": "Groups where no mention is needed",
+          "help": "Group chat IDs where the bot answers every message even when mentions are required."
+        },
+        "group_allowed_users": {
+          "label": "People allowed in groups",
+          "help": "Telegram user IDs whose group messages the bot answers. This does not let them message it privately."
+        },
+        "observe_unmentioned_group_messages": {
+          "label": "Read group messages it does not answer",
+          "help": "Keep unmentioned group messages as context for the next answer."
+        },
+        "guest_mode": {
+          "label": "Answer a mention in any group",
+          "help": "Answer an @mention even in groups not in the list above."
+        },
+        "exclusive_bot_mentions": {
+          "label": "Ignore messages for other bots",
+          "help": "Skip a group message that mentions another bot."
+        },
+        "allow_bots": {
+          "label": "Messages from other bots",
+          "help": "Whether messages sent by other bots are answered."
+        },
+        "stt_enabled": {
+          "label": "Transcribe voice notes",
+          "help": "Voice notes people send are turned into text for the agent."
+        },
+        "stt_echo_transcripts": {
+          "label": "Show the transcript",
+          "help": "Send the transcribed text back so the person sees what was understood."
+        },
+        "voice_auto_tts": {
+          "label": "Answer with voice notes",
+          "help": "Answers are also sent as voice. In a chat, /voice changes this for that chat."
+        },
+        "home_channel": {
+          "label": "Home chat",
+          "help": "The chat ID where scheduled tasks and notices are delivered. In Telegram, /sethome in a chat sets it too."
+        },
+        "gateway_restart_notification": {
+          "label": "Say when back online",
+          "help": "Send a message to the home chat when the agent restarts."
+        },
+        "command_menu_max": {
+          "label": "Commands in the menu",
+          "help": "How many commands the bot's “/” menu lists (1–100)."
+        },
+        "proxy_url": {
+          "label": "Proxy",
+          "help": "Reach Telegram through a proxy, e.g. socks5://host:1080. Leave empty for a direct connection."
+        },
+        "allowed_roles": {
+          "label": "Allowed roles",
+          "help": "Server role ids (digits). The bot answers anyone who has one."
+        },
+        "allowed_channels": {
+          "label": "Only these channels",
+          "help": "Ids of the channels it answers in. Empty: any channel it can see."
+        },
+        "free_response_channels": {
+          "label": "Channels with no mention needed",
+          "help": "Ids of channels where it answers every message."
+        },
+        "ignored_channels": {
+          "label": "Ignored channels",
+          "help": "Ids of channels it never answers in, even when mentioned."
+        },
+        "auto_thread": {
+          "label": "Answer in a thread",
+          "help": "When mentioned in a channel it opens a thread and answers there."
+        },
+        "thread_require_mention": {
+          "label": "In threads: answer only when mentioned",
+          "help": "Inside threads it answers only when mentioned."
+        },
+        "no_thread_channels": {
+          "label": "Channels without threads",
+          "help": "Ids of channels where it answers directly, without a thread."
+        },
+        "disable_dms": {
+          "label": "Ignore direct messages",
+          "help": "It does not answer DMs, only channels."
+        },
+        "reply_in_thread": {
+          "label": "Answer in a thread",
+          "help": "It answers in a thread under the message instead of the channel itself."
+        },
+        "reply_broadcast": {
+          "label": "Also show the answer in the channel",
+          "help": "The first part of a threaded answer also shows in the channel."
+        },
+        "strict_mention": {
+          "label": "Explicit mention in every message",
+          "help": "In threads it answers only a message that mentions it explicitly."
+        },
+        "free_response_rooms": {
+          "label": "Rooms with no mention needed",
+          "help": "Ids of rooms where it answers every message (they start with !)."
+        },
+        "allowed_rooms": {
+          "label": "Only these rooms",
+          "help": "Ids of the rooms it answers in. Direct messages are not affected."
+        },
+        "dm_mention_threads": {
+          "label": "Thread on a mention in a DM",
+          "help": "In a direct chat, mentioning it opens a thread."
+        },
+        "e2ee_mode": {
+          "label": "End-to-end encryption",
+          "help": "Whether it uses encryption in encrypted rooms."
+        },
+        "reply_mode": {
+          "label": "How it answers",
+          "help": "In a thread under the message, or as a plain message in the channel."
+        },
+        "require_authenticated_sender": {
+          "label": "Verify the sender",
+          "help": "Only mail your server verified the sender of (SPF/DKIM/DMARC) is accepted, so nobody can pose as an address on the list."
+        },
+        "skip_attachments": {
+          "label": "Ignore attachments",
+          "help": "Attachments are not read."
+        },
+        "poll_interval": {
+          "label": "Check mail every (seconds)",
+          "help": "Seconds between checks for new mail (5 to 3600)."
+        }
+      },
+      "choice": {
+        "unauthorized_dm_behavior": {
+          "pair": "Send a pairing code",
+          "ignore": "Ignore"
+        },
+        "reasoning_style": {
+          "code": "Code block",
+          "blockquote": "Quote",
+          "subtext": "Small text"
+        },
+        "tool_progress": {
+          "off": "Off",
+          "new": "New tools only",
+          "all": "Every tool",
+          "verbose": "Every tool, in detail"
+        },
+        "reply_to_mode": {
+          "off": "Never",
+          "first": "First message of an answer",
+          "all": "Every message"
+        },
+        "notifications": {
+          "important": "Final answers and approvals only",
+          "all": "Every message"
+        },
+        "allow_bots": {
+          "none": "Ignore them",
+          "all": "Answer them",
+          "mentions": "Answer only when mentioned"
+        },
+        "e2ee_mode": {
+          "off": "Off",
+          "optional": "When needed",
+          "required": "Required"
+        },
+        "reply_mode": {
+          "off": "Plain message",
+          "thread": "In a thread"
+        }
+      },
+      "title_of": "{name} settings",
+      "platform": {
+        "discord": {
+          "option": {
+            "allowed_users": {
+              "label": "People the bot answers",
+              "help": "Discord user ids. Anyone not here and without an allowed role gets no answer."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In server channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to. /set-home sets it too."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "123456789012345678, 876543210987654321"
+        },
+        "slack": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Slack member ids (like U01ABCDEF). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel (starting with C) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "list_placeholder": "C01ABCDEF, C02GHIJKL"
+        },
+        "matrix": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Full Matrix ids (like @sara:matrix.org). Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In rooms: answer only when mentioned",
+              "help": "In rooms it answers only a message that mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home room",
+              "help": "Id of the room (starting with !) scheduled results and notices go to."
+            },
+            "reactions": {
+              "label": "Reactions",
+              "help": "A reaction on your message while it works and when it is done."
+            }
+          },
+          "section": {
+            "groups": "Rooms"
+          },
+          "list_placeholder": "!abc:matrix.org"
+        },
+        "mattermost": {
+          "option": {
+            "allowed_users": {
+              "label": "People who skip approval",
+              "help": "Mattermost user ids. Anyone else gets a pairing code."
+            },
+            "require_mention": {
+              "label": "In channels: answer only when mentioned",
+              "help": "In channels it answers only a message that @mentions it. DMs are not affected."
+            },
+            "home_channel": {
+              "label": "Home channel",
+              "help": "Id of the channel scheduled results and notices go to."
+            }
+          },
+          "list_placeholder": "channelid1, channelid2"
+        },
+        "email": {
+          "option": {
+            "allowed_users": {
+              "label": "Addresses the agent answers",
+              "help": "Email addresses. Mail from anyone else is ignored and gets no pairing code."
+            },
+            "home_channel": {
+              "label": "Home address",
+              "help": "The address scheduled results and notices go to."
+            }
+          },
+          "section": {
+            "access": "Who may write to the agent",
+            "media": "Attachments"
+          },
+          "list_placeholder": "sara@example.com, ali@example.com"
+        }
+      },
+      "open": "Settings"
+    },
+    "wh": {
+      "title": "Webhooks",
+      "new": "New webhook",
+      "intro": "Let an outside service — GitHub, a form, a script — start this agent by sending a request to an address. Each webhook has its own prompt and secret.",
+      "public_note": "Outside services send to this hub's address ({origin}). They can reach it only if that address is open to the internet.",
+      "none": "No webhooks yet.",
+      "listener_online": "Listening",
+      "listener_unknown": "Starting",
+      "listener_offline": "Not listening",
+      "listener_error": "Error",
+      "listener_off": "Off",
+      "static": "From config.yaml",
+      "prompt_label": "Prompt:",
+      "prompt_empty": "(the whole request)",
+      "url": "Address",
+      "secret": "Secret",
+      "secret_global": "Signed with the listener's shared secret from config.yaml.",
+      "show_secret": "Show secret",
+      "hide_secret": "Hide secret",
+      "test": "Test",
+      "testing": "Testing…",
+      "test_accepted": "Accepted: the agent is running with this webhook's prompt. This test came from the hub itself, so it does not prove the public address.",
+      "test_refused": "The listener answered {status}. {reason}",
+      "delete": "Delete",
+      "delete_title": "Delete the webhook {name}?",
+      "delete_body": "Services that still send to its address will be refused.",
+      "new_title": "New webhook",
+      "new_intro": "A name for the address, and what the agent is asked when a request arrives.",
+      "name": "Name",
+      "name_hint": "Lowercase letters, digits, - and _. It is part of the address.",
+      "name_invalid": "Use lowercase letters, digits, - and _, starting with a letter or a digit.",
+      "name_taken": "A webhook with this name already exists.",
+      "prompt": "Prompt",
+      "prompt_hint": "{a.b} is replaced with that value of the request's JSON, {event_type} with the event, {__raw__} with the whole request. Leave it empty to send the whole request.",
+      "prompt_placeholder": "A new issue was opened: {issue.title}. Read it and suggest a label.",
+      "description": "Description (optional)",
+      "events": "Events (optional)",
+      "events_hint": "Only these events start the agent (GitHub's X-GitHub-Event, or event_type in the request). Empty takes every event.",
+      "deliver": "Send the answer to",
+      "deliver_log": "Nowhere — keep it in the agent's record",
+      "deliver_to": "{name} (its home chat)",
+      "create": "Create",
+      "copy_url": "Copy address",
+      "copy_secret": "Copy secret"
+    }
+  }
+}

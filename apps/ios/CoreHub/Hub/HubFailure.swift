@@ -29,6 +29,10 @@ struct HubFailure: Error, Equatable {
     var reason: String?
     /// `details.max_bytes` of a `413`: the most the hub takes.
     var maxBytes: Int?
+    /// `details.timezone`, where the hub names the zone it needs (a Hermes schedule's cron).
+    var timezone: String?
+    /// `details.message`: the words of whoever refused behind the hub (Hermes, Apple, Google).
+    var detailMessage: String?
 
     static let signedOut = HubFailure(kind: .signedOut, status: 401, code: "unauthorized", message: nil, operationID: nil, requestID: nil, detail: "")
 
@@ -69,6 +73,8 @@ struct HubFailure: Error, Equatable {
             )
             failure.reason = envelope?.details?.reason
             failure.maxBytes = envelope?.details?.max_bytes
+            failure.timezone = envelope?.details?.timezone
+            failure.detailMessage = envelope?.details?.message
             return failure
         }
         if error is URLError {
@@ -85,8 +91,10 @@ struct HubFailure: Error, Equatable {
             let request_id: String?
             let reason: String?
             let max_bytes: Int?
+            let timezone: String?
+            let message: String?
 
-            private enum Keys: String, CodingKey { case operationId, request_id, reason, max_bytes }
+            private enum Keys: String, CodingKey { case operationId, request_id, reason, max_bytes, timezone, message }
 
             /// Each field on its own: one of an unexpected type must not lose the others.
             init(from decoder: Decoder) throws {
@@ -95,6 +103,8 @@ struct HubFailure: Error, Equatable {
                 request_id = try? container.decodeIfPresent(String.self, forKey: .request_id)
                 reason = try? container.decodeIfPresent(String.self, forKey: .reason)
                 max_bytes = try? container.decodeIfPresent(Int.self, forKey: .max_bytes)
+                timezone = try? container.decodeIfPresent(String.self, forKey: .timezone)
+                message = try? container.decodeIfPresent(String.self, forKey: .message)
             }
         }
 

@@ -34,6 +34,10 @@ enum PendingItems {
 @Observable
 final class PendingModel {
     private(set) var items: [Approval] = []
+    /// Senders waiting to pair with the channel agent of the profile an admin is in (none for a member).
+    private(set) var pairing: [PendingPairing] = []
+    /// Everything that waits: the bell's count.
+    var count: Int { items.count + pairing.count }
     var actionError: String?
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var listener: UUID?
@@ -76,6 +80,41 @@ final class PendingModel {
             }
             items = PendingItems.merge(groups)
         }
+        refreshPairing()
+    }
+
+    /// `agents.listPairing` of the profile's channel agent, for an admin (the web's pending list).
+    func refreshPairing() {
+        guard let app else { return }
+        guard app.isAdmin, let agent = PairingRules.channelAgent(app.agents) else {
+            pairing = []
+            return
+        }
+        let profile = app.currentProfile
+        Task {
+            let list = try? await app.api.call { try await AgentsAPI.agentsListPairing(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
+            pairing = (list?.pending ?? []).map { PendingPairing(profile: profile, agentID: agent.id, request: $0) }
+        }
+    }
+
+    /// Approves or denies a sender from the sheet; the list is asked again either way.
+    func answer(_ item: PendingPairing, approve: Bool) async {
+        guard let app else { return }
+        do {
+            if approve {
+                _ = try await app.api.call {
+                    try await AgentsAPI.agentsApprovePairing(xHubProfile: item.profile, agentId: item.agentID, platform: item.request.platform, requestId: item.request.requestId, apiConfiguration: $0)
+                }
+            } else {
+                try await app.api.call {
+                    try await AgentsAPI.agentsDenyPairing(xHubProfile: item.profile, agentId: item.agentID, platform: item.request.platform, requestId: item.request.requestId, apiConfiguration: $0)
+                }
+            }
+            pairing.removeAll { $0.id == item.id }
+        } catch {
+            actionError = HubFailure(error).describe(app.l10n)
+        }
+        refreshPairing()
     }
 
     func respond(_ approval: Approval, decision: ApprovalDecision?, answer: String?) async {
@@ -106,8 +145,8 @@ struct PendingButton: View {
         Button(action: open) {
             ZStack(alignment: .topTrailing) {
                 LucideIcon(.bell, size: 20)
-                if !model.items.isEmpty {
-                    Text("\(model.items.count)")
+                if model.count > 0 {
+                    Text("\(model.count)")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Tone.accentText)
                         .padding(.horizontal, 4)
@@ -117,7 +156,7 @@ struct PendingButton: View {
             }
         }
         .accessibilityLabel(l10n("pending.title"))
-        .accessibilityValue(String(model.items.count))
+        .accessibilityValue(String(model.count))
         .accessibilityIdentifier("pending.open")
     }
 }
@@ -132,13 +171,15 @@ struct PendingSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Space.s4) {
-                if model.items.isEmpty {
+                if model.count == 0 {
                     Text(l10n("pending.empty"))
                         .foregroundStyle(Tone.textMuted)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Space.s8)
                 }
                 if let error = model.actionError { NoticeView(text: error, tone: .danger) }
+                // Senders waiting to pair (an admin's errand): approved or denied right here.
+                ForEach(model.pairing) { item in PairingRequestCard(item: item, model: model) }
                 ForEach(model.items, id: \.id) { approval in
                     VStack(alignment: .leading, spacing: Space.s2) {
                         HStack(spacing: Space.s2) {

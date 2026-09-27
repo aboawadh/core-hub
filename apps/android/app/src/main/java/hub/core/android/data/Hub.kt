@@ -4,6 +4,7 @@ import hub.core.client.api.AgentsApi
 import hub.core.client.api.AuditApi
 import hub.core.client.api.AuthApi
 import hub.core.client.api.DevicesApi
+import hub.core.client.api.JobsApi
 import hub.core.client.api.MetaApi
 import hub.core.client.api.ModelsApi
 import hub.core.client.api.NotifyApi
@@ -50,6 +51,8 @@ class HubApis(hub: String, client: OkHttpClient) {
     val updates = UpdatesApi(base, client)
     val devices = DevicesApi(base, client)
     val audit = AuditApi(base, client)
+    /** Jobs: an install, update or restart followed to its end. */
+    val jobs = JobsApi(base, client)
     /** Speech: whether the profile's STT / TTS providers are ready, transcribing, speaking. */
     val models = ModelsApi(base, client)
 }
@@ -63,6 +66,10 @@ data class HubError(
     val reason: String? = null,
     /** `details.max_bytes` of a `413`: the most the hub takes. */
     val maxBytes: Long? = null,
+    /** `details.timezone`, where the hub names the zone it needs (a Hermes schedule's cron). */
+    val timezone: String? = null,
+    /** `details.message`: the words of whoever refused behind the hub (Hermes, Apple, Google). */
+    val detailMessage: String? = null,
 ) : Exception(text ?: code) {
     val offline: Boolean get() = status == 0
 
@@ -85,12 +92,22 @@ data class HubError(
             return ((obj?.get("details") as? JsonObject)?.get("max_bytes") as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
         }
 
+        fun timezoneOf(body: String?): String? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("timezone") as? JsonPrimitive)?.contentOrNull
+        }
+
+        fun detailMessageOf(body: String?): String? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull
+        }
+
         fun from(error: Throwable): HubError = when (error) {
             is HubError -> error
             is ClientException -> {
                 val body = (error.response as? ClientError<*>)?.body as? String
                 val (code, text) = bodyFields(body)
-                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body))
+                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body), timezoneOf(body), detailMessageOf(body))
             }
             is ServerException -> {
                 val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)

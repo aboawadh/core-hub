@@ -1,15 +1,6 @@
 package hub.core.android
 
 import hub.core.android.ui.kit.ConfirmDialog
-import hub.core.android.ui.kit.ControlSize
-import hub.core.android.ui.kit.HubButton
-import hub.core.android.ui.kit.HubDialog
-import hub.core.android.ui.kit.HubIconButton
-import hub.core.android.ui.kit.HubMenu
-import hub.core.android.ui.kit.IconKind
-import hub.core.android.ui.kit.Lucide
-import hub.core.android.ui.kit.MenuItem
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import android.content.Context
@@ -18,7 +9,6 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,7 +18,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -59,6 +48,7 @@ import hub.core.android.ui.screens.SchedulesScreen
 import hub.core.android.ui.screens.SearchScreen
 import hub.core.android.ui.screens.SettingsPageScreen
 import hub.core.android.ui.screens.SettingsScreen
+import hub.core.android.ui.screens.NewTaskButton
 import hub.core.android.ui.screens.TasksScreen
 import hub.core.android.phone.PushPayload
 import hub.core.android.phone.Share
@@ -68,24 +58,18 @@ import hub.core.android.ui.screens.TopBar
 import hub.core.android.ui.screens.term
 import hub.core.android.ui.theme.CoreHubTheme
 import hub.core.android.ui.theme.LocalTokens
-import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private var pendingPairing by mutableStateOf<PairingRequest?>(null)
     private var pendingPath by mutableStateOf<String?>(null)
 
-    /** The in-app language (the footer's language chip) wins over the phone's. */
+    /**
+     * The in-app language (the footer's language chip) wins over the phone's, and digits are
+     * Latin in both (DECISIONS §113) — also when the app follows an Arabic phone.
+     */
     override fun attachBaseContext(base: Context) {
         val language = (base.applicationContext as? CoreHubApp)?.graph?.prefs?.language
-        if (language == null) {
-            super.attachBaseContext(base)
-            return
-        }
-        val locale = Locale.forLanguageTag(language.tag)
-        val config = Configuration(base.resources.configuration)
-        config.setLocale(locale)
-        config.setLayoutDirection(locale)
-        super.attachBaseContext(base.createConfigurationContext(config))
+        super.attachBaseContext(Digits.wrap(base, language))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -211,7 +195,10 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
         when (route) {
             Route.NewChat -> {
                 // The page itself names the profile the chat will be made in (as on iOS).
-                TopBar(term("new_chat"), onMenu = openDrawer) { PendingButton(shell, nav) }
+                TopBar(term("new_chat"), onMenu = openDrawer) {
+                    PendingButton(shell, nav)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
+                }
                 // A newer Core Hub on GitHub: Update or Later, under the top bar (SelfUpdate.kt).
                 hub.core.android.phone.UpdateBanner(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 ChatScreen(null, s.profile, shell.profileName(s.profile), onCreated = { id, profile -> nav.go(Route.Chat(id, profile)) })
@@ -219,7 +206,9 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             is Route.Chat -> {
                 val chats by shell.chats.collectAsState()
                 val chat = chats.items.firstOrNull { it.id == route.sessionId }
-                val title = chat?.title ?: term("new_chat")
+                // The open chat's own title first: a rename shows even when the list filters it out.
+                val live by hub.core.android.ui.screens.rememberChatViewModel(route.sessionId, route.profile).ui.collectAsState()
+                val title = live.chat.session?.title ?: chat?.title ?: term("new_chat")
                 // The top bar names the conversation and wears its agent's face (as the web's header).
                 val agents = hub.core.android.ui.components.rememberAgents(route.profile)
                 val agent = agents.firstOrNull { it.id == chat?.agentId }
@@ -229,9 +218,19 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                         .joinToString(" · ").ifEmpty { null },
                 ) {
                     PendingButton(shell, nav)
-                    ExportButton(shell, route.sessionId, route.profile, title)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
+                    // The context ring and running subagents (apps batch 6); their sheets live here too.
+                    hub.core.android.ui.components.ChatInsightBar(route.sessionId, route.profile)
+                    hub.core.android.ui.screens.ChatMenuButton(
+                        shell, route.sessionId, route.profile, title,
+                        onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                        onGone = { nav.go(Route.NewChat) },
+                    )
                 }
-                ChatScreen(route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> })
+                ChatScreen(
+                    route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> },
+                    onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                )
             }
             is Route.Room -> {
                 RoomScreen(
@@ -239,7 +238,10 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                     subtitle = if (route.profile != s.profile) shell.profileName(route.profile) else null,
                     onMenu = openDrawer,
                     onGone = { nav.go(Route.NewChat) },
-                ) { PendingButton(shell, nav) }
+                ) {
+                    PendingButton(shell, nav)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
+                }
             }
             Route.Search -> {
                 TopBar(term("search"), onMenu = openDrawer)
@@ -256,7 +258,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 }
             }
             Route.Tasks -> {
-                TopBar(term("tasks"), onMenu = openDrawer)
+                TopBar(term("tasks"), onMenu = openDrawer) { NewTaskButton() }
                 TasksScreen(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             Route.Schedules -> {
@@ -293,39 +295,3 @@ fun titleOf(route: Route): String = when (route) {
     else -> route.destination
 }
 
-/**
- * The conversation's «⋮»: Export, which asks the hub for the chat's Markdown transcript
- * (`sessions.export`) and hands it to the share sheet.
- */
-@Composable
-private fun ExportButton(shell: ShellViewModel, sessionId: String, profile: String, title: String) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var failed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.foundation.layout.Box {
-        HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { open = true }, kind = IconKind.Glass, modifier = Modifier.testTag("chat.more"))
-        HubMenu(open, { open = false }) {
-            MenuItem(
-                stringResource(R.string.chat_export), {
-                    open = false
-                    scope.launch {
-                        val file = shell.exportChat(context, sessionId, profile, title)
-                        if (file == null) failed = true
-                        else hub.core.android.ui.components.AttachmentFiles.share(context, file, "text/markdown")
-                    }
-                },
-                icon = Lucide.Share2,
-                modifier = Modifier.testTag("chat.export"),
-            )
-        }
-    }
-    if (failed) {
-        HubDialog({ failed = false }) {
-            Text(stringResource(R.string.chat_export_failed))
-            androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
-                HubButton(stringResource(R.string.ok), { failed = false }, size = ControlSize.Md)
-            }
-        }
-    }
-}

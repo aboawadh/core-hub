@@ -26,9 +26,16 @@ data class ChatAttachment(
     /** The hub's id for its bytes (`sessions.downloadAttachment`); null for a block without a file. */
     val attachmentId: String? = null,
     val mime: String? = null,
+    val sizeBytes: Long? = null,
 ) {
-    /** A picture is drawn in the message; anything else is its name (web: #154). */
-    val isImage: Boolean get() = kind == ContentBlock.Type.IMAGE && attachmentId != null
+    /**
+     * A picture is drawn in the message, whether it came as an image or as a file (a photo sent at
+     * original quality); anything else is a row that opens it.
+     */
+    val isImage: Boolean get() = attachmentId != null && (
+        FileKinds.openAs(name.orEmpty(), mime) == FileOpen.PICTURE ||
+            (kind == ContentBlock.Type.IMAGE && FileKinds.mimeOf(name.orEmpty(), mime) == "application/octet-stream")
+        )
 }
 
 /** One message as the transcript draws it. The text is the concatenation of its text blocks. */
@@ -61,7 +68,7 @@ data class ChatMessage(
             reasoningMs = message.reasoning?.durationMs,
             toolCalls = message.toolCalls,
             attachments = message.content.filter { it.type != ContentBlock.Type.TEXT && it.type != ContentBlock.Type.LOCATION }
-                .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime) },
+                .map { ChatAttachment(it.type, it.name, it.url, it.attachmentId, it.mime, it.sizeBytes) },
             runId = message.runId,
             streaming = message.status == hub.core.client.model.MessageStatus.STREAMING,
             authorId = message.author.id,
@@ -69,8 +76,27 @@ data class ChatMessage(
     }
 }
 
-/** The session's header facts the chat screen needs. */
-data class ChatSessionInfo(val id: String, val profile: String, val title: String?, val agentId: String)
+/** The session's header facts the chat screen needs, and what its controls read (apps batch 1). */
+data class ChatSessionInfo(
+    val id: String,
+    val profile: String,
+    val title: String?,
+    val agentId: String,
+    val model: String? = null,
+    val pinned: Boolean = false,
+    val archived: Boolean = false,
+    val globalAgent: Boolean = false,
+    val workingDir: String? = null,
+    /** How full the model's window is, as the agent reported it (the context ring, apps batch 6). */
+    val context: hub.core.client.model.ContextUsage? = null,
+) {
+    companion object {
+        fun of(session: Session) = ChatSessionInfo(
+            session.id, session.profile, session.title, session.agentId, session.model, session.pinned, session.archived,
+            session.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, session.workingDir, session.context,
+        )
+    }
+}
 
 /**
  * The whole state of one open conversation. [lastSeq] is the highest `seq` seen on
@@ -111,12 +137,23 @@ object ChatReducer {
             state.messages.filter { m -> messages.none { it.id == m.id } && m.seq > (messages.maxOfOrNull { it.seq } ?: 0) }
                 .associateBy { it.id }).values.sortedBy { it.seq }
         return state.copy(
-            session = ChatSessionInfo(detail.id, detail.profile, detail.title, detail.agentId),
+            session = ChatSessionInfo(
+                detail.id, detail.profile, detail.title, detail.agentId, detail.model, detail.pinned, detail.archived,
+                detail.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, detail.workingDir, detail.context,
+            ),
             messages = merged,
             approvals = detail.pendingApprovals.filter { it.status == ApprovalStatus.PENDING }.associateBy { it.id },
             activeRun = active,
             runStartedAt = if (active == null) null else state.runStartedAt ?: active.startedAt?.toInstant()?.toEpochMilli() ?: now,
         )
+    }
+
+    /** The session as the hub has it now (an event, or the answer to a change made here). */
+    fun absorb(state: ChatState, session: Session): ChatState {
+        if (state.session != null && state.session.id != session.id) return state
+        // An update that does not carry the window keeps the one the agent reported last.
+        val info = ChatSessionInfo.of(session).let { if (it.context == null) it.copy(context = state.session?.context) else it }
+        return state.copy(session = info)
     }
 
     /** Older messages read while scrolling back; they go before what is shown. */
@@ -166,8 +203,9 @@ object ChatReducer {
                 if (it.status == ApprovalStatus.PENDING) seen.copy(approvals = seen.approvals + (it.id to it)) else seen
             } ?: seen
             "approval.resolved" -> p.decode("approval", Approval.serializer())?.let { seen.copy(approvals = seen.approvals - it.id) } ?: seen
-            "session.updated" -> p.decode("session", Session.serializer())?.let {
-                seen.copy(session = session.copy(title = it.title, agentId = it.agentId))
+            "session.updated" -> p.decode("session", Session.serializer())?.let { absorb(seen, it) } ?: seen
+            "context.updated" -> p.decode("context", hub.core.client.model.ContextUsage.serializer())?.let { context ->
+                seen.copy(session = seen.session?.copy(context = context))
             } ?: seen
             else -> seen
         }

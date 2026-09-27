@@ -1,0 +1,27 @@
+{
+  "background": {
+    "title": "Background",
+    "open_count": "Running in the background: {n}",
+    "none": "Nothing is running.",
+    "none_body": "Chats, tasks, schedules, workflows, jobs and subagents appear here while they work.",
+    "finished": "Finished in the last 24 hours ({n})",
+    "stop": "Stop",
+    "open_item": "Open",
+    "untitled": "Untitled",
+    "kind": {
+      "chat_run": "Chat",
+      "task_run": "Task",
+      "schedule_run": "Schedule",
+      "workflow_run": "Workflow",
+      "job": "Job",
+      "subagent": "Subagent"
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "succeeded": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped"
+    }
+  }
+}

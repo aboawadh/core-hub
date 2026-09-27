@@ -19,6 +19,9 @@ final class ChatModel {
     private(set) var sending = false
     /// The last action that failed (send, stop, answer), in one sentence.
     var actionError: String?
+    /// The outcome of the last compress or steer, in one sentence (not an error).
+    var notice: String?
+    private(set) var compressing = false
     private(set) var loadingOlder = false
 
     let sessionID: String
@@ -180,14 +183,14 @@ final class ChatModel {
     }
 
     /// The person's words and the files they attached, as one run (web: `blocksFor`).
-    func send(_ message: OutgoingMessage) async {
+    func send(_ message: OutgoingMessage, replyTo: String? = nil) async {
         guard !message.isEmpty, let app else { return }
         sending = true
         actionError = nil
         defer { sending = false }
         let profile = profile
         let sessionID = sessionID
-        let run = RunCreate(content: message.blocks, when: .queue)
+        let run = RunCreate(content: message.blocks, when: .queue, replyToMessageId: replyTo)
         let key = ULID.make()
         do {
             _ = try await app.api.call {
@@ -249,6 +252,97 @@ final class ChatModel {
                 )
             }
             state.prependOlder(page)
+        } catch {
+            actionError = HubFailure(error).describe(l10n)
+        }
+    }
+}
+
+// MARK: - The chat's own actions (apps batch 1)
+
+extension ChatModel {
+    /// Rename, pin, archive and their undo: the hub's answer replaces what the screen shows.
+    @discardableResult
+    func change(_ patch: SessionPatch) async -> Bool {
+        guard let app else { return false }
+        do {
+            let session = try await ChatActions.update(app, id: sessionID, profile: profile, patch)
+            state.absorb(session)
+            return true
+        } catch {
+            actionError = HubFailure(error).describe(l10n)
+            return false
+        }
+    }
+
+    func rename(_ typed: String) async {
+        guard let title = ChatControls.renameTitle(typed) else { return }
+        await change(SessionPatch(title: title))
+    }
+
+    /// The chat's model from the profile's catalogue (`<provider>/<model>`); `nil` goes back to
+    /// the agent's default.
+    func setModel(_ value: String?) async {
+        guard value != state.model else { return }
+        await change(ChatControls.modelPatch(value))
+    }
+
+    func delete() async -> Bool {
+        guard let app else { return false }
+        do {
+            try await ChatActions.delete(app, id: sessionID, profile: profile)
+            state.deleted = true
+            return true
+        } catch {
+            actionError = HubFailure(error).describe(l10n)
+            return false
+        }
+    }
+
+    /// A new chat with this one's transcript up to `message` (all of it when nil).
+    func fork(at message: String? = nil) async -> Session? {
+        guard let app else { return nil }
+        do {
+            return try await ChatActions.fork(app, id: sessionID, profile: profile, at: message)
+        } catch {
+            actionError = HubFailure(error).describe(l10n)
+            return nil
+        }
+    }
+
+    /// `focus`: what the summary should keep in view (the context sheet, apps batch 6); empty is the whole chat.
+    func compress(focus: String = "") async {
+        guard let app, !compressing else { return }
+        compressing = true
+        notice = l10n("chat_controls.compressing")
+        defer { compressing = false }
+        do {
+            let result = try await ChatActions.compress(app, id: sessionID, profile: profile, focus: focus)
+            if let context = result.context { state.context = context }
+            let line = ChatControls.compressionText(ChatControls.compression(result))
+            notice = l10n(line.key, line.params)
+        } catch {
+            notice = nil
+            actionError = HubFailure(error).describe(l10n)
+        }
+    }
+
+    /// Guides the running reply with `text`; when it cannot take it, the words go as the next
+    /// message instead (what Hermes itself does with a steer that has no turn to join).
+    func steer(_ text: String) async {
+        guard let app else { return }
+        guard let run = state.activeRun else {
+            await send(OutgoingMessage(text: text))
+            return
+        }
+        do {
+            let result = try await ChatActions.steer(app, id: sessionID, profile: profile, run: run.id, text: text)
+            if result.status == .queued {
+                notice = l10n("chat_controls.steered")
+            } else {
+                notice = l10n("chat_controls.steer_queued")
+                await send(OutgoingMessage(text: text))
+            }
         } catch {
             actionError = HubFailure(error).describe(l10n)
         }

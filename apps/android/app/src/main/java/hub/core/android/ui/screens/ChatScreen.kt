@@ -71,12 +71,14 @@ fun ChatScreen(
     profile: String,
     profileName: String,
     onCreated: (String, String) -> Unit,
+    /** Opens another chat (a fork from a message); `null` offers no fork. */
+    onOpenChat: ((String, String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val vm: ChatViewModel = viewModel(key = "chat:${sessionId ?: "draft"}:$profile") {
-        ChatViewModel(context.graph, sessionId, profile)
-    }
+    val vm = rememberChatViewModel(sessionId, profile)
     val ui by vm.ui.collectAsState()
+    val signedIn by context.graph.store.session.collectAsState()
+    var replyTo by remember(sessionId) { mutableStateOf<hub.core.android.chat.ChatMessage?>(null) }
     var draft by rememberSaveable(sessionId) { mutableStateOf("") }
     if (sessionId == null) {
         // Text shared from another app lands in the new chat's draft, once.
@@ -93,6 +95,9 @@ fun ChatScreen(
             context.graph.sharedFiles.value = emptyList()
         }
     }
+    // A profile file the Files page made an attachment of lands in this chat's tray, ready (any chat).
+    val handedOff by context.graph.handOff.version.collectAsState()
+    LaunchedEffect(handedOff, profile) { context.graph.handOff.take(profile).forEach(vm.tray::addReady) }
     val chat = ui.chat
     val turns = remember(chat.messages) { Turns.group(chat.messages) }
     val listState = rememberLazyListState()
@@ -119,6 +124,16 @@ fun ChatScreen(
             previous = height
             if (shrunk > 0 && following) listState.scrollBy(shrunk.toFloat())
         }
+    }
+    // Copy, read aloud, reply and fork under each message of this chat (apps batch 1).
+    val chatAgent = agents.firstOrNull { it.id == chat.session?.agentId }
+    val globalAgent = chat.session?.globalAgent == true
+    val messageActions = remember(sessionId, onOpenChat, globalAgent) {
+        hub.core.android.ui.components.MessageActions(
+            speak = { vm.speak(it.text) },
+            reply = { replyTo = it },
+            fork = if (onOpenChat == null || globalAgent) null else { message -> vm.fork(message.id) { onOpenChat(it.id, it.profile) } },
+        )
     }
     val dismissKeyboard = rememberKeyboardDismisser()
     val dismissOnScroll = rememberDismissKeyboardOnScroll(dismissKeyboard)
@@ -152,13 +167,19 @@ fun ChatScreen(
                         val agent = if (turn.fromPerson) null else hub.core.android.ui.components.AgentIdentity.of(
                             turn.messages.first().authorId, turn.authorName, agents, agentFallback,
                         )
-                        TurnView(turn, youLabel, profile, agent = agent)
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            hub.core.android.ui.components.LocalChatSession provides sessionId,
+                            hub.core.android.ui.components.LocalMessageActions provides messageActions,
+                        ) {
+                            TurnView(turn, youLabel, profile, agent = agent)
+                        }
                     }
                 }
             }
         }
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ui.error?.let { ErrorNotice(it) }
+            ui.notice?.let { hub.core.android.ui.components.ChatNoticeLine(it, vm::dismissNotice) }
             chat.failure?.let { Notice(it.ifBlank { stringResource(R.string.chat_run_failed) }, Tone.DANGER) }
             chat.decisions.forEach { approval -> ApprovalCard(approval) { vm.respond(approval, it, null) } }
             chat.question?.let { q ->
@@ -176,8 +197,10 @@ fun ChatScreen(
         val ready = files.any { it.state is AttachmentTray.State.Ready }
         val send = {
             val text = draft
+            val reply = replyTo?.id
             draft = ""
-            vm.send(text, onCreated)
+            replyTo = null
+            vm.send(text, onCreated, reply)
         }
         // The words appear in the draft while they are spoken; with Auto and no keyboard to go
         // by, the conversation's own language is the one listened in.
@@ -189,6 +212,36 @@ fun ChatScreen(
             onSend = send,
         )
         DictationStrip(dictation)
+        replyTo?.let { hub.core.android.ui.components.ReplyStrip(it) { replyTo = null } }
+        // The composer's chips (apps batch 1): a new chat's folder and model, a chat's model, the
+        // agent's approvals, and Steer while a reply runs.
+        val chipAgent = if (sessionId == null) ui.agentId else chat.session?.agentId
+        LaunchedEffect(chipAgent) { if (sessionId == null || chipAgent != null) vm.loadControls(chipAgent) }
+        val steerable = sessionId != null && chat.running && hub.core.client.model.AgentCapability.STEER in chatAgent?.capabilities.orEmpty()
+        hub.core.android.ui.components.ComposerChips(
+            models = ui.models,
+            modelsLoaded = ui.modelsLoaded,
+            model = if (sessionId == null) ui.draftModel else chat.session?.model,
+            onModel = vm::setModel,
+            approval = ui.approval,
+            isAdmin = signedIn?.user?.isAdmin == true,
+            onApproval = { value -> chipAgent?.let { vm.setApproval(it, value) } },
+            allowDefault = true,
+            folder = ui.draftFolder,
+            dirs = ui.dirs,
+            dirsError = ui.dirsError?.let { hub.core.android.ui.components.errorText(it) },
+            onFolder = if (sessionId == null) vm::setFolder else null,
+            onSteer = if (steerable) {
+                {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        draft = ""
+                        vm.steer(text)
+                    }
+                }
+            } else null,
+            steerReady = hub.core.android.chat.ChatControls.canSteer(chat.running, draft, chatAgent?.capabilities.orEmpty()),
+        )
         Composer(
             text = draft,
             onText = { draft = it },
@@ -245,6 +298,13 @@ private fun DraftIntro(profileName: String, profile: String, ui: ChatUi, onSelec
             }
         }
     }
+}
+
+/** The chat's view model, shared by its screen and its top bar's menu (the same key, the same instance). */
+@Composable
+fun rememberChatViewModel(sessionId: String?, profile: String): ChatViewModel {
+    val context = LocalContext.current
+    return viewModel(key = "chat:${sessionId ?: "draft"}:$profile") { ChatViewModel(context.graph, sessionId, profile) }
 }
 
 @Composable

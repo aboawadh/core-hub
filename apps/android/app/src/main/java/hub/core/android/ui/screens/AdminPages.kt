@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
@@ -58,7 +57,6 @@ import hub.core.android.ui.kit.EmptyState
 import hub.core.android.ui.kit.GroupedList
 import hub.core.android.ui.kit.HubButton
 import hub.core.android.ui.kit.HubCard
-import hub.core.android.ui.kit.HubCheckbox
 import hub.core.android.ui.kit.HubDialog
 import hub.core.android.ui.kit.HubIconButton
 import hub.core.android.ui.kit.HubMenu
@@ -83,10 +81,7 @@ import hub.core.client.model.NotifyPreferences
 import hub.core.client.model.NotifyPreferencesEventsValue
 import hub.core.client.model.Pairing
 import hub.core.client.model.PairingCreate
-import hub.core.client.model.User
-import hub.core.client.model.UserAdminPatch
 import hub.core.client.model.UserCreate
-import hub.core.client.model.UserStatus
 import kotlinx.coroutines.launch
 
 /** The admin pages' rules on the phone (Users, notification settings, devices, usage), apart from the screens. */
@@ -147,11 +142,6 @@ class AdminOps(private val apis: () -> HubApis?, val profile: String) {
         return hubCall { block(api) }
     }
 
-    suspend fun users() = call { it.auth.authListUsers(limit = 200).items }
-    suspend fun addUser(body: UserCreate) = call { it.auth.authCreateUser(body) }
-    suspend fun updateUser(id: String, patch: UserAdminPatch) = call { it.auth.authUpdateUser(id, patch) }
-    suspend fun deleteUser(id: String) = call { it.auth.authDeleteUser(id) }
-    suspend fun profiles() = call { it.auth.authListProfiles().items }
     suspend fun preferences() = call { it.notify.notifyGetPreferences() }
     suspend fun savePreferences(p: NotifyPreferences) = call { it.notify.notifySetPreferences(p) }
     suspend fun devices() = call { it.devices.devicesList(limit = 200).items }
@@ -169,124 +159,6 @@ private fun rememberAdminOps(profile: String): AdminOps {
 }
 
 private val pad = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)
-
-/** People: everyone on the hub, their role and state; add a person, make admin or member, disable, set a password, delete. */
-@Composable
-fun PeoplePage(profile: String, me: String) {
-    val ops = rememberAdminOps(profile)
-    val scope = rememberCoroutineScope()
-    val t = LocalTokens.current
-    val users = rememberLoad("people") { ops.users().getOrThrow() }
-    var adding by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf<String?>(null) }
-    var deleting by remember { mutableStateOf<User?>(null) }
-    var password by remember { mutableStateOf<User?>(null) }
-    var error by remember { mutableStateOf<HubError?>(null) }
-    fun act(r: Result<*>) { r.onFailure { error = it as HubError }.onSuccess { error = null }; users.reload() }
-    LoadView(users) { list ->
-        LazyColumn(contentPadding = pad, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("people.list")) {
-            item { ErrorNotice(error) }
-            item { HubButton(stringResource(R.string.people_add), { adding = true }, icon = Lucide.UserPlus, kind = ButtonKind.Subtle, size = ControlSize.Md, modifier = Modifier.testTag("people.add")) }
-            item {
-                GroupedList {
-                    list.forEach { u ->
-                        Item(
-                            u.displayName, subtitle = "@${u.username}", icon = Lucide.CircleUserRound, tag = "person.${u.username}",
-                            trailing = {
-                                if (u.status == UserStatus.DISABLED) Badge(stringResource(R.string.people_disabled), tone = BadgeTone.Warning)
-                                Badge(stringResource(roleLabel(u.role.value)), tone = if (u.role.value == "member") BadgeTone.Neutral else BadgeTone.Accent)
-                                if (u.role.value != "owner" && u.id != me) Box {
-                                    HubIconButton(Lucide.Ellipsis, stringResource(R.string.chat_more), { menu = u.id }, size = 32.dp, iconSize = 16.dp, modifier = Modifier.testTag("person.${u.username}.more"))
-                                    HubMenu(menu == u.id, { menu = null }) {
-                                        val admin = u.role.value == "admin"
-                                        MenuItem(stringResource(if (admin) R.string.people_make_member else R.string.people_make_admin), {
-                                            menu = null
-                                            scope.launch { act(ops.updateUser(u.id, UserAdminPatch(role = if (admin) UserAdminPatch.Role.MEMBER else UserAdminPatch.Role.ADMIN))) }
-                                        }, icon = Lucide.ShieldCheck)
-                                        MenuItem(stringResource(if (u.status == UserStatus.DISABLED) R.string.people_enable else R.string.people_disable), {
-                                            menu = null
-                                            scope.launch { act(ops.updateUser(u.id, UserAdminPatch(status = if (u.status == UserStatus.DISABLED) UserStatus.ACTIVE else UserStatus.DISABLED))) }
-                                        }, icon = Lucide.Power)
-                                        MenuItem(stringResource(R.string.people_set_password), { menu = null; password = u }, icon = Lucide.KeyRound)
-                                        MenuItem(stringResource(R.string.presets_delete), { menu = null; deleting = u }, icon = Lucide.Trash, danger = true)
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-            item { Text(stringResource(R.string.people_owner_note), fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
-        }
-    }
-    if (adding) AddPersonSheet(ops, onDone = { adding = false; users.reload() })
-    password?.let { u ->
-        var typed by remember(u.id) { mutableStateOf("") }
-        HubDialog({ password = null }, stringResource(R.string.people_password_for, u.displayName)) {
-            Text(stringResource(R.string.people_password_note), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
-            HubTextField(typed, { typed = it }, visualTransformation = PasswordVisualTransformation(), error = if (typed.isNotEmpty() && !AdminRules.passwordOk(typed)) stringResource(R.string.people_password_short) else null, fieldTag = "person.password")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                HubButton(stringResource(R.string.cancel), { password = null }, kind = ButtonKind.Secondary, size = ControlSize.Md)
-                HubButton(stringResource(R.string.save), { scope.launch { act(ops.updateUser(u.id, UserAdminPatch(password = typed))) }; password = null }, size = ControlSize.Md, enabled = AdminRules.passwordOk(typed))
-            }
-        }
-    }
-    deleting?.let { u ->
-        ConfirmDialog(
-            stringResource(R.string.people_delete_title, u.displayName), stringResource(R.string.people_delete_body), stringResource(R.string.presets_delete),
-            onConfirm = { scope.launch { act(ops.deleteUser(u.id)) }; deleting = null }, onDismiss = { deleting = null }, danger = true,
-        )
-    }
-}
-
-private fun roleLabel(role: String): Int = when (role) {
-    "owner" -> R.string.people_role_owner
-    "admin" -> R.string.people_role_admin
-    else -> R.string.people_role_member
-}
-
-@Composable
-private fun AddPersonSheet(ops: AdminOps, onDone: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val t = LocalTokens.current
-    val profiles = rememberLoad("profiles") { ops.profiles().getOrThrow() }
-    var username by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var admin by remember { mutableStateOf(false) }
-    var chosen by remember { mutableStateOf(listOf<String>()) }
-    var error by remember { mutableStateOf<HubError?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val body = AdminRules.create(username, name, password, admin, chosen)
-    HubSheet(onDismiss = onDone, title = stringResource(R.string.people_add)) {
-        ErrorNotice(error)
-        HubTextField(username, { username = it.lowercase() }, label = stringResource(R.string.people_username), placeholder = stringResource(R.string.people_username_hint), mono = true, size = ControlSize.Md,
-            error = if (username.isNotEmpty() && !AdminRules.usernameOk(username)) stringResource(R.string.people_username_bad) else null, fieldTag = "person.username")
-        HubTextField(name, { name = it }, label = stringResource(R.string.people_display_name), size = ControlSize.Md, fieldTag = "person.name")
-        HubTextField(password, { password = it }, label = stringResource(R.string.people_password), visualTransformation = PasswordVisualTransformation(), size = ControlSize.Md,
-            error = if (password.isNotEmpty() && !AdminRules.passwordOk(password)) stringResource(R.string.people_password_short) else null, fieldTag = "person.new_password")
-        Segmented(
-            listOf(Segment(false, stringResource(R.string.people_role_member)), Segment(true, stringResource(R.string.people_role_admin))),
-            admin, { admin = it }, Modifier.fillMaxWidth(), size = ControlSize.Sm,
-        )
-        Text(stringResource(if (admin) R.string.people_admin_can else R.string.people_member_can), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
-        if (!admin) {
-            LoadView(profiles) { list ->
-                GroupedList(title = stringResource(R.string.people_profiles)) {
-                    list.forEach { p ->
-                        Item(p.name, tag = "person.profile.${p.slug}", onClick = { chosen = if (p.slug in chosen) chosen - p.slug else chosen + p.slug },
-                            trailing = { HubCheckbox(p.slug in chosen, null) })
-                    }
-                }
-            }
-        }
-        HubButton(stringResource(R.string.people_add), {
-            val b = body ?: return@HubButton
-            busy = true
-            scope.launch { ops.addUser(b).onSuccess { onDone() }.onFailure { error = it as HubError }; busy = false }
-        }, icon = Lucide.UserPlus, fill = true, loading = busy, enabled = body != null, modifier = Modifier.fillMaxWidth().testTag("person.create"))
-    }
-}
 
 /** The notification settings table: each kind of notice, in the app and as a push; and quiet hours. */
 @Composable
@@ -364,7 +236,7 @@ private fun qr(text: String, size: Int = 480): Bitmap? = runCatching {
  * push, remove.
  */
 @Composable
-fun DevicesPage(profile: String) {
+fun DevicesPage(profile: String, isAdmin: Boolean = false) {
     val context = LocalContext.current
     val ops = rememberAdminOps(profile)
     val scope = rememberCoroutineScope()
@@ -449,6 +321,8 @@ fun DevicesPage(profile: String) {
                 }
             }
         }
+        // The admin's push senders, folded at the bottom (the web's order, decision §81).
+        if (isAdmin) item { PushSendersSection(profile) }
     }
     renaming?.let { d ->
         var name by remember(d.id) { mutableStateOf(d.name) }
@@ -515,3 +389,6 @@ fun UsagePage(profile: String, isAdmin: Boolean) {
         }
     }
 }
+
+internal val deviceConnectionsPage = SettingsPageEntry("device_connections") { DevicesPage(it.session.profile, it.session.user.isAdmin) }
+internal val usagePage = SettingsPageEntry("usage") { UsagePage(it.session.profile, it.session.user.isAdmin) }

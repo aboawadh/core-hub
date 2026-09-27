@@ -80,6 +80,17 @@ final class L10nTests: XCTestCase {
         }
     }
 
+    // docs/clients/phone-pages.md: an area keeps its strings in `<area>.<lang>.json`, merged in; no key twice.
+    func testAreaCataloguesAreMergedAndNoKeyIsInTwoFiles() {
+        for language in AppLanguage.allCases {
+            let l10n = L10n(language, bundle: host)
+            XCTAssertTrue(l10n.has("kit.delete"), "kit.\(language.rawValue).json is not merged")
+            XCTAssertTrue(l10n.has("common.save"))
+            XCTAssertGreaterThan(L10n.catalogues(language, bundle: host).count, 1)
+            XCTAssertEqual(L10n.duplicates(language, bundle: host), [])
+        }
+    }
+
     func testEveryNavigationTermIsTheManifestsWord() throws {
         let manifest = try JSONSerialization.jsonObject(with: Fixture.repositoryFile("navigation", "json")) as! [String: Any]
         let terms = manifest["terms"] as! [String: [String: String]]

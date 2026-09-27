@@ -92,6 +92,10 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val pending: StateFlow<List<Approval>> = _pending.asStateFlow()
     private var pendingJob: Job? = null
 
+    /** Senders waiting to pair with the channel agent of the profile the admin is in (none for a member). */
+    private val _pairing = MutableStateFlow<List<PendingPairing>>(emptyList())
+    val pairing: StateFlow<List<PendingPairing>> = _pairing.asStateFlow()
+
     /** The chats list's batch mode: the chats selected (empty = not selecting). */
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
     val selected: StateFlow<Set<String>> = _selected.asStateFlow()
@@ -99,6 +103,9 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val batchError: StateFlow<String?> = _batchError.asStateFlow()
     private val _batchBusy = MutableStateFlow(false)
     val batchBusy: StateFlow<Boolean> = _batchBusy.asStateFlow()
+    /** The last one-chat action from the list (rename, pin, archive) that failed. */
+    private val _chatError = MutableStateFlow<HubError?>(null)
+    val chatError: StateFlow<HubError?> = _chatError.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -136,7 +143,8 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    private fun loadProfiles() {
+    /** The profiles again: after one is made, renamed, archived or imported (Settings → Profiles). */
+    fun loadProfiles() {
         val s = graph.store.current ?: return
         viewModelScope.launch {
             hubCall { graph.apis(s).auth.authListProfiles() }.onSuccess { page ->
@@ -224,6 +232,34 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
             }
             _pending.value = PendingList.merge(groups)
         }
+        refreshPairing()
+    }
+
+    /** `agents.listPairing` of the profile's channel agent, for an admin (the web's pending list). */
+    private fun refreshPairing() {
+        val s = graph.store.current ?: return
+        if (!s.user.isAdmin) { _pairing.value = emptyList(); return }
+        viewModelScope.launch {
+            val found = hubCall {
+                val agent = PairingRules.channelAgent(graph.apis(s).agents.agentsList(s.profile).items) ?: return@hubCall emptyList()
+                graph.apis(s).agents.agentsListPairing(s.profile, agent.id).pending.map { PendingPairing(s.profile, agent.id, it) }
+            }
+            _pairing.value = found.getOrNull().orEmpty()
+        }
+    }
+
+    /** Approves or denies a sender from the pending sheet; the list is asked again either way. */
+    suspend fun answerPairing(item: PendingPairing, approve: Boolean): Result<Unit> {
+        val s = graph.store.current ?: return Result.failure(HubError(401, "unauthorized", null))
+        val r = hubCall {
+            val agents = graph.apis(s).agents
+            if (approve) agents.agentsApprovePairing(item.profile, item.agentId, item.request.platform, item.request.requestId)
+            else agents.agentsDenyPairing(item.profile, item.agentId, item.request.platform, item.request.requestId)
+            Unit
+        }
+        if (r.isSuccess) _pairing.update { list -> list.filter { it.request.requestId != item.request.requestId } }
+        refreshPairing()
+        return r
     }
 
     /** Answers a waiting thing from the list; a `409` means it was answered elsewhere or expired. */
@@ -235,6 +271,24 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
             schedulePending()
         }
     }
+
+    /** One chat's rename, pin or archive from the list, in its own profile; the row follows the hub's answer. */
+    fun changeChat(session: Session, patch: hub.core.client.model.SessionPatch) {
+        val s = graph.store.current ?: return
+        viewModelScope.launch {
+            hubCall { hub.core.android.chat.ChatActions(graph.apis(s)).update(session.id, session.profile, patch) }
+                .onSuccess { updated -> _chatError.value = null; _chats.update { ChatsList.upsert(it, updated) } }
+                .onFailure { _chatError.value = it as HubError }
+        }
+    }
+
+    suspend fun deleteChat(session: Session): Result<Unit> {
+        val s = graph.store.current ?: return Result.failure(HubError(401, "unauthorized", null))
+        return hubCall { hub.core.android.chat.ChatActions(graph.apis(s)).delete(session.id, session.profile) }
+            .onSuccess { _chats.update { ChatsList.remove(it, session.id) }; _selected.update { it - session.id } }
+    }
+
+    fun dismissChatError() { _chatError.value = null }
 
     fun toggleSelected(id: String) = _selected.update { ChatsBatch.toggle(it, id) }
 

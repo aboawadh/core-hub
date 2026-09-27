@@ -71,7 +71,7 @@ ADR 0005 makes the profile an ambient filter. The header carries the profile
 because switching workspace must not require a lookup. There is no `?profile=`
 query form (the clients today send both, sometimes with different values).
 Global operations (`auth`, `updates`, `devices`, `notify`, `meta`, stubs) are
-marked `x-scope: global` and ignore the header.
+marked `x-scope: global` and ignore the header (the notify webhooks read it: §115).
 
 ## 5. The server mints every id; there are no client-side drafts
 
@@ -3514,3 +3514,149 @@ repository. Proposed, owner to confirm:
   list endpoint (§94). `.github/workflows/models-catalog-watch.yml` compares the file every Monday
   with CLI Proxy API's public catalogues and keeps one issue (label `models-catalog`) of ids seen
   there and not here, and ids here no source lists any more; it never edits the file or pushes.
+
+## 111. A turn's tool activity: a live window, then one folded row
+
+The owner, with an iPhone screenshot (2026-09-26): every tool the agent used was its own big card
+stacked above the answer (skill_view, vision_analyze, terminal, vision_analyze …) — noisy on the
+web, worse on the phone. He wants it like an activity view: while the agent works only the latest
+few steps, and when the turn ends one compact row that opens when the person wants to read them or
+see what failed; the answer stays the main thing on screen. No contract change: every client reads
+the `ToolCall`s it already has. Proposed, owner to confirm:
+
+- **The live window is 4 calls on the web and 2 on a phone** (iOS, Android). A call still running or
+  waiting for approval is always in view, and so is one that **failed**, until the turn ends — an
+  error never scrolls out of sight while the agent carries on. The rest are one «+k خطوات سابقة» /
+  "+k earlier steps" line that opens them and folds them back. A new step slides in and an old one
+  leaves with a fade; nothing moves under reduced motion on any platform.
+- **When the turn has ended** (the message is no longer streaming and no call runs or waits) every
+  call folds into **one row**: how many steps, how long, how many failed (in the danger colour, only
+  when some did) and the latest tools' names as small chips (three on the web, two on a phone). A
+  click or tap opens the full list with the same cards as before. What is open is per message and
+  never saved.
+- **"How long"** is the wall-clock time from the first call's start to the last call's end when
+  every call carries both; otherwise the calls' durations summed; otherwise nothing is shown.
+  Under a minute it reads «42 ث» / "42s", from a minute «1 د 05 ث» / "1m 05s", never below one
+  second.
+- The rule is one pure function per client — `toolActivity` (web), `ToolActivity` (Android and
+  iOS) — tested the same way on all three. The questions the agent asked (`clarify`) keep showing
+  as they do (web: `AnsweredQuestions`).
+
+## 112. The sidebar folds into a rail of icons; the Runtime card is one counted line; new speech-to-text rows start on gpt-transcribe
+
+The owner approved three parked web items on 2026-09-26: a ChatGPT-style sidebar that folds to
+icons, the Runtime checklist folded when there is nothing to read, and a successor for
+`whisper-1`, which OpenAI shuts down on 2027-02-26 (`gpt-transcribe` replaces it). Proposed, owner
+to confirm:
+
+- **The rail (web and desktop).** On a window at least 48rem wide the sidebar folds to a rail of
+  icons one large control wide, from a toggle in the brand row or `Ctrl+Shift+S` (`⌘⇧S` on a Mac —
+  ChatGPT's own shortcut for this; matched on the physical S key so an Arabic layout works). The
+  rail carries the same entries in the same order under the same keys — `rail`, then `chat` and
+  `rooms` as two icons that unfold the sidebar on their list, and inside Settings or an agent their
+  lists as icons — each row keeping its words as its accessible name and showing them as a tooltip
+  toward the page. The footer becomes one button (the person's initial and the connection dot)
+  whose menu holds Settings, the language, the theme, sign out and the version. The choice is this
+  browser's (`localStorage`, read in try/catch), not the account's. The width eases over the motion
+  token (instant under reduced motion), and in Arabic the rail is on the right. It adds no
+  destination and no entry; the phone drawer never folds. No contract change.
+- **The Runtime card.** When every check passes it is one line — «وقت التشغيل جاهز · الفحوص 4/4» /
+  "Runtime ready · 4/4 checks" — and the whole line is the button that opens the list. When any
+  fails it is open by itself, says how many passed («نجح 2 من 4 فحوص»), and lists the failing
+  checks first, each half in the order the steps happen in. The chat's failure notice still shows
+  only the failing checks.
+- **Speech-to-text default.** The `openai-stt` preset's model is `gpt-transcribe`. A preset's
+  settings are copied into a row once, when it is created, so only new rows take it: a row that
+  already holds `whisper-1`, or any model somebody chose, keeps it until a person changes it. The
+  OpenAI-compatible transcription adapter still asks for `whisper-1` when a row has no model at all,
+  which is what self-hosted Whisper servers answer to.
+
+## 113. Latin digits in every client, also in Arabic; the phone's profile chip sits in the drawer's footer
+
+Decided by the owner on 2026-09-26 (before the apps night), not proposed:
+
+- **Latin digits (123) everywhere.** Every client — web, desktop, iOS, Android, the CLI and the hub's
+  own messages — shows numbers, durations, sizes, dates and times, counts, percentages and version
+  numbers with Latin digits, in the Arabic UI too. Arabic words, plural forms and RTL stay («43 ث»,
+  «12 خطوة», «26 سبتمبر 2026»). Android was the odd one: it followed the Arabic locale's digits
+  («٤٣ ث» in the tool-activity row), while the web and iOS mostly showed Latin. It is done once per
+  client, on the locale used for formatting, not per screen: the web's `intlLocale` (`ar-u-nu-latn`
+  for every `Intl` formatter and `toLocale*String`, guarded by a test that reads the source), iOS's
+  `AppLanguage.locale` / `Locale.latinDigits` (`@numbers=latn`, and byte counts through
+  `ByteCountFormatStyle` with that locale instead of the phone's), Android's `Digits` (the
+  activity's configuration and the process default carry `-u-nu-latn`, so `stringResource`,
+  plurals, `String.format`, `Formatter` and `DateUtils` all agree — also when the app follows an
+  Arabic phone). The string catalogues hold no Arabic-Indic digits either; `pnpm i18n:check` fails
+  on one (the JSON catalogues and Android's `values-ar`). Content the person or the agent wrote is
+  shown as written.
+- **The phone's profile selector is a small chip in the drawer's footer**, beside the account name
+  and the connection dot (iOS and Android), opening the same picker; it left the top of the drawer.
+  Web and desktop keep it in the top bar. It stays what NAVIGATION.md rule 4 says: one concrete
+  profile, never «all», it switches `X-Hub-Profile` in place and never navigates. The header of an
+  agent's pages on iOS keeps its full-width selector, because those pages edit one profile.
+
+## 114. The generated phone clients send `null` when the contract asks for it
+
+Proposed on the apps night (2026-09-27) — owner to confirm. It changes no wire shape; it lets the
+Kotlin and Swift clients send what the contract already allows.
+
+The generated Kotlin client left every `null` out of a request (`explicitNulls = false`, so a PATCH
+built from a model does not clear fields it did not mean to touch) and the Swift one did the same
+(`encodeIfPresent`). So the phones could not say "set this to null" — back to the agent's default
+model (`SessionPatch.model: null`), give a chat's naming back to the hub (`title: null`, §26), clear a
+task's description — and a body whose schema **requires** a property that may be null was refused
+with 400: a schedule's `trigger` and `target` list every field as required, some of them null, so
+the phones' create, edit and next-run preview never passed the hub's contract check (batch 3 had
+patched it per app with a `ScheduleBodies` interceptor, now removed).
+
+The rule, read from the contract for every schema a JSON request body can hold (components, inline
+bodies, inline object properties and inline array items, `$ref` aliases followed):
+
+- a property that is **required and admits `null`** is always written, `null` when unset;
+- a property that is **optional and admits `null`** stays absent when unset (a PATCH still changes
+  only what it names), and is written as `null` only when the caller lists it in the model's
+  `sendNull` set — `SessionPatch(sendNull = setOf(SessionPatch.Clearable.MODEL))` in Kotlin,
+  `SessionPatch(sendNull: [.model])` in Swift. `Clearable` holds exactly those properties, so the
+  compiler refuses a field that cannot be cleared. A listed property that holds a value is sent with
+  its value;
+- read-only properties are never written; response decoding does not change.
+
+It is made by `packages/contracts/scripts/explicit-nulls.mjs` after generation, like the multipart
+and serializer patches: Swift models get `sendNull`/`Clearable` and an `encode(to:)` that writes
+`encodeNil` where the rule says (nested models encode themselves); Kotlin models implement
+`ExplicitNulls` (an interface written next to the client), whose `withExplicitNulls` puts the nulls
+back into the JSON tree, nested models, lists and maps included, and `ApiClient` sends every JSON
+body through it. The patch fails generation when a line it expects is not in the generator's output,
+and when a nullable property sits in an inline object it cannot name (make that object a component).
+
+Rejected: `explicitNulls = true` in Kotlin (every untouched field of a PATCH would clear what it did
+not name); a tri-state wrapper type per property (`NullEncodable` in the Swift generator, a
+`Patch<T>` in Kotlin), which changes the type of every nullable request field and every call site
+that builds one; and per-app interceptors that rewrite bodies after encoding (what batch 3 did), which
+each screen would have to know about.
+
+## 115. A notify webhook belongs to the profile its request names, and says so in the contract
+
+Proposed on the apps night (2026-09-27) — owner to confirm. The wire does not change: the header
+the hub already read is now declared.
+
+§4 listed `notify` among the global operations that ignore `X-Hub-Profile`, and the seven webhook
+operations (`notify.listWebhooks`, `createWebhook`, `updateWebhook`, `deleteWebhook`, `testWebhook`,
+`listWebhookDeliveries`, `redeliverWebhookDelivery`) were marked `x-scope: global` with no profile
+parameter. The hub did otherwise since §59: it stores each webhook in the profile of the request
+(`X-Hub-Profile`, `default` when absent) and finds it there again, so switching profiles lists a
+different set, and the web — whose client sends the header on every call — worked. The generated
+phone clients send only what an operation declares, so the phones listed and wrote the default
+profile's webhooks whatever profile they were in, until batch 10 added the header by hand (an OkHttp
+interceptor on Android, `customHeaders` on iOS).
+
+Now the seven operations declare `X-Hub-Profile` (the shared `Profile` parameter) and drop
+`x-scope: global`; the generated clients take the profile as their first argument like every other
+profile-scoped call, and the hand-added header is gone. On the hub the route's guard now resolves
+the profile before the handler (`requireWorkspace`), with the same answers as before: an unknown or
+forbidden slug is `404 profile_not_found`, and no header still means `default`. The event catalogue
+(`notify.listWebhookEvents`) stays global — it is the same in every profile — and so do the inbox and
+the notification preferences, which belong to the person.
+
+Rejected: keeping the interceptors (every client would have to know which global operations are
+secretly scoped), and a `?profile=` query form (§4 rejected it for all operations).

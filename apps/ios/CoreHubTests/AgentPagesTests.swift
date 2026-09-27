@@ -27,8 +27,14 @@ final class AgentPagesTests: XCTestCase {
         XCTAssertEqual(SettingValues.parse(choice, "fast"), .string("fast"))
         XCTAssertNil(SettingValues.parse(choice, "slow"))
         XCTAssertTrue(SettingValues.on(field(.toggle, value: .bool(true))))
-        XCTAssertFalse(SettingValues.editable(field(.json)))
-        XCTAssertTrue(SettingValues.editable(field(.secret)))
+        // A list is one item per line and JSON must parse (apps batch 9: no longer read-only on the phone).
+        XCTAssertEqual(SettingValues.parse(field(.list), "a\n\n b \n"), .array([.string("a"), .string("b")]))
+        XCTAssertEqual(SettingValues.parse(field(.json), "{\"x\": 3}"), .dictionary(["x": .int(3)]))
+        XCTAssertNil(SettingValues.parse(field(.json), "{x"))
+        XCTAssertEqual(SettingValues.typedText(field(.list, value: .array([.string("a"), .string("b")]))), "a\nb")
+        XCTAssertEqual(SettingValues.typedText(field(.secret, value: .string("shh"))), "")
+        XCTAssertTrue(SettingValues.multiline(field(.json)))
+        XCTAssertFalse(SettingValues.multiline(field(.secret)))
     }
 
     func testTokenAndCredentialPlatformsLinkHereAndACodeIsScannedFromTheWeb() {

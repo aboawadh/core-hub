@@ -148,6 +148,22 @@ struct TaskBoardView: View {
     @State private var blocking: (task: HubTask, drop: BoardLogic.Drop)?
     @State private var reason = ""
     @State private var focused: BoardLogic.ColumnID?
+    @State private var archiving: (task: HubTask, drop: BoardLogic.Drop)?
+    /// The task open on its own (TaskDetailView), and whether a new one is being written.
+    @State private var opened: OpenedTask?
+    @State private var creating = false
+    /// Tasks II (batch 5): the profile's projects and the one the board is narrowed to, the
+    /// projects sheet, and "Select" — the ticked cards and what is done to them all at once (§103).
+    @State private var projects: [Project] = []
+    @State private var projectFilter: String?
+    @State private var managing = false
+    @State private var selecting = false
+    @State private var ticked: Set<String> = []
+    @State private var bulkBusy = false
+    @State private var bulkNotice: String?
+    @State private var commenting = false
+    @State private var bulkText = ""
+    @State private var bulkDeleting = false
 
     var body: some View {
         Group {
@@ -161,8 +177,52 @@ struct TaskBoardView: View {
                 SkeletonList()
             }
         }
-        .task { await load() }
+        .task(id: projectFilter) { await load() }
+        .task { await loadProjects() }
         .refreshable { await load() }
+        .sheet(isPresented: $managing) {
+            ProjectsSheet(changed: { Task { await loadProjects(); await load() } })
+        }
+        .alert(l10n("tasks.bulk.comment_title", ["count": String(ticked.count)]), isPresented: $commenting) {
+            TextField(l10n("tasks.comments.placeholder"), text: $bulkText)
+            Button(l10n("tasks.comments.send")) {
+                let words = bulkText.trimmingCharacters(in: .whitespacesAndNewlines)
+                bulkText = ""
+                if !words.isEmpty { Task { await bulk(TaskBulkUpdatePatch(comment: words)) } }
+            }
+            .accessibilityIdentifier("dialog.confirm")
+            Button(l10n("common.cancel"), role: .cancel) { bulkText = "" }
+        }
+        .alert(l10n("tasks.bulk.delete_confirm", ["count": String(ticked.count)]), isPresented: $bulkDeleting) {
+            Button(l10n("common.cancel"), role: .cancel) {}
+            Button(l10n("kit.delete"), role: .destructive) { Task { await bulkDelete() } }
+                .accessibilityIdentifier("dialog.confirm")
+        } message: {
+            Text(l10n("kit.delete_body"))
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { creating = true } label: { LucideIcon(.plus, size: 20) }
+                    .accessibilityLabel(l10n("tasks.new_task"))
+                    .accessibilityIdentifier("tasks.new")
+            }
+        }
+        .sheet(item: $opened) { which in
+            TaskDetailView(task: which.task, openChat: openChat, changed: { Task { await load() } })
+        }
+        .sheet(isPresented: $creating) {
+            NewTaskSheet(created: { _ in Task { await load() } })
+        }
+        .alert(archiving.map { l10n("tasks.archive_confirm", ["title": $0.task.title]) } ?? "", isPresented: Binding(get: { archiving != nil }, set: { if !$0 { archiving = nil } })) {
+            Button(l10n("board.action_archive")) {
+                if let archiving {
+                    self.archiving = nil
+                    Task { await move(archiving.task, to: archiving.drop.to, reason: nil) }
+                }
+            }
+            .accessibilityIdentifier("dialog.confirm")
+            Button(l10n("common.cancel"), role: .cancel) { archiving = nil }
+        }
         .confirmationDialog(l10n("board.which"), isPresented: Binding(get: { choosing != nil }, set: { if !$0 { choosing = nil } }), titleVisibility: .visible) {
             if let choosing {
                 ForEach(choosing.options) { option in
@@ -201,6 +261,8 @@ struct TaskBoardView: View {
         let badges = Set(grouped.values.flatMap { $0 }.map(\.profile)).count > 1
         VStack(spacing: 0) {
             if let error { NoticeView(text: error, tone: .danger).padding(.horizontal, Space.s4) }
+            if let bulkNotice { NoticeView(text: bulkNotice, tone: .warning).padding(.horizontal, Space.s4) }
+            boardTools
             ScrollViewReader { proxy in
                 // The columns by name and count: a tap brings one into view, and a card dropped on
                 // one goes to that column.
@@ -236,6 +298,151 @@ struct TaskBoardView: View {
                 .scrollIndicators(.hidden)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if selecting { bulkBar }
+        }
+    }
+
+    // MARK: - Projects and selection (Tasks II)
+
+    /// The project filter, Select, and the projects sheet.
+    private var boardTools: some View {
+        HStack(spacing: Space.s2) {
+            if projects.count > 1 || projectFilter != nil {
+                Menu {
+                    Button { projectFilter = nil } label: { checkedLabel(l10n("tasks.filter.all"), projectFilter == nil) }
+                    ForEach(projects, id: \.id) { project in
+                        Button { projectFilter = project.id } label: { checkedLabel(project.name, projectFilter == project.id) }
+                    }
+                } label: {
+                    HStack(spacing: Space.s1) {
+                        LucideIcon(.listFilter, size: 14)
+                        Text(projects.first { $0.id == projectFilter }?.name ?? l10n("tasks.filter.all")).lineLimit(1)
+                    }
+                }
+                .buttonStyle(ChipButtonStyle(quiet: projectFilter == nil))
+                .accessibilityIdentifier("tasks.project_filter")
+            }
+            Spacer(minLength: 0)
+            Button {
+                selecting.toggle()
+                ticked = []
+                bulkNotice = nil
+            } label: {
+                Text(l10n(selecting ? "tasks.bulk.done" : "tasks.bulk.select"))
+            }
+            .buttonStyle(ChipButtonStyle(quiet: !selecting))
+            .accessibilityIdentifier("tasks.select")
+            Button { managing = true } label: { LucideIcon(.folder, size: 16) }
+                .buttonStyle(ChipButtonStyle(quiet: true))
+                .accessibilityLabel(l10n("tasks.projects.title"))
+                .accessibilityIdentifier("tasks.projects")
+        }
+        .padding(.horizontal, Space.s4)
+        .padding(.top, Space.s2)
+    }
+
+    @ViewBuilder
+    private func checkedLabel(_ title: String, _ on: Bool) -> some View {
+        if on { Label { Text(title) } icon: { Image(lucide: .check) } } else { Text(title) }
+    }
+
+    private var tickedTasks: [HubTask] {
+        (board?.columns ?? []).flatMap(\.tasks).filter { ticked.contains($0.id) }
+    }
+
+    /// What is done to every ticked card: a priority, the same comment, the archive, delete.
+    private var bulkBar: some View {
+        let chosen = tickedTasks
+        return HStack(spacing: Space.s3) {
+            Text(l10n("tasks.bulk.count", ["count": String(chosen.count)]))
+                .font(.system(size: FontSize.sizeSm, weight: .semibold))
+                .accessibilityIdentifier("tasks.bulk.count")
+            Spacer(minLength: 0)
+            if bulkBusy { ProgressView() }
+            Menu {
+                ForEach(TaskRules.priorities, id: \.self) { priority in
+                    Button(l10n("tasks.priority_\(priority.rawValue)")) { Task { await bulk(TaskBulkUpdatePatch(priority: priority)) } }
+                }
+            } label: {
+                LucideIcon(.gauge, size: 20)
+            }
+            .accessibilityLabel(l10n("tasks.bulk.priority"))
+            .accessibilityIdentifier("tasks.bulk.priority")
+            Button { commenting = true } label: { LucideIcon(.messagesSquare, size: 20) }
+                .accessibilityLabel(l10n("tasks.bulk.comment"))
+                .accessibilityIdentifier("tasks.bulk.comment")
+            if BulkRules.archivable(chosen) {
+                Button { Task { await bulk(TaskBulkUpdatePatch(archived: true)) } } label: { LucideIcon(.archive, size: 20) }
+                    .accessibilityLabel(l10n("tasks.bulk.archive"))
+                    .accessibilityIdentifier("tasks.bulk.archive")
+            }
+            Button(role: .destructive) { bulkDeleting = true } label: { LucideIcon(.trash, size: 20).foregroundStyle(Tone.danger) }
+                .accessibilityLabel(l10n("kit.delete"))
+                .accessibilityIdentifier("tasks.bulk.delete")
+        }
+        .disabled(chosen.isEmpty || bulkBusy)
+        .padding(.horizontal, Space.s4)
+        .padding(.vertical, Space.s3)
+        .background(.bar)
+        .accessibilityIdentifier("tasks.bulk.bar")
+    }
+
+    /// The same change on every ticked card, one call per profile they are in.
+    private func bulk(_ patch: TaskBulkUpdatePatch) async {
+        let calls = BulkRules.calls(tickedTasks)
+        bulkBusy = true
+        defer { bulkBusy = false }
+        var answers: [BulkResult] = []
+        do {
+            for call in calls {
+                let request = TaskBulkUpdate(taskIds: call.ids, patch: patch)
+                answers.append(try await app.api.call { try await TasksAPI.tasksBulkUpdateTasks(xHubProfile: call.profile, taskBulkUpdate: request, apiConfiguration: $0) })
+            }
+            error = nil
+        } catch {
+            self.error = HubFailure(error).describe(l10n)
+        }
+        settle(answers)
+        await load()
+    }
+
+    private func bulkDelete() async {
+        let calls = BulkRules.calls(tickedTasks)
+        bulkBusy = true
+        defer { bulkBusy = false }
+        var answers: [BulkResult] = []
+        do {
+            for call in calls {
+                let ids = BulkRules.idsParam(call.ids)
+                answers.append(try await app.api.call { try await TasksAPI.tasksBulkDeleteTasks(xHubProfile: call.profile, ids: ids, apiConfiguration: $0) })
+            }
+            error = nil
+        } catch {
+            self.error = HubFailure(error).describe(l10n)
+        }
+        settle(answers)
+        await load()
+    }
+
+    /// All went: the selection ends. Some were refused: they stay ticked, and the board says how many.
+    private func settle(_ answers: [BulkResult]) {
+        let (changed, refused) = BulkRules.tally(answers)
+        if refused > 0 {
+            let failed = Set(answers.flatMap(\.results).filter { !$0.ok }.map(\.id))
+            ticked = ticked.intersection(failed)
+            bulkNotice = l10n("tasks.bulk.refused", ["done": String(changed), "count": String(refused)])
+        } else if !answers.isEmpty {
+            ticked = []
+            bulkNotice = nil
+            selecting = false
+        }
+    }
+
+    private func loadProjects() async {
+        let profile = app.currentProfile
+        projects = (try? await app.api.call { try await TasksAPI.tasksListProjects(xHubProfile: profile, apiConfiguration: $0) }.items) ?? []
+        if let filter = projectFilter, !projects.contains(where: { $0.id == filter }) { projectFilter = nil }
     }
 
     @ViewBuilder
@@ -261,14 +468,30 @@ struct TaskBoardView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(Space.s2)
                         }
                         ForEach(tasks, id: \.id) { task in
-                            BoardCard(task: task, showProfile: badges, openChat: openChat, move: { status in Task { await move(task, to: status, reason: nil) } })
-                                .background(GeometryReader { g in
-                                    Color.clear.preference(key: CardFrames.self, value: [task.id: g.frame(in: .named(space))])
-                                })
-                                .draggable(task.id) {
+                            let card = BoardCard(
+                                task: task, showProfile: badges, openChat: openChat,
+                                open: {
+                                    if selecting {
+                                        if ticked.contains(task.id) { ticked.remove(task.id) } else { ticked.insert(task.id) }
+                                    } else {
+                                        opened = OpenedTask(task: task)
+                                    }
+                                },
+                                choose: { drop in start(drop, task: task) },
+                                selected: selecting ? ticked.contains(task.id) : nil
+                            )
+                            .background(GeometryReader { g in
+                                Color.clear.preference(key: CardFrames.self, value: [task.id: g.frame(in: .named(space))])
+                            })
+                            // While selecting, a card is ticked, not lifted.
+                            if selecting {
+                                card
+                            } else {
+                                card.draggable(task.id) {
                                     Text(task.title).font(.system(size: FontSize.sizeSm, weight: .semibold))
                                         .padding(Space.s3).background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.lg))
                                 }
+                            }
                         }
                         if archived > 0 {
                             Text(l10n("board.archived", ["count": String(archived)]))
@@ -328,6 +551,8 @@ struct TaskBoardView: View {
     private func start(_ option: BoardLogic.Drop, task: HubTask) {
         if option.transition.requiresReason {
             blocking = (task, option)
+        } else if option.transition.confirm {
+            archiving = (task, option)
         } else {
             Task { await move(task, to: option.to, reason: nil) }
         }
@@ -335,7 +560,8 @@ struct TaskBoardView: View {
 
     private func load() async {
         do {
-            board = try await app.api.call { try await TasksAPI.tasksGetColumns(profiles: .all, apiConfiguration: $0) }
+            let project = projectFilter
+            board = try await app.api.call { try await TasksAPI.tasksGetColumns(profiles: .all, projectId: project, apiConfiguration: $0) }
             error = nil
         } catch {
             self.error = HubFailure(error).describe(l10n)
@@ -368,13 +594,23 @@ struct BoardCard: View {
     let task: HubTask
     let showProfile: Bool
     let openChat: (_ sessionID: String, _ profile: String) -> Void
-    let move: (TaskStatus) -> Void
+    /// Opens the task on its own (TaskDetailView).
+    let open: () -> Void
+    /// A move from the card's menu means what the same drop would: a reason for a block, a yes to archive.
+    let choose: (BoardLogic.Drop) -> Void
+    /// While the board is selecting: whether this card is ticked (a tap ticks it); nil otherwise.
+    var selected: Bool? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s1) {
             HStack(alignment: .firstTextBaseline) {
+                if let selected {
+                    LucideIcon(selected ? .circleCheck : .circle, size: 18)
+                        .foregroundStyle(selected ? Tone.accent : Tone.textFaint)
+                        .accessibilityIdentifier("task.tick.\(task.id)")
+                }
                 Text(task.title)
                     .font(.system(size: FontSize.sizeMd, weight: .medium))
                     .foregroundStyle(Tone.text)
@@ -402,6 +638,15 @@ struct BoardCard: View {
                 if let assignee = task.assignee {
                     Text(assignee.name).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                 }
+                // The checklist, as the web's card counts it.
+                if task.subtaskCounts.total > 0 {
+                    HStack(spacing: 2) {
+                        LucideIcon(.listChecks, size: 12)
+                        Text("\(task.subtaskCounts.done)/\(task.subtaskCounts.total)")
+                    }
+                    .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    .accessibilityIdentifier("task.subtasks.\(task.id)")
+                }
             }
             if let reason = task.blockedReason ?? task.statusReason {
                 Text(reason).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted).lineLimit(2)
@@ -414,17 +659,30 @@ struct BoardCard: View {
         .padding(Space.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(Tone.border, lineWidth: 0.5))
+        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous).strokeBorder(selected == true ? Tone.accent : Tone.border, lineWidth: selected == true ? 1.5 : 0.5))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+        .accessibilityAddTraits(selected == true ? .isSelected : [])
+        .onTapGesture(perform: open)
         .contextMenu {
+            Button(l10n("tasks.detail.open"), action: open)
             if let sessionID = task.sessionId {
                 Button(l10n("tasks.open_chat")) { openChat(sessionID, task.profile) }
             }
-            Menu(l10n("tasks.move")) {
-                ForEach(TaskColumns.order.filter { $0 != task.status }, id: \.self) { status in
-                    Button(l10n("tasks.status_\(status.rawValue)")) { move(status) }
+            let moves = TaskRules.moves(from: task.status)
+            if !moves.isEmpty {
+                Menu(l10n("tasks.move")) {
+                    ForEach(moves) { drop in
+                        Button(l10n("board.action_\(drop.transition.action.rawValue)")) { choose(drop) }
+                    }
                 }
             }
         }
         .accessibilityIdentifier("task.card.\(task.id)")
     }
+}
+
+/// A task the board opened on its own (a sheet needs an identity; the generated task has none).
+struct OpenedTask: Identifiable {
+    let task: HubTask
+    var id: String { task.id }
 }

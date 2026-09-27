@@ -123,6 +123,8 @@ fun AgentsScreen(profile: String, onOpen: (Route) -> Unit) {
                             )
                         }
                     }
+                    // Install, update, restart and remove, followed to their end (apps batch 8).
+                    AgentCardActions(agent, profile, onChanged = agents.reload)
                 }
             }
         }

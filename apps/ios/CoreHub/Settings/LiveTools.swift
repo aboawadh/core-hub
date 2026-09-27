@@ -202,7 +202,7 @@ enum ToolsFormat {
 
     static func bytes(_ value: Int?) -> String {
         guard let value else { return "—" }
-        return ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
+        return ByteCount.text(Int64(value), style: .memory)
     }
 
     static func duration(_ seconds: Int?, language: AppLanguage) -> String {
@@ -444,4 +444,9 @@ private struct ProcessRow: View {
         .compactMap { $0 }
         .joined(separator: " · ")
     }
+}
+
+extension PhonePage {
+    static let logs = PhonePage(.logs) { _ in LogsPage() }
+    static let performance = PhonePage(.performance) { _ in PerformancePage() }
 }

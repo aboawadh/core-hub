@@ -15,6 +15,8 @@ struct RoomScreen: View {
     @State private var draft = ""
     @State private var tray: AttachmentTray?
     @State private var showingMembers = false
+    /// The room action asked from the «⋯» (a sheet or a question).
+    @State private var pending: RoomManage.Action?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +44,11 @@ struct RoomScreen: View {
                     .accessibilityLabel(l10n("rooms.members_title"))
                     .accessibilityIdentifier("room.members")
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                if model.load == .ready { RoomMenu(model: model, pending: $pending) }
+            }
         }
+        .roomManagement(model, pending: $pending)
         .sheet(isPresented: $showingMembers) {
             NavigationStack { RoomMembersSheet(model: model) }
         }
@@ -113,6 +119,7 @@ struct RoomScreen: View {
                     Task { await model.respond(approval, decision: decision, answer: answer) }
                 }
             }
+            HandoffStrip(model: model)
             ForEach(model.state.busySeats, id: \.id) { seat in
                 SeatActivity(seat: seat, step: model.state.step(of: seat)) {
                     Task { await model.stopSeat(seat) }
@@ -241,34 +248,31 @@ struct RoomMembersSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
+    @State private var seatEdit: SeatEdit?
+    @State private var removing: Seat?
+    @State private var leaving = false
 
     var body: some View {
         List {
-            Section(l10n("rooms.seats")) {
+            Section {
+                if model.state.seats.isEmpty {
+                    Text(l10n("rooms.manage.no_seats")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
+                }
                 ForEach(model.state.seats, id: \.id) { seat in
-                    HStack {
-                        AgentAvatar(
-                            identity: AgentIdentity.of(
-                                authorID: seat.agentId, shownName: seat.name,
-                                agents: app.agentDirectory.agents(model.profile), fallback: seat.name
-                            ),
-                            profile: model.profile,
-                            size: 28
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("@\(seat.name)").contentDirection(of: seat.name)
-                            if let description = seat.description, !description.isEmpty {
-                                Text(description)
-                                    .font(.system(size: FontSize.sizeXs))
-                                    .foregroundStyle(Tone.textMuted)
-                                    .contentDirection(of: description)
+                    seatRow(seat)
+                        .contextMenu { if model.state.canManage { seatActions(seat) } }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if model.state.canManage {
+                                Button(role: .destructive) { removing = seat } label: { LucideLabel(l10n("rooms.manage.seat_remove"), icon: .trash) }
                             }
                         }
-                        Spacer()
-                        if seat.id == model.state.leadSeatID { StatusPill(text: l10n("rooms.lead"), kind: .good) }
-                        if seat.status != .idle { StatusPill(text: l10n("rooms.status_\(seat.status.rawValue)")) }
-                    }
                 }
+                if model.state.canManage {
+                    Button { seatEdit = .add } label: { LucideLabel(l10n("rooms.manage.seat_add"), icon: .userPlus) }
+                        .accessibilityIdentifier("room.seat.add")
+                }
+            } header: {
+                Text(l10n("rooms.seats"))
             }
             Section(l10n("rooms.people")) {
                 ForEach(model.state.members, id: \.id) { member in
@@ -307,15 +311,40 @@ struct RoomMembersSheet: View {
             if let error = model.actionError {
                 NoticeView(text: error, tone: .danger)
             }
+            RoomMemorySection(model: model)
             if let mine = model.state.members.first(where: { $0.userId == model.me }), mine.role != .owner {
-                Button(l10n("rooms.leave"), role: .destructive) {
-                    Task {
-                        await model.leave()
-                        dismiss()
-                    }
-                }
-                .accessibilityIdentifier("room.leave")
+                Button(l10n("rooms.leave"), role: .destructive) { leaving = true }
+                    .accessibilityIdentifier("room.leave")
             }
+        }
+        .sheet(item: $seatEdit) { edit in SeatFormSheet(model: model, edit: edit) }
+        .alert(
+            removing.map { l10n("rooms.manage.seat_remove_title", ["name": $0.name]) } ?? "",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
+        ) {
+            Button(l10n("common.cancel"), role: .cancel) { removing = nil }
+            Button(l10n("rooms.manage.seat_remove"), role: .destructive) {
+                guard let seat = removing else { return }
+                removing = nil
+                Task {
+                    do { try await model.removeSeat(seat) } catch { model.actionError = HubFailure(error).describe(l10n) }
+                }
+            }
+            .accessibilityIdentifier("dialog.confirm")
+        } message: {
+            Text(l10n("rooms.manage.seat_remove_body"))
+        }
+        .alert(l10n("rooms.manage.leave_title"), isPresented: $leaving) {
+            Button(l10n("common.cancel"), role: .cancel) {}
+            Button(l10n("rooms.manage.leave"), role: .destructive) {
+                Task {
+                    await model.leave()
+                    dismiss()
+                }
+            }
+            .accessibilityIdentifier("dialog.confirm")
+        } message: {
+            Text(l10n("rooms.manage.leave_body", ["name": model.state.name]))
         }
         .navigationTitle(l10n("rooms.members_title"))
         .navigationBarTitleDisplayMode(.inline)
@@ -323,5 +352,55 @@ struct RoomMembersSheet: View {
             ToolbarItem(placement: .confirmationAction) { Button(l10n("common.close")) { dismiss() } }
         }
         .accessibilityIdentifier("room.members.sheet")
+    }
+
+    /// An agent's seat: its face, `@name`, role and model, the lead, what it is doing, and (for the
+    /// manager) its «⋯».
+    private func seatRow(_ seat: Seat) -> some View {
+        HStack {
+            AgentAvatar(
+                identity: AgentIdentity.of(
+                    authorID: seat.agentId, shownName: seat.name,
+                    agents: app.agentDirectory.agents(model.profile), fallback: seat.name
+                ),
+                profile: model.profile,
+                size: 28
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("@\(seat.name)").contentDirection(of: seat.name)
+                let line = RoomManage.seatLine(seat, defaultModel: l10n("rooms.manage.default_model"))
+                Text(line)
+                    .font(.system(size: FontSize.sizeXs))
+                    .foregroundStyle(Tone.textMuted)
+                    .lineLimit(2)
+                    .contentDirection(of: line)
+            }
+            Spacer()
+            if seat.id == model.state.leadSeatID { StatusPill(text: l10n("rooms.lead"), kind: .good) }
+            if seat.status != .idle { StatusPill(text: l10n("rooms.status_\(seat.status.rawValue)")) }
+            if model.state.canManage {
+                Menu { seatActions(seat) } label: {
+                    LucideIcon(.ellipsis, size: 18).foregroundStyle(Tone.textMuted).frame(width: 32, height: 32)
+                }
+                .accessibilityLabel(l10n("rooms.manage.more"))
+                .accessibilityIdentifier("room.seat.menu.\(seat.id)")
+            }
+        }
+        .accessibilityIdentifier("room.seat.row.\(seat.id)")
+    }
+
+    @ViewBuilder
+    private func seatActions(_ seat: Seat) -> some View {
+        Button { seatEdit = .edit(seat) } label: {
+            Label { Text(l10n("rooms.manage.seat_edit")) } icon: { Image(lucide: .pencil) }
+        }
+        if seat.id != model.state.leadSeatID {
+            Button { Task { await model.makeLead(seat) } } label: {
+                Label { Text(l10n("rooms.manage.make_lead")) } icon: { Image(lucide: .pin) }
+            }
+        }
+        Button(role: .destructive) { removing = seat } label: {
+            Label { Text(l10n("rooms.manage.seat_remove")) } icon: { Image(lucide: .trash) }
+        }
     }
 }

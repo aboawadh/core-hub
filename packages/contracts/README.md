@@ -11,3 +11,12 @@ The single source of truth for the Core Hub API (ADR 0003).
 
 Commands (from the repository root): `pnpm contracts:lint`, `pnpm contracts:generate`,
 `pnpm test --filter @corehub/contracts`.
+
+## Explicit `null` in the generated phone clients
+
+A request property that is required and may be `null` is always sent (`null` when unset); an
+optional one that may be `null` is sent as `null` only when listed in the model's `sendNull`
+(`SessionPatch(sendNull = setOf(SessionPatch.Clearable.MODEL))` in Kotlin,
+`SessionPatch(sendNull: [.model])` in Swift), and otherwise left out. `scripts/explicit-nulls.mjs`
+patches the generator's output after `generate:native` and fails loudly when that output changes
+shape. Contract decision §114.
