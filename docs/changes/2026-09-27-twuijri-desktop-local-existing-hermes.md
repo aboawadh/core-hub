@@ -173,7 +173,14 @@ $ eslint . && prettier --check .   → exit 0 (مجلد إعادة الإنتا�
 اختبار الدخان لسطح المكتب (`tests/smoke/desktop.spec.ts`، سطر الشاشة الأولى) يعمل على CI فقط (Electron + Xvfb).
 
 ### CI
-يُحدَّث بعد الدفع.
+على `2c755f8f` (PR #189) كل الفحوص نجحت:
+```
+CI (36316890402) success: Lint/typecheck/contracts/client tests/build, Server unit tests 1/3 2/3 3/3,
+  Web smoke journeys (Playwright), Desktop app smoke (Electron under Xvfb), Docker image /health,
+  db:generate + db:migrate (SQLite and PostgreSQL), graphify-out guard
+Desktop installers (36316890337) success: macos-latest, ubuntu-latest, windows-latest
+Change record (36316890430) success
+```
 
 ## المخاطر والرجوع
 - الربط يعتمد على تخطيط هرمز الداخلي (`installs/`): إن تغيّر، يصير الرابط بلا أثر ويرجع هرمز لسلوكه (بيئة خاصة).
