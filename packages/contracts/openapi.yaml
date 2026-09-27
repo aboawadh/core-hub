@@ -15498,9 +15498,10 @@ paths:
       operationId: notify.listWebhooks
       tags: [notify]
       summary: List outgoing webhooks (admin)
-      description: 'The webhooks of the profile in `X-Hub-Profile`: a webhook is kept in the profile it was registered from, and every webhook operation finds it there (decision §115).'
+      description: 'The webhooks of the profile in `X-Hub-Profile` (`default` when the header is absent): a webhook is kept in the profile it was registered from, and every webhook operation finds it there (decision §115).'
       parameters:
-        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/ProfileOptional'
+      x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -15547,7 +15548,8 @@ paths:
       summary: Register a webhook (admin)
       description: 'The hub then sends every subscribed event from the listed profiles as a `WebhookPayload`, signed `X-CoreHub-Signature: sha256=<hmac>` when `secret` is set (decisions §42, §59). A delivery is queued and sent in the background; a failed attempt is retried `max_retries` times with exponential backoff, each attempt within 10 s, and the address is checked again at each attempt.'
       parameters:
-        - $ref: '#/components/parameters/Profile'
+        - $ref: '#/components/parameters/ProfileOptional'
+      x-scope: global
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -15601,7 +15603,7 @@ paths:
           $ref: '#/components/responses/NotFound'
   /notify/webhooks/{webhook_id}:
     parameters:
-      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProfileOptional'
       - name: webhook_id
         in: path
         required: true
@@ -15611,6 +15613,7 @@ paths:
       operationId: notify.updateWebhook
       tags: [notify]
       summary: Edit a webhook (admin)
+      x-scope: global
       x-roles: [owner, admin]
       requestBody:
         required: true
@@ -15658,6 +15661,7 @@ paths:
       operationId: notify.deleteWebhook
       tags: [notify]
       summary: Remove a webhook (admin)
+      x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -15671,7 +15675,7 @@ paths:
           $ref: '#/components/responses/NotFound'
   /notify/webhooks/{webhook_id}/test:
     parameters:
-      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProfileOptional'
       - name: webhook_id
         in: path
         required: true
@@ -15681,6 +15685,7 @@ paths:
       operationId: notify.testWebhook
       tags: [notify]
       summary: Send a `webhook.test` delivery (admin)
+      x-scope: global
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.completed, job.failed]
       responses:
@@ -15700,7 +15705,7 @@ paths:
           $ref: '#/components/responses/NotFound'
   /notify/webhooks/{webhook_id}/deliveries:
     parameters:
-      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProfileOptional'
       - name: webhook_id
         in: path
         required: true
@@ -15711,6 +15716,7 @@ paths:
       tags: [notify]
       summary: The most recent deliveries of one webhook, newest first (admin)
       description: 'What the hub actually sent and what the endpoint answered. The payload is not returned: it may carry message text.'
+      x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       parameters:
@@ -15766,7 +15772,7 @@ paths:
           $ref: '#/components/responses/NotFound'
   /notify/webhooks/{webhook_id}/deliveries/{delivery_id}/redeliver:
     parameters:
-      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/ProfileOptional'
       - name: webhook_id
         in: path
         required: true
@@ -15782,6 +15788,7 @@ paths:
       tags: [notify]
       summary: Send a failed delivery again (admin)
       description: 'Queues a new delivery with the same body (decision §59) and answers it. Only a delivery that is `dead`, or `failed` with no retry pending, can be redelivered (`409 state_invalid` otherwise); the webhook must still exist.'
+      x-scope: global
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -17244,6 +17251,19 @@ components:
         admins may name any profile; a member only one they were explicitly given. Anything
         else is `404 profile_not_found`; for a member who has been given no profile at all,
         `details.reason` is `no_profile_granted`.
+      schema:
+        $ref: '#/components/schemas/ProfileSlug'
+      example: work
+    ProfileOptional:
+      name: X-Hub-Profile
+      in: header
+      required: false
+      description: |
+        Workspace (profile) slug the request is scoped to, as in `Profile`, for the operations that
+        worked without it before v1.1.3 (decision §115). Sent, it is honoured exactly like
+        `Profile`: an unknown slug, or one the caller may not enter, is `404 profile_not_found`.
+        Absent, the request behaves as those hubs answered it: a `profile` query value is read if
+        one is given (an undocumented form kept only for old scripts), otherwise `default`.
       schema:
         $ref: '#/components/schemas/ProfileSlug'
       example: work

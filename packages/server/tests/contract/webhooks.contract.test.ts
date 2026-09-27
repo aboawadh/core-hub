@@ -275,8 +275,14 @@ describe.skipIf(!doc)('contract: webhooks receive the events they subscribe to',
         ...(document.paths?.[op.path]?.parameters ?? []),
         ...(op.operation.parameters ?? []),
       ]);
-      expect(declared, operationId).toContain('#/components/parameters/Profile');
+      // Optional, not `Profile`: a client built for v1.1.2 sends no header (§115, ADR 0027).
+      expect(declared, operationId).toContain('#/components/parameters/ProfileOptional');
+      expect(declared, operationId).not.toContain('#/components/parameters/Profile"');
+      expect(op.operation['x-scope'], operationId).toBe('global');
     }
+    const optional = (document.components?.parameters as Record<string, { required?: boolean }>)
+      .ProfileOptional!;
+    expect(optional.required).toBe(false);
     await call('auth.createProfile', 201, { body: { slug: 'hooks-elsewhere', name: 'Elsewhere' } });
     const elsewhere = { 'X-Hub-Profile': 'hooks-elsewhere' };
     const made = await call('notify.createWebhook', 201, {

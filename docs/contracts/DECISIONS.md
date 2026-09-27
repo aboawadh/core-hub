@@ -71,7 +71,7 @@ ADR 0005 makes the profile an ambient filter. The header carries the profile
 because switching workspace must not require a lookup. There is no `?profile=`
 query form (the clients today send both, sometimes with different values).
 Global operations (`auth`, `updates`, `devices`, `notify`, `meta`, stubs) are
-marked `x-scope: global` and ignore the header (the notify webhooks read it: §115).
+marked `x-scope: global` and ignore the header (the notify webhooks read it when sent: §115).
 
 ## 5. The server mints every id; there are no client-side drafts
 
@@ -3660,6 +3660,17 @@ the notification preferences, which belong to the person.
 
 Rejected: keeping the interceptors (every client would have to know which global operations are
 secretly scoped), and a `?profile=` query form (§4 rejected it for all operations).
+
+**Amended 2026-09-27 (hotfix, compatibility rule — ADR 0027 when merged): the header is optional.**
+Making `X-Hub-Profile` required on these seven operations broke every client built for v1.1.2 (the
+older phone apps, the CLI, scripts), which send no header. They now reference `ProfileOptional`
+(`required: false`) and carry `x-scope: global` again, as in v1.1.2; `Profile` and every other
+operation are unchanged. Sent, the header is honoured as above (an unknown or forbidden slug is
+`404 profile_not_found`), so the generated clients — which pass it by name — keep their per-profile
+behaviour. Absent, the request is answered exactly as v1.1.2 answered it: from a `?profile=` value
+when one is given (v1.1.2 read it here; v1.1.3 had silently dropped it, so such a script wrote into
+`default`), otherwise from `default`. The `?profile=` form stays undocumented as an input for new
+clients (§4); it is kept only so an old script keeps working.
 
 ## 116. An archive can replace the default profile; the old default is kept as `default-backup`
 

@@ -753,7 +753,8 @@ its approval.
   `plugins.list` is the only operation (no installer, switch or settings exists for hub plugins), and
   the empty state says so. **Webhooks** (notify, §59): the list in the profile you are in (the calls
   carry `X-Hub-Profile`, as the web's do; since the leftovers task the contract declares it on the
-  seven webhook operations, DECISIONS §115, and the phones pass it as the generated argument), on/off,
+  seven webhook operations, DECISIONS §115 — optional since the compatibility hotfix, so a client
+  built for v1.1.2 without it still lands in `default` — and the phones pass it by name), on/off,
   **send test** followed to its outcome, the recent deliveries (followed while one waits) with
   **redeliver** where it may, **add/edit** (address with the hub's refusal in words, private
   addresses, events from the catalogue with a filter, every profile or these, message text, retries,

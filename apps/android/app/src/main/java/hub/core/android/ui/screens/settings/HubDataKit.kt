@@ -73,18 +73,18 @@ class HubDataOps(private val profile: String, private val apis: () -> HubDataApi
             )
         }
 
-    suspend fun webhooks(): Result<List<Webhook>> = hubCall { apis().notify.notifyListWebhooks(profile).items }
+    suspend fun webhooks(): Result<List<Webhook>> = hubCall { apis().notify.notifyListWebhooks(xHubProfile = profile).items }
     suspend fun events(): Result<List<NotifyListWebhookEvents200ResponseItemsInner>> = hubCall { apis().notify.notifyListWebhookEvents().items }
-    suspend fun create(body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyCreateWebhook(profile, body) }
-    suspend fun update(id: String, body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyUpdateWebhook(profile, id, body) }
+    suspend fun create(body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyCreateWebhook(webhookWrite = body, xHubProfile = profile) }
+    suspend fun update(id: String, body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyUpdateWebhook(webhookId = id, webhookWrite = body, xHubProfile = profile) }
     suspend fun setEnabled(id: String, on: Boolean): Result<Webhook> = update(id, WebhookWrite(enabled = on, maxRetries = null))
-    suspend fun delete(id: String): Result<Unit> = hubCall { apis().notify.notifyDeleteWebhook(profile, id) }
-    suspend fun deliveries(id: String): Result<List<WebhookDelivery>> = hubCall { apis().notify.notifyListWebhookDeliveries(profile, id, 10).items }
-    suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(profile, id, delivery) }
+    suspend fun delete(id: String): Result<Unit> = hubCall { apis().notify.notifyDeleteWebhook(webhookId = id, xHubProfile = profile) }
+    suspend fun deliveries(id: String): Result<List<WebhookDelivery>> = hubCall { apis().notify.notifyListWebhookDeliveries(webhookId = id, xHubProfile = profile, limit = 10).items }
+    suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(webhookId = id, deliveryId = delivery, xHubProfile = profile) }
 
     /** Queues the test delivery and follows its job to the end (as the web polls it). */
     suspend fun test(id: String, pause: suspend () -> Unit = { kotlinx.coroutines.delay(700) }, tries: Int = 60): Result<NotifyWebhookRules.TestOutcome> = hubCall {
-        val jobId = apis().notify.notifyTestWebhook(profile, id).jobId
+        val jobId = apis().notify.notifyTestWebhook(webhookId = id, xHubProfile = profile).jobId
         var outcome: NotifyWebhookRules.TestOutcome? = null
         var left = tries
         while (outcome == null && left-- > 0) {

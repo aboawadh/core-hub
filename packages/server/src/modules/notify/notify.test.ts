@@ -438,3 +438,164 @@ describe('notify: webhooks', () => {
     }
   });
 });
+
+// Decision §115 as amended for the compatibility rule (ADR 0027): the seven webhook operations
+// declare `X-Hub-Profile` as optional. A client built for v1.1.2 sends no header and must be
+// answered exactly as v1.1.2 answered it: from `default`, or from a `?profile=` value.
+describe('notify: webhooks without X-Hub-Profile, as hubs before v1.1.3 answered them', () => {
+  type Hub = Awaited<ReturnType<typeof signedInHub>>;
+  /** A request with the token and nothing else: no `X-Hub-Profile`. */
+  const bare = (
+    hub: Hub,
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    url: string,
+    payload?: unknown,
+    headers: Record<string, string> = {},
+  ) =>
+    hub.app.inject({
+      method,
+      url,
+      ...(payload !== undefined ? { payload } : {}),
+      headers: { authorization: `Bearer ${hub.token}`, ...headers },
+    });
+  const ids = (response: { json(): unknown }) =>
+    (response.json() as { items: Json[] }).items.map((item) => item.id);
+
+  async function withOtherProfile(hub: Hub) {
+    const made = await bare(hub, 'POST', '/api/v1/profiles', { slug: 'other', name: 'Other' });
+    expect(made.statusCode).toBe(201);
+  }
+
+  it('answers all seven operations without the header, in the default profile', async () => {
+    overrideNotify({
+      resolveHost: dns,
+      fetchImpl: (async () => {
+        throw new Error('connection refused');
+      }) as unknown as typeof fetch,
+    });
+    const hub = await signedInHub();
+    try {
+      await withOtherProfile(hub);
+      const created = await bare(hub, 'POST', '/api/v1/notify/webhooks', hook);
+      expect(created.statusCode).toBe(201);
+      const id = (created.json() as Json).id as string;
+
+      // Stored in `default`: listed there with or without the header, not in another profile.
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks'))).toEqual([id]);
+      expect(
+        ids(await authed(hub, hub.token, { method: 'GET', url: '/api/v1/notify/webhooks' })),
+      ).toEqual([id]);
+      expect(
+        ids(
+          await authed(hub, hub.token, {
+            method: 'GET',
+            url: '/api/v1/notify/webhooks',
+            profile: 'other',
+          }),
+        ),
+      ).toEqual([]);
+
+      const patched = await bare(hub, 'PATCH', `/api/v1/notify/webhooks/${id}`, { name: 'CI 2' });
+      expect(patched.statusCode).toBe(200);
+      expect((patched.json() as Json).name).toBe('CI 2');
+
+      const test = await bare(hub, 'POST', `/api/v1/notify/webhooks/${id}/test`);
+      expect(test.statusCode).toBe(202);
+      await drainJobs(hub.app);
+
+      const deliveries = await bare(hub, 'GET', `/api/v1/notify/webhooks/${id}/deliveries`);
+      expect(deliveries.statusCode).toBe(200);
+      const delivery = (deliveries.json() as { items: Json[] }).items[0]!;
+      expect(delivery).toMatchObject({ webhook_id: id, status: 'failed' });
+
+      const again = await bare(
+        hub,
+        'POST',
+        `/api/v1/notify/webhooks/${id}/deliveries/${delivery.id as string}/redeliver`,
+      );
+      expect(again.statusCode).toBe(202);
+
+      expect((await bare(hub, 'DELETE', `/api/v1/notify/webhooks/${id}`)).statusCode).toBe(204);
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks'))).toEqual([]);
+    } finally {
+      overrideNotify({});
+      await hub.close();
+    }
+  });
+
+  it('uses the profile the header names, and only there', async () => {
+    overrideNotify({ resolveHost: dns });
+    const hub = await signedInHub();
+    try {
+      await withOtherProfile(hub);
+      const other = { 'x-hub-profile': 'other' };
+      const created = await bare(hub, 'POST', '/api/v1/notify/webhooks', hook, other);
+      expect(created.statusCode).toBe(201);
+      const id = (created.json() as Json).id as string;
+
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks', undefined, other))).toEqual([
+        id,
+      ]);
+      // Without the header it is `default`, where this webhook is not.
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks'))).toEqual([]);
+      expect((await bare(hub, 'DELETE', `/api/v1/notify/webhooks/${id}`)).statusCode).toBe(404);
+      expect(
+        (await bare(hub, 'DELETE', `/api/v1/notify/webhooks/${id}`, undefined, other)).statusCode,
+      ).toBe(204);
+    } finally {
+      overrideNotify({});
+      await hub.close();
+    }
+  });
+
+  it('reads a ?profile= value when the header is absent, as v1.1.2 did; the header wins', async () => {
+    overrideNotify({ resolveHost: dns });
+    const hub = await signedInHub();
+    try {
+      await withOtherProfile(hub);
+      const created = await bare(hub, 'POST', '/api/v1/notify/webhooks?profile=other', hook);
+      expect(created.statusCode).toBe(201);
+      const id = (created.json() as Json).id as string;
+
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks?profile=other'))).toEqual([id]);
+      expect(
+        ids(
+          await authed(hub, hub.token, {
+            method: 'GET',
+            url: '/api/v1/notify/webhooks',
+            profile: 'other',
+          }),
+        ),
+      ).toEqual([id]);
+      expect(ids(await bare(hub, 'GET', '/api/v1/notify/webhooks'))).toEqual([]);
+      // A header that is sent is what counts.
+      expect(
+        ids(
+          await bare(hub, 'GET', '/api/v1/notify/webhooks?profile=other', undefined, {
+            'x-hub-profile': 'default',
+          }),
+        ),
+      ).toEqual([]);
+    } finally {
+      overrideNotify({});
+      await hub.close();
+    }
+  });
+
+  it('answers 404 profile_not_found only for a profile that is named and does not exist', async () => {
+    const hub = await signedInHub();
+    try {
+      expect((await bare(hub, 'GET', '/api/v1/notify/webhooks')).statusCode).toBe(200);
+      const byHeader = await bare(hub, 'GET', '/api/v1/notify/webhooks', undefined, {
+        'x-hub-profile': 'nowhere',
+      });
+      expect(byHeader.statusCode).toBe(404);
+      expect(byHeader.json()).toMatchObject({ code: 'profile_not_found' });
+      const byQuery = await bare(hub, 'GET', '/api/v1/notify/webhooks?profile=nowhere');
+      expect(byQuery.statusCode).toBe(404);
+      expect(byQuery.json()).toMatchObject({ code: 'profile_not_found' });
+    } finally {
+      await hub.close();
+    }
+  });
+});
