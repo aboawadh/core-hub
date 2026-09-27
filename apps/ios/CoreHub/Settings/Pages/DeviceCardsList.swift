@@ -45,6 +45,8 @@ struct DeviceCardsList: View {
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }
+            // The admin's push senders, folded at the bottom (the web's order, decision §81).
+            if app.isAdmin { PushSendersSection() }
         }
         .task { await load() }
         .refreshable { await load() }
