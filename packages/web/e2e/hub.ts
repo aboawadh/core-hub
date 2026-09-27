@@ -1573,6 +1573,9 @@ const app = await buildServer({
     // 2026-09-28): FCM and APNs stay "not configured" here, as the push journey expects.
     COREHUB_PUSH_RELAY: 'off',
     ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
+    // The journeys never reach the real push relay the hub uses by default (DEFAULT_RELAY_URL):
+    // a phone sender stays "not configured" here, as it was before the relay was built in.
+    COREHUB_PUSH_RELAY: 'off',
     // The terminal journey's hub (playwright.config.ts): the owner's web terminal is on.
     ...(process.env.COREHUB_WEB_TERMINAL === '1' ? { COREHUB_WEB_TERMINAL: '1' } : {}),
   }),
