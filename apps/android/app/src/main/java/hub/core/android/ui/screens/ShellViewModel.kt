@@ -92,6 +92,10 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val pending: StateFlow<List<Approval>> = _pending.asStateFlow()
     private var pendingJob: Job? = null
 
+    /** Senders waiting to pair with the channel agent of the profile the admin is in (none for a member). */
+    private val _pairing = MutableStateFlow<List<PendingPairing>>(emptyList())
+    val pairing: StateFlow<List<PendingPairing>> = _pairing.asStateFlow()
+
     /** The chats list's batch mode: the chats selected (empty = not selecting). */
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
     val selected: StateFlow<Set<String>> = _selected.asStateFlow()
@@ -139,7 +143,8 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    private fun loadProfiles() {
+    /** The profiles again: after one is made, renamed, archived or imported (Settings → Profiles). */
+    fun loadProfiles() {
         val s = graph.store.current ?: return
         viewModelScope.launch {
             hubCall { graph.apis(s).auth.authListProfiles() }.onSuccess { page ->
@@ -227,6 +232,34 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
             }
             _pending.value = PendingList.merge(groups)
         }
+        refreshPairing()
+    }
+
+    /** `agents.listPairing` of the profile's channel agent, for an admin (the web's pending list). */
+    private fun refreshPairing() {
+        val s = graph.store.current ?: return
+        if (!s.user.isAdmin) { _pairing.value = emptyList(); return }
+        viewModelScope.launch {
+            val found = hubCall {
+                val agent = PairingRules.channelAgent(graph.apis(s).agents.agentsList(s.profile).items) ?: return@hubCall emptyList()
+                graph.apis(s).agents.agentsListPairing(s.profile, agent.id).pending.map { PendingPairing(s.profile, agent.id, it) }
+            }
+            _pairing.value = found.getOrNull().orEmpty()
+        }
+    }
+
+    /** Approves or denies a sender from the pending sheet; the list is asked again either way. */
+    suspend fun answerPairing(item: PendingPairing, approve: Boolean): Result<Unit> {
+        val s = graph.store.current ?: return Result.failure(HubError(401, "unauthorized", null))
+        val r = hubCall {
+            val agents = graph.apis(s).agents
+            if (approve) agents.agentsApprovePairing(item.profile, item.agentId, item.request.platform, item.request.requestId)
+            else agents.agentsDenyPairing(item.profile, item.agentId, item.request.platform, item.request.requestId)
+            Unit
+        }
+        if (r.isSuccess) _pairing.update { list -> list.filter { it.request.requestId != item.request.requestId } }
+        refreshPairing()
+        return r
     }
 
     /** Answers a waiting thing from the list; a `409` means it was answered elsewhere or expired. */

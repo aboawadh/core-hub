@@ -52,20 +52,22 @@ import hub.core.client.model.ApprovalKind
 @Composable
 fun PendingButton(shell: ShellViewModel, nav: Navigator) {
     val pending by shell.pending.collectAsState()
+    val pairing by shell.pairing.collectAsState()
+    val count = pending.size + pairing.size
     val profiles by shell.profiles.collectAsState()
     var open by remember { mutableStateOf(false) }
     val t = LocalTokens.current
     // The bell shows only while something waits (owner, 2026-09-27: a small mark, not another
     // permanent button); its count is the badge, its words are for TalkBack.
-    if (pending.isNotEmpty() || open) {
+    if (count > 0 || open) {
         Box {
             HubIconButton(
-                Lucide.Bell, stringResource(R.string.pending_count, pending.size), { shell.refreshPending(); open = true },
+                Lucide.Bell, stringResource(R.string.pending_count, count), { shell.refreshPending(); open = true },
                 kind = IconKind.Glass, modifier = Modifier.testTag("pending.open"),
             )
-            if (pending.isNotEmpty()) {
+            if (count > 0) {
                 Text(
-                    "${pending.size}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = t.accentText,
+                    "$count", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = t.accentText,
                     modifier = Modifier.align(Alignment.TopEnd).background(t.accent, CircleShape).padding(horizontal = 5.dp, vertical = 1.dp),
                 )
             }
@@ -77,7 +79,9 @@ fun PendingButton(shell: ShellViewModel, nav: Navigator) {
             Modifier.fillMaxWidth().heightIn(max = 560.dp).testTag("pending.sheet"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (pending.isEmpty()) item { EmptyState(stringResource(R.string.pending_empty), icon = Lucide.Inbox) }
+            if (count == 0) item { EmptyState(stringResource(R.string.pending_empty), icon = Lucide.Inbox) }
+            // Senders waiting to pair (an admin's errand): approved or denied right here.
+            items(pairing, key = { "pairing:" + it.request.platform + ":" + it.request.requestId }) { item -> PairingCard(shell, item) }
             items(pending, key = { it.id }) { approval ->
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

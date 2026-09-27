@@ -68,6 +68,8 @@ data class HubError(
     val maxBytes: Long? = null,
     /** `details.timezone`, where the hub names the zone it needs (a Hermes schedule's cron). */
     val timezone: String? = null,
+    /** `details.message`: the words of whoever refused behind the hub (Hermes, Apple, Google). */
+    val detailMessage: String? = null,
 ) : Exception(text ?: code) {
     val offline: Boolean get() = status == 0
 
@@ -95,12 +97,17 @@ data class HubError(
             return ((obj?.get("details") as? JsonObject)?.get("timezone") as? JsonPrimitive)?.contentOrNull
         }
 
+        fun detailMessageOf(body: String?): String? {
+            val obj = body?.let { runCatching { json.parseToJsonElement(it) as? JsonObject }.getOrNull() }
+            return ((obj?.get("details") as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull
+        }
+
         fun from(error: Throwable): HubError = when (error) {
             is HubError -> error
             is ClientException -> {
                 val body = (error.response as? ClientError<*>)?.body as? String
                 val (code, text) = bodyFields(body)
-                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body), timezoneOf(body))
+                HubError(error.statusCode, code, text, reasonOf(body), maxBytesOf(body), timezoneOf(body), detailMessageOf(body))
             }
             is ServerException -> {
                 val (code, text) = bodyFields((error.response as? ServerError<*>)?.body as? String)
