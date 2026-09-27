@@ -4,6 +4,7 @@ import hub.core.client.api.AgentsApi
 import hub.core.client.api.AuditApi
 import hub.core.client.api.AuthApi
 import hub.core.client.api.DevicesApi
+import hub.core.client.api.JobsApi
 import hub.core.client.api.MetaApi
 import hub.core.client.api.ModelsApi
 import hub.core.client.api.NotifyApi
@@ -50,6 +51,8 @@ class HubApis(hub: String, client: OkHttpClient) {
     val updates = UpdatesApi(base, client)
     val devices = DevicesApi(base, client)
     val audit = AuditApi(base, client)
+    /** Jobs: an install, update or restart followed to its end. */
+    val jobs = JobsApi(base, client)
     /** Speech: whether the profile's STT / TTS providers are ready, transcribing, speaking. */
     val models = ModelsApi(base, client)
 }
