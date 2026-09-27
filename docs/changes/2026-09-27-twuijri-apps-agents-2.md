@@ -1,5 +1,5 @@
 # الوكلاء II على الجوال: خوادم MCP وبطاقات الإعدادات والقنوات (الدفعة 9)
-المسؤول: twuijri · الفرع: night/apps-agents-2 · الحالة: in-progress
+المسؤول: twuijri · الفرع: night/apps-agents-2 · الحالة: done
 
 ## المشكلة والهدف
 قائمة الفجوات (الدفعة 9، 9a و9b) قالت: صفحة MCP في التطبيقين قائمة واختبار فقط (لا إضافة ولا تعديل ولا حذف ولا بطاقة
@@ -104,6 +104,10 @@ $ gh workflow run ios.yml --ref night/apps-agents-2   (run 36285941847، الا�
 `GITHUB_TOKEN` المحفوظ و«Other keys … timeout») و`android-channels.png` (سطر البوابة، بطاقة واتساب «مراسلة نفسي» مع ملاحظة إعادة
 التشغيل وزرها و«2 waiting — Review» و«Change mode»، بطاقة تيليجرام مع «Settings»، ويب هوك بعنوانه وسرّه المخفي، ولوحة إعدادات تيليجرام
 بأقسامها وافتراضاتها و«Also changes WhatsApp and other channels»).
+
+CI على #181 بعد الدفع (الالتزام `222c2d08`): كل الفحوص نجحت — Android build, unit tests, lint (7m59s)، Generate the Swift client
+وBuild and test on the iOS simulator (6m30s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys،
+Desktop smoke، Docker، Installers ×3، db:generate + db:migrate، Change record، graphify-out.
 
 ## المخاطر والرجوع
 - حقول `list`/`json` تُرسل الآن قيمًا منظّمة (مصفوفة/JSON) لا نصًا؛ لا محوّل في المركز يعلن هذين النوعين اليوم، فلم يُجرَّب مع مركز حقيقي.
