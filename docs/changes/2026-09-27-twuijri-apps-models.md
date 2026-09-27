@@ -1,5 +1,5 @@
 # إضافات صفحة النماذج في الجوال (الدفعة 15)
-المسؤول: twuijri · الفرع: night/apps-models · الحالة: in-progress
+المسؤول: twuijri · الفرع: night/apps-models · الحالة: done
 
 ## المشكلة والهدف
 صفحة النماذج في التطبيقين كانت أصلية لكن ناقصة عن صفحة الويب: لا تعديل للمزوّد (الاسم، العنوان، مفتاح جديد)، ولا
@@ -56,7 +56,23 @@ $ pnpm lint                    → All matched files use Prettier code style!
 ```
 صور الأندرويد: `apps/android/app/build/shots/models/android-{providers,defaults,speech,images}-{light-en,dark-ar}.png`
 (ورقة المزوّد نافذة مستقلة لا تظهر في الصورة؛ يتحقق الاختبار من ظهور ملاحظة «قائمة احتياطية» و«من حسابك» فيها).
-الآيفون لا يُبنى على لينكس: ينتظر مهمة iOS في CI.
+الآيفون على CI (`gh workflow run ios.yml --ref night/apps-models`): التشغيل الأول 36290793205 فشل بخطأ ترجمة واحد
+(`ModelsSpeech.swift:117: main actor-isolated property 'currentProfile'`) أصلحته بـ `@MainActor`؛ التشغيل 36291064858:
+```
+✓ Generate the Swift client (CoreHubClient)
+✓ Build and test on the iOS simulator
+Executed 302 tests, with 0 failures (0 unexpected)
+Test Case '-[CoreHubTests.ModelsExtrasTests testAPresetIsOfferedOncePerScopeAndAKeyOnFileMakesTheKeyOptional]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testACustomEndpointNeedsANameAndAnAddressAndSendsAKeyOnlyWhenTyped]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testEditingSendsWhatChangedAndAnEmptyKeyFieldKeepsTheKey]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testADisplayNameIsSetOrClearedAndItsModelStaysOnePathSegment]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testWhereAListCameFromIsSaid]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testTheImagesTabOffersOnlyModelsThatDrawOnProvidersThatDrawImageOnlyFirst]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testAChainSavedOnAnInheritedChatModelSavesThatModelToo]' passed
+Test Case '-[CoreHubTests.ModelsExtrasTests testALoopbackAddressOnAContainerisedHubIsCalledOutWithTheHostAlias]' passed
+```
+بعد دمج فرع الليلة (تغيّر العقد بمهمة leftovers): أعدت توليد العميلين، و`check-clients` و`i18n:check` نجحا،
+واختبارات الأندرويد نفسها (ModelsExtras/ModelsAdmin/StringsParity/NavigationParity/ModelsShots) بلا فشل.
 
 ## المخاطر والرجوع
 - كود Swift لم يُترجم محليًا؛ يعتمد على CI. الرجوع: `git revert` لالتزامات الفرع في فرع الليلة؛ لا عقد ولا بيانات.
