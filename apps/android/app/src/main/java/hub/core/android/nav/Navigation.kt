@@ -43,7 +43,7 @@ object Screens {
 
     /** The Settings list, in the manifest's order, as the phone's Settings page draws it. */
     val settingsTabs = listOf("account", "users", "webhooks", "display", "notifications", "privacy", "this_device", "about")
-    val settingsManagement = listOf("models", "device_connections", "knowledge")
+    val settingsManagement = listOf("models", "device_connections", "knowledge", "linked_hubs")
     val settingsTools = listOf(
         "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files",
     )
@@ -66,7 +66,7 @@ object Screens {
 
     /** Destinations only an owner or admin sees (`roles: ["admin"]`). */
     val adminOnly = setOf(
-        "agent_manager", "users", "webhooks", "logs", "performance", "workspaces", "updates", "plugins", "files",
+        "agent_manager", "users", "webhooks", "linked_hubs", "logs", "performance", "workspaces", "updates", "plugins", "files",
     ) + agentLevel
 
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */

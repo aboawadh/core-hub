@@ -129,9 +129,14 @@
     "library",
     "loader-circle",
     "message-square-text",
+    "network",
     "plug",
     "power",
+    "route",
+    "send",
     "shield",
+    "square-terminal",
+    "tag",
     "wand-sparkles"
   ]
 }

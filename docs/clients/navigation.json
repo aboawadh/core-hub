@@ -257,8 +257,8 @@
         "kind": "settings-management"
       },
       "roles": ["admin"],
-      "surfaces": ["web", "desktop"],
-      "note": "Other Core Hubs linked to this one (ADR 0026): invite, redeem an invite, approve, rename, switch off, limit, unlink; which agents linked hubs may ask; each peer's shared agents and one question to one of them; each peer's audit log. Owners and admins; not on the phones yet."
+      "surfaces": ["web", "desktop", "android"],
+      "note": "Other Core Hubs linked to this one (ADR 0026): invite, redeem an invite, approve, rename, switch off, limit, unlink; which agents linked hubs may ask; each peer's shared agents and one question to one of them; each peer's audit log. Owners and admins; on Android since 2026-09-27, not on iOS yet."
     },
     {
       "id": "chat",
@@ -774,6 +774,7 @@
       "new_chat": "/new",
       "search": "/search",
       "device_connections": "/settings/devices",
+      "linked_hubs": "/settings/linked-hubs",
       "agent_manager": "/agents",
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",

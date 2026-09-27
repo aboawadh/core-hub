@@ -45,7 +45,7 @@ object PageRegistry {
     /** Every Settings destination of the phone, in the manifest's order (tabs, management, tools). */
     val settings: List<SettingsPageEntry> = listOf(
         accountPage, usersPage, webhooksPage, displayPage, notificationsPage, privacyPage, thisDevicePage, aboutPage,
-        modelsPage, deviceConnectionsPage, knowledgePage,
+        modelsPage, deviceConnectionsPage, knowledgePage, linkedHubsPage,
         logsPage, usagePage, skillsUsagePage, performancePage, themePage, workspacesPage, updatesPage, hubPluginsPage, filesPage,
     )
 

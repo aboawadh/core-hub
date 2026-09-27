@@ -51,6 +51,7 @@ fun settingsIcon(destination: String): Int = when (destination) {
     "models" -> Lucide.Layers
     "device_connections" -> Lucide.QrCode
     "knowledge" -> Lucide.Library
+    "linked_hubs" -> Lucide.Network
     "logs" -> Lucide.FileSearch
     "usage" -> Lucide.ChartColumn
     "skills_usage" -> Lucide.WandSparkles
@@ -129,8 +130,7 @@ private fun OnTheWebRows() {
 /** Which web-only pages a role sees (navigation.json: the terminal is the owner's, linked hubs an admin's). */
 object WebOnly {
     fun rows(role: String): List<String> = when (role) {
-        "owner" -> listOf("linked_hubs", "terminal")
-        "admin" -> listOf("linked_hubs")
+        "owner" -> listOf("terminal")
         else -> emptyList()
     }
 }
