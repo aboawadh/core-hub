@@ -157,6 +157,19 @@ class FilesPageTest {
     private val textJson get() = """{"path":"notes/plan.md","content":"# Plan\n","etag":${json.encodeToString(kotlinx.serialization.serializer<String>(), textEtag)},
         "size_bytes":7,"modified_at":"2026-09-25T08:12:00Z"}"""
 
+    private val attachmentJson = """{"id":"01J8QK3ZR2W7M5N4P6T8V9X0AT","profile":"work","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HM",
+        "created_at":"2026-09-25T10:14:50Z","updated_at":"2026-09-25T10:14:50Z","name":"plan.md","mime":"text/markdown",
+        "size_bytes":7,"kind":"file","url":"https://hub.example/attachment","purpose":"message",
+        "width":null,"height":null,"duration_ms":null,"sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}"""
+
+    private fun sessionJson(id: String, source: String) =
+        """{"id":"$id","profile":"work","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HM","created_at":"2026-09-20T10:00:00Z",
+           "updated_at":"2026-09-20T10:00:00Z","agent_id":"01J8QK3ZR2W7M5N4P6T8V9X0AG","title":"Chat $id","source":"$source",
+           "origin":null,"channel":null,"model":null,"provider":null,"reasoning_effort":null,"working_dir":null,
+           "pinned":false,"archived":false,"category_id":null,"preview":null,"message_count":0,"usage":null,
+           "context":null,"status":"idle","active_run_id":null,"parent_session_id":null,"notify":false,
+           "last_message_at":"2026-09-21T10:00:00Z","match":null}"""
+
     @Before fun start() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -186,6 +199,10 @@ class FilesPageTest {
                         if (request.requestUrl!!.queryParameter("overwrite") == "true") ok(entryJson, 201)
                         else ok("""{"error":"A file of that name is there.","code":"conflict","details":{"reason":"exists"}}""", 409)
                     }
+                    path.endsWith("/workspace-files/attach") -> ok(attachmentJson, 201)
+                    path.endsWith("/sessions") && request.method == "GET" -> ok(
+                        """{"items":[${(1..10).joinToString(",") { sessionJson("01J8QK3ZR2W7M5N4P6T8V9X0S$it", if (it == 2) "global_agent" else "chat") }}],"next_cursor":null}""",
+                    )
                     path.endsWith("/workspace-files/archive") -> MockResponse().setHeader("Content-Type", "application/zip").setBody("PK-zip-bytes")
                     path.endsWith("/workspace-files/content") -> MockResponse().setHeader("Content-Type", "text/markdown").setBody("# Plan\n")
                     else -> MockResponse().setResponseCode(404)
@@ -200,6 +217,27 @@ class FilesPageTest {
     private val hub get() = server.url("/").toString().trimEnd('/')
     private fun ops() = FilesOps("work") { FilesApis(hub, OkHttpClient()) }
     private fun body(request: RecordedRequest) = json.parseToJsonElement(request.body.readUtf8()).jsonObject
+
+    @Test fun `attaching asks the hub to make the attachment, nothing is fetched or uploaded`() = runTest {
+        val attachment = ops().attach("notes/plan.md").getOrThrow()
+        assertEquals("01J8QK3ZR2W7M5N4P6T8V9X0AT", attachment.id)
+        assertEquals(1, requests.size)
+        assertEquals("POST", requests[0].method)
+        assertTrue(requests[0].requestUrl!!.encodedPath.endsWith("/workspace-files/attach"))
+        assertEquals("work", requests[0].getHeader("X-Hub-Profile"))
+        assertEquals("notes/plan.md", body(requests[0])["path"]!!.jsonPrimitive.content)
+        assertEquals(0, uploadsSeen)
+    }
+
+    @Test fun `attach offers this profile's recent chats, at most eight, without the global agent's`() = runTest {
+        val chats = ops().recentChats().getOrThrow()
+        assertEquals(FilesRules.RECENT_CHATS, chats.size)
+        assertFalse(chats.any { it.id.endsWith("S2") })
+        assertEquals("01J8QK3ZR2W7M5N4P6T8V9X0S1", chats.first().id)
+        assertEquals("work", requests[0].getHeader("X-Hub-Profile"))
+        assertEquals("false", requests[0].requestUrl!!.queryParameter("archived"))
+        assertNull(requests[0].requestUrl!!.queryParameter("profiles"))
+    }
 
     @Test fun `a folder is read in the profile, with its entries and limits`() = runTest {
         val folder = ops().folder("notes").getOrThrow()

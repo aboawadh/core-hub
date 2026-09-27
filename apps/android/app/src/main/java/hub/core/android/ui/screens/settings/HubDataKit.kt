@@ -40,22 +40,19 @@ import okhttp3.OkHttpClient
  */
 
 /**
- * The generated clients these pages call. The notify webhooks are `x-scope: global` in the contract
- * (no profile parameter), yet the hub keeps each webhook in the profile the request names, as the web
- * sends it; so their client carries the page's profile as a header of every call.
+ * The generated clients these pages call. The notify webhooks name their profile like every other
+ * profile-scoped call (DECISIONS §115: the contract declares `X-Hub-Profile` on them).
  */
-class HubDataApis(hub: String, client: OkHttpClient, profile: String) {
+class HubDataApis(hub: String, client: OkHttpClient) {
     private val base = apiBase(hub)
-    private val scoped = client.newBuilder()
-        .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header(PROFILE_HEADER, profile).build()) }
-        .build()
     val knowledge = KnowledgeApi(base, client)
     val plugins = PluginsApi(base, client)
     val audit = AuditApi(base, client)
-    val notify = NotifyApi(base, scoped)
+    val notify = NotifyApi(base, client)
     val jobs = JobsApi(base, client)
 
     companion object {
+        /** The header's name, for the admin pages' own scoped client (AdminKit.kt). */
         const val PROFILE_HEADER = "X-Hub-Profile"
     }
 }
@@ -76,18 +73,18 @@ class HubDataOps(private val profile: String, private val apis: () -> HubDataApi
             )
         }
 
-    suspend fun webhooks(): Result<List<Webhook>> = hubCall { apis().notify.notifyListWebhooks().items }
+    suspend fun webhooks(): Result<List<Webhook>> = hubCall { apis().notify.notifyListWebhooks(profile).items }
     suspend fun events(): Result<List<NotifyListWebhookEvents200ResponseItemsInner>> = hubCall { apis().notify.notifyListWebhookEvents().items }
-    suspend fun create(body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyCreateWebhook(body) }
-    suspend fun update(id: String, body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyUpdateWebhook(id, body) }
+    suspend fun create(body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyCreateWebhook(profile, body) }
+    suspend fun update(id: String, body: WebhookWrite): Result<Webhook> = hubCall { apis().notify.notifyUpdateWebhook(profile, id, body) }
     suspend fun setEnabled(id: String, on: Boolean): Result<Webhook> = update(id, WebhookWrite(enabled = on, maxRetries = null))
-    suspend fun delete(id: String): Result<Unit> = hubCall { apis().notify.notifyDeleteWebhook(id) }
-    suspend fun deliveries(id: String): Result<List<WebhookDelivery>> = hubCall { apis().notify.notifyListWebhookDeliveries(id, 10).items }
-    suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(id, delivery) }
+    suspend fun delete(id: String): Result<Unit> = hubCall { apis().notify.notifyDeleteWebhook(profile, id) }
+    suspend fun deliveries(id: String): Result<List<WebhookDelivery>> = hubCall { apis().notify.notifyListWebhookDeliveries(profile, id, 10).items }
+    suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(profile, id, delivery) }
 
     /** Queues the test delivery and follows its job to the end (as the web polls it). */
     suspend fun test(id: String, pause: suspend () -> Unit = { kotlinx.coroutines.delay(700) }, tries: Int = 60): Result<NotifyWebhookRules.TestOutcome> = hubCall {
-        val jobId = apis().notify.notifyTestWebhook(id).jobId
+        val jobId = apis().notify.notifyTestWebhook(profile, id).jobId
         var outcome: NotifyWebhookRules.TestOutcome? = null
         var left = tries
         while (outcome == null && left-- > 0) {

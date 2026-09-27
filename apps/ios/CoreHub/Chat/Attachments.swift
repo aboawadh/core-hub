@@ -259,6 +259,14 @@ final class AttachmentTray {
         }
     }
 
+    /// A file already on the hub (a profile file made an attachment, `AttachmentHandOff`): it shows
+    /// ready at once and goes with the next message like one picked here.
+    func addReady(_ attachment: Attachment) {
+        let known = items.contains { if case .ready(let a) = $0.state { return a.id == attachment.id } else { return false } }
+        guard !known else { return }
+        items.append(Item(name: attachment.name, isImage: attachment.kind == .image, preview: nil, state: .ready(attachment)))
+    }
+
     /// The chip's ×: the file does not go, and an uploaded one is deleted on the hub.
     func remove(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
@@ -280,6 +288,46 @@ final class AttachmentTray {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter.string(from: Date())
+    }
+}
+
+/// Files handed to the next composer that opens (the web's `attachments/handoff.ts`): «Attach to
+/// chat» on the Files page makes an attachment of a profile file on the hub
+/// (`knowledge.attachWorkspaceFile`), puts it here and opens a chat; that chat's composer takes it
+/// into its tray, ready to send. One slot, kept with its profile so a composer in another profile
+/// never picks it up, and dropped after `ttl` so a chat opened much later is not surprised.
+final class AttachmentHandOff {
+    /// How long a handed-off file waits for its composer (the web's `HANDOFF_TTL_MS`).
+    static let ttl: TimeInterval = 60
+
+    private struct Slot {
+        let profile: String
+        let attachments: [Attachment]
+        let at: Date
+    }
+
+    private var slot: Slot?
+    private let now: () -> Date
+
+    init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
+
+    /// Puts `attachments` in the slot for the composer that opens next in `profile`.
+    func put(_ profile: String, _ attachments: [Attachment]) {
+        slot = Slot(profile: profile, attachments: attachments, at: now())
+    }
+
+    /// What was handed to `profile`, once; empty when nothing was (or it expired).
+    func take(_ profile: String) -> [Attachment] {
+        guard let current = slot else { return [] }
+        if now().timeIntervalSince(current.at) > Self.ttl {
+            slot = nil
+            return []
+        }
+        guard current.profile == profile else { return [] }
+        slot = nil
+        return current.attachments
     }
 }
 

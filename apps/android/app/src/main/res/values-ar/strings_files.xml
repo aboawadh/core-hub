@@ -31,7 +31,7 @@
     <string name="files_page_save_to_phone">حفظ في الهاتف</string>
     <string name="files_page_share">مشاركة</string>
     <string name="files_page_share_zip">مشاركة مضغوطًا</string>
-    <string name="files_page_attach">إرفاق بمحادثة جديدة</string>
+    <string name="files_page_attach">إرفاق بمحادثة…</string>
     <string name="files_page_rename">إعادة تسمية</string>
     <string name="files_page_rename_title">إعادة تسمية «%1$s»</string>
     <string name="files_page_move">نقل</string>
@@ -65,4 +65,10 @@
     <string name="files_page_into_itself">لا يمكن نقل مجلد إلى داخل نفسه.</string>
     <string name="files_page_gone">لم يعد موجودًا.</string>
     <string name="files_page_failed">لم تنجح العملية: %1$s</string>
+    <string name="files_page_attach_title">إرفاق «%1$s» بمحادثة</string>
+    <string name="files_page_attach_body">ينسخ المركز الملف إلى المحادثة: ينتظر في صندوق الكتابة جاهزًا ليذهب مع رسالتك التالية. تعديله هنا لاحقًا لا يغيّر ما أُرفق.</string>
+    <string name="files_page_attach_new">محادثة جديدة</string>
+    <string name="files_page_attach_recent">محادثات هذا البروفايل الأخيرة</string>
+    <string name="files_page_attach_untitled">محادثة بلا عنوان</string>
+    <string name="files_page_attach_none">لا محادثات في هذا البروفايل بعد.</string>
 </resources>

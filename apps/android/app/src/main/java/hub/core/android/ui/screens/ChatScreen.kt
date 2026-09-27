@@ -95,6 +95,9 @@ fun ChatScreen(
             context.graph.sharedFiles.value = emptyList()
         }
     }
+    // A profile file the Files page made an attachment of lands in this chat's tray, ready (any chat).
+    val handedOff by context.graph.handOff.version.collectAsState()
+    LaunchedEffect(handedOff, profile) { context.graph.handOff.take(profile).forEach(vm.tray::addReady) }
     val chat = ui.chat
     val turns = remember(chat.messages) { Turns.group(chat.messages) }
     val listState = rememberLazyListState()

@@ -96,6 +96,8 @@ struct NewChatScreen: View {
             if tray == nil { tray = AttachmentTray(app: app) }
             if controls == nil { controls = ChatControlsModel(app: app) }
             if let seed, draft.isEmpty { draft = seed }
+            // A profile file the Files page made an attachment of: in the tray, ready.
+            if let tray { app.handOff.take(app.currentProfile).forEach { tray.addReady($0) } }
             if !seedFiles.isEmpty, let tray, tray.items.isEmpty {
                 for file in seedFiles {
                     tray.addFile(file, profile: app.currentProfile)

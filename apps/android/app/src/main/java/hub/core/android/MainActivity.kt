@@ -195,7 +195,10 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
         when (route) {
             Route.NewChat -> {
                 // The page itself names the profile the chat will be made in (as on iOS).
-                TopBar(term("new_chat"), onMenu = openDrawer) { PendingButton(shell, nav) }
+                TopBar(term("new_chat"), onMenu = openDrawer) {
+                    PendingButton(shell, nav)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
+                }
                 // A newer Core Hub on GitHub: Update or Later, under the top bar (SelfUpdate.kt).
                 hub.core.android.phone.UpdateBanner(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                 ChatScreen(null, s.profile, shell.profileName(s.profile), onCreated = { id, profile -> nav.go(Route.Chat(id, profile)) })
@@ -215,6 +218,7 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                         .joinToString(" · ").ifEmpty { null },
                 ) {
                     PendingButton(shell, nav)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
                     // The context ring and running subagents (apps batch 6); their sheets live here too.
                     hub.core.android.ui.components.ChatInsightBar(route.sessionId, route.profile)
                     hub.core.android.ui.screens.ChatMenuButton(
@@ -234,7 +238,10 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                     subtitle = if (route.profile != s.profile) shell.profileName(route.profile) else null,
                     onMenu = openDrawer,
                     onGone = { nav.go(Route.NewChat) },
-                ) { PendingButton(shell, nav) }
+                ) {
+                    PendingButton(shell, nav)
+                    hub.core.android.ui.screens.BackgroundButton(shell, nav)
+                }
             }
             Route.Search -> {
                 TopBar(term("search"), onMenu = openDrawer)

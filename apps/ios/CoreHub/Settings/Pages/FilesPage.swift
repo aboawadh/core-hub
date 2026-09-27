@@ -2,7 +2,8 @@
 // folder of the profile in the top chip, for its owner and admins. Browse by the folder trail, search
 // and sort the folder; open a file the way a chat's file opens (Quick Look, the player, the share
 // sheet — `FileOpener`), share or save it («Save to Files» in the share sheet), or attach it to a new
-// chat; upload files and photos with their progress; make a folder or a text file, rename, move,
+// or recent chat (made an attachment on the hub, handed to that chat's composer ready); upload
+// files and photos with their progress; make a folder or a text file, rename, move,
 // copy, delete (after a confirm); edit text with the save-conflict check. The rules and calls are
 // FilesRules.swift; the header and rows FilesViews.swift. Android's FilesPage.kt is the twin.
 import CoreHubClient
@@ -85,6 +86,7 @@ struct FilesPage: View {
     @State private var choosingFiles = false
     @State private var choosingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
+    @State private var attaching: FileItem?
 
     private var profile: String { app.currentProfile }
     private var ops: FilesOps { FilesOps(api: app.api, profile: profile) }
@@ -150,6 +152,14 @@ struct FilesPage: View {
         .fileOpener(opener)
         .onChange(of: FileDownloads.shared.states) { _, states in settle(states) }
         .sheet(item: $sharing) { item in ActivitySheet(items: [item.url]) }
+        .sheet(item: $attaching) { item in
+            FilesAttachSheet(entry: item.entry, ops: ops) { attachment, target in
+                attaching = nil
+                app.handOff.put(profile, [attachment])
+                app.pendingRoute = target
+            }
+            .presentationDetents([.medium, .large])
+        }
         .sheet(item: $editing, onDismiss: reopenIfAsked) { edit in editor(edit) }
         .sheet(item: $prompt, onDismiss: openNewFile) { prompt in promptSheet(prompt) }
         .confirmDelete($deleting, name: { $0.name }, delete: { [ops, l10n] entry in
@@ -291,21 +301,9 @@ struct FilesPage: View {
         }
     }
 
-    /// Handed to a new chat the way another app's share is: it lands in the composer's tray and uploads there.
+    /// «Attach to chat»: the hub makes the attachment, the chosen chat's composer takes it ready.
     private func attach(_ entry: WorkspaceFileEntry) {
-        withLocal(entry) { local in
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("files-\(UUID().uuidString)", isDirectory: true)
-            let copy = folder.appendingPathComponent(local.lastPathComponent)
-            do {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try FileManager.default.copyItem(at: local, to: copy)
-            } catch {
-                problem = FilesRules.say(error, l10n)
-                return
-            }
-            app.pendingFiles.append(copy)
-            if app.pendingDraft == nil { app.pendingDraft = "" }
-        }
+        attaching = FileItem(entry: entry)
     }
 
     private func shareZip(_ path: String) {

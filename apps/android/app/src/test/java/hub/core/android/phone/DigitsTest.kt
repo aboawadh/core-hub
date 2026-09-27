@@ -15,6 +15,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.Locale
 
 /**
@@ -63,6 +65,42 @@ class DigitsTest {
         assertEquals("43 ث", context.getString(R.string.tool_activity_seconds, 43))
         assertEquals("ar", Locale.getDefault().language)
         assertEquals("43", "%d".format(43))
+    }
+
+    @Test @Config(qualifiers = "en-rUS")
+    fun `Arabic chosen in the app on an English phone writes Arabic month names with Latin digits`() {
+        Locale.setDefault(Locale.forLanguageTag("en-US"))
+        Digits.wrap(ApplicationProvider.getApplicationContext(), AppLanguage.AR)
+        assertEquals("ar", Locale.getDefault().language)
+        // The phone's own language is still read as English (the language chip's «follow the phone»).
+        assertEquals(AppLanguage.EN, AppLanguage.system())
+        assertEquals("en", Digits.phoneLocales()[0].language)
+        val written = hub.core.android.ui.screens.localTime(OffsetDateTime.parse("2026-09-27T14:05:00Z"), ZoneOffset.UTC)
+        // Arabic's medium date is numeric; the time says «م» (PM) in Arabic, not «PM».
+        assertTrue("«$written» is written in Arabic", arabicLetter.containsMatchIn(written))
+        assertTrue(written, written.contains("2026") && written.contains("27"))
+        assertFalse("«$written» has English words", Regex("[A-Za-z]").containsMatchIn(written))
+        assertFalse("«$written» has Arabic-Indic digits", eastern.containsMatchIn(written))
+        val day = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", Locale.getDefault()).format(java.time.LocalDate.of(2026, 9, 27))
+        assertEquals("27 سبتمبر 2026", day)
+    }
+
+    @Test fun `English chosen in the app on an Arabic phone writes English month names`() {
+        Locale.setDefault(Locale.forLanguageTag("ar-SA"))
+        Digits.wrap(ApplicationProvider.getApplicationContext(), AppLanguage.EN)
+        assertEquals("en", Locale.getDefault().language)
+        assertEquals(AppLanguage.AR, AppLanguage.system())
+        val written = hub.core.android.ui.screens.localTime(OffsetDateTime.parse("2026-09-27T14:05:00Z"), ZoneOffset.UTC)
+        assertTrue(written, written.contains("Sep") && written.contains("2026"))
+        assertFalse(written, arabicLetter.containsMatchIn(written))
+    }
+
+    @Test fun `the app's language is the default before any screen opens`() {
+        Locale.setDefault(Locale.forLanguageTag("en-US"))
+        val used = Digits.useAppLocale(AppLanguage.AR)
+        assertEquals("ar", used.language)
+        assertEquals("latn", used.getUnicodeLocaleType("nu"))
+        assertEquals(used, Locale.getDefault())
     }
 
     @Test fun `English stays English`() {

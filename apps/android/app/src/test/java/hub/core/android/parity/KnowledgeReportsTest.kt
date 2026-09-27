@@ -215,7 +215,7 @@ class KnowledgeReportsTest {
 
     @After fun stop() = server.shutdown()
 
-    private fun ops() = HubDataOps("work") { HubDataApis(server.url("/").toString().trimEnd('/'), OkHttpClient(), "work") }
+    private fun ops() = HubDataOps("work") { HubDataApis(server.url("/").toString().trimEnd('/'), OkHttpClient()) }
     private fun body(request: RecordedRequest) = json.parseToJsonElement(request.body.readUtf8()).jsonObject
 
     @Test fun `knowledge asks for the kind, the search and the next page in the profile`() = runTest {

@@ -2,6 +2,7 @@ package hub.core.android
 
 import android.content.Context
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.os.LocaleList
 import java.util.Locale
 
@@ -24,13 +25,29 @@ object Digits {
     }
 
     /**
+     * The phone's own languages, whatever the app chose: the system's configuration, which
+     * [Locale.setDefault] does not touch (unlike [LocaleList.getDefault], whose first entry follows it).
+     */
+    fun phoneLocales(): LocaleList =
+        runCatching { Resources.getSystem().configuration.locales }.getOrNull()?.takeIf { !it.isEmpty } ?: LocaleList.getDefault()
+
+    /**
+     * The process default becomes the app's language with Latin digits, so every date, month name
+     * and number formatted with [Locale.getDefault] (`localTime`, the pages' `d MMM yyyy`) reads in
+     * the app's language — Arabic months in an Arabic app on an English phone, and the reverse.
+     */
+    fun useAppLocale(language: AppLanguage?, system: LocaleList = phoneLocales()): Locale =
+        locales(language, system)[0].also(Locale::setDefault)
+
+    /**
      * [base] configured for [language] (null follows the phone) with Latin digits; the process
-     * default gains the same keyword, so `"%d".format(n)` and friends agree with the resources.
+     * default becomes the same locale, so `"%d".format(n)`, dates and month names agree with the
+     * resources.
      */
     fun wrap(base: Context, language: AppLanguage?): Context {
-        Locale.setDefault(latin(Locale.getDefault()))
         val config = Configuration(base.resources.configuration)
         val locales = locales(language, config.locales)
+        Locale.setDefault(locales[0])
         config.setLocales(locales)
         config.setLayoutDirection(locales[0])
         return base.createConfigurationContext(config)

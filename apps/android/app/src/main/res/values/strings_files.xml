@@ -31,7 +31,7 @@
     <string name="files_page_save_to_phone">Save to phone</string>
     <string name="files_page_share">Share</string>
     <string name="files_page_share_zip">Share as zip</string>
-    <string name="files_page_attach">Attach to a new chat</string>
+    <string name="files_page_attach">Attach to chat…</string>
     <string name="files_page_rename">Rename</string>
     <string name="files_page_rename_title">Rename «%1$s»</string>
     <string name="files_page_move">Move</string>
@@ -65,4 +65,10 @@
     <string name="files_page_into_itself">A folder cannot go inside itself.</string>
     <string name="files_page_gone">It is not there any more.</string>
     <string name="files_page_failed">That did not work: %1$s</string>
+    <string name="files_page_attach_title">Attach «%1$s» to a chat</string>
+    <string name="files_page_attach_body">The hub copies the file into the chat: it waits in the composer, ready to go with your next message. Later edits here do not change what was attached.</string>
+    <string name="files_page_attach_new">New chat</string>
+    <string name="files_page_attach_recent">Recent chats in this profile</string>
+    <string name="files_page_attach_untitled">Untitled chat</string>
+    <string name="files_page_attach_none">No chats in this profile yet.</string>
 </resources>

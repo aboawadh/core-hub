@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import hub.core.android.ui.kit.HubSheet
+import hub.core.android.ui.kit.ListRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,7 +58,6 @@ import hub.core.android.data.HubError
 import hub.core.android.generated.FontTokens
 import hub.core.android.graph
 import hub.core.android.nav.Route
-import hub.core.android.phone.Share
 import hub.core.android.ui.components.AttachmentFiles
 import hub.core.android.ui.components.ConfirmDeleteDialog
 import hub.core.android.ui.components.FormField
@@ -104,7 +107,7 @@ import kotlinx.coroutines.withContext
  * folder of the profile in the top chip, for its owner and admins. Browse by the folder trail, search
  * and sort the folder; open a file the way a chat's file opens (pictures drawn, documents in the
  * phone's viewer, sound and video played), save it to the phone, share it, or attach it to a new
- * chat; upload files and photos with their progress; make a folder or a text file, rename, move,
+ * or recent chat (made an attachment on the hub, handed to that chat's composer ready); upload files and photos with their progress; make a folder or a text file, rename, move,
  * copy, delete (after a confirm); edit text with the save-conflict check. iOS's FilesPage.swift is
  * the twin.
  */
@@ -185,13 +188,10 @@ private fun FilesPage(ctx: SettingsPageContext) {
     fun share(entry: WorkspaceFileEntry) = withLocal(entry) { local ->
         if (!AttachmentFiles.share(context, local, entry.mime)) Toast.makeText(context, openFailed, Toast.LENGTH_LONG).show()
     }
-    fun attach(entry: WorkspaceFileEntry) = withLocal(entry) { local ->
-        // Handed to a new chat the way another app's share is: it lands in the composer's tray and uploads there.
-        val copy = File(File(context.cacheDir, "outgoing/${UUID.randomUUID()}").apply { mkdirs() }, local.name)
-        local.copyTo(copy, overwrite = true)
-        val picture = FileKinds.openAs(entry.name, entry.mime) == FileOpen.PICTURE
-        graph.sharedFiles.value = graph.sharedFiles.value + Share.SharedFile(copy, picture, if (picture) PickedFiles.thumbnail(copy) else null)
-        ctx.onOpen(Route.NewChat)
+    // «Attach to chat»: the hub makes the attachment, the chosen chat's composer takes it ready.
+    var attaching by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
+    fun attach(entry: WorkspaceFileEntry) {
+        attaching = entry
     }
     var zipping by remember { mutableStateOf<String?>(null) }
     fun shareZip(path: String, name: String) {
@@ -397,6 +397,14 @@ private fun FilesPage(ctx: SettingsPageContext) {
             },
             tag = "files.editor",
         )
+    }
+
+    attaching?.let { entry ->
+        AttachToChatSheet(entry, ops, words, onDismiss = { attaching = null }) { attachment, route ->
+            attaching = null
+            graph.handOff.put(profile, listOf(attachment))
+            ctx.onOpen(route)
+        }
     }
 
     replacing?.let { (name, answer) ->
@@ -703,6 +711,67 @@ private fun entryIcon(entry: WorkspaceFileEntry): Int = when (entry.kind) {
             type.startsWith("video/") -> Lucide.Film
             entry.editable || FileKinds.openAs(entry.name, entry.mime) == FileOpen.VIEWER -> Lucide.FileText
             else -> Lucide.File
+        }
+    }
+}
+
+/**
+ * «Attach to chat» (the web's AttachToChatDialog): a new chat, or one of this profile's recent chats
+ * (the file belongs to this profile, so another profile's chats are not offered). Choosing one makes
+ * the attachment on the hub (`knowledge.attachWorkspaceFile`) and hands it to that chat's composer.
+ */
+@Composable
+private fun AttachToChatSheet(
+    entry: WorkspaceFileEntry,
+    ops: FilesOps,
+    words: FilesWords,
+    onDismiss: () -> Unit,
+    onAttached: (hub.core.client.model.Attachment, Route) -> Unit,
+) {
+    val t = LocalTokens.current
+    val scope = rememberCoroutineScope()
+    var chats by remember(entry.path) { mutableStateOf<List<hub.core.client.model.Session>?>(null) }
+    var error by remember(entry.path) { mutableStateOf<String?>(null) }
+    var busy by remember(entry.path) { mutableStateOf(false) }
+    LaunchedEffect(entry.path) {
+        ops.recentChats().onSuccess { chats = it }.onFailure { chats = emptyList(); error = words.say(it) }
+    }
+    fun send(route: (hub.core.client.model.Attachment) -> Route) {
+        if (busy) return
+        busy = true
+        error = null
+        scope.launch {
+            ops.attach(entry.path)
+                .onSuccess { onAttached(it, route(it)) }
+                .onFailure { error = words.say(it) }
+            busy = false
+        }
+    }
+    HubSheet(onDismiss = onDismiss, title = stringResource(R.string.files_page_attach_title, entry.name), modifier = Modifier.testTag("files.attach")) {
+        Text(stringResource(R.string.files_page_attach_body), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+        error?.let { NoticeBox(it, BadgeTone.Danger) }
+        HubButton(
+            stringResource(R.string.files_page_attach_new), { send { Route.NewChat } },
+            modifier = Modifier.testTag("files.attach.new"), icon = Lucide.Plus, enabled = !busy, loading = busy, fill = true,
+        )
+        Text(stringResource(R.string.files_page_attach_recent), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted)
+        val untitled = stringResource(R.string.files_page_attach_untitled)
+        when (val list = chats) {
+            null -> Spinner()
+            else -> if (list.isEmpty()) {
+                Text(stringResource(R.string.files_page_attach_none), fontSize = FontTokens.sizeSm.sp, color = t.textFaint)
+            } else {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    list.forEach { chat ->
+                        ListRow(
+                            chat.title?.takeIf { it.isNotBlank() } ?: untitled,
+                            icon = Lucide.MessageSquareText,
+                            tag = "files.attach.chat.${chat.id}",
+                            onClick = if (busy) null else ({ send { Route.Chat(chat.id, chat.profile) } }),
+                        )
+                    }
+                }
+            }
         }
     }
 }

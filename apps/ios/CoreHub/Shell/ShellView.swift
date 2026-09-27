@@ -31,6 +31,9 @@ struct ShellView: View {
     @State private var seedFiles: [URL] = []
     @State private var pending: PendingModel?
     @State private var showingPending = false
+    /// What works in the background (apps leftovers): the top bar's Activity button and its sheet.
+    @State private var background: BackgroundModel?
+    @State private var showingBackground = false
 
     var body: some View {
         // Read here, so the shell redraws when an agent's location request arrives (§105).
@@ -65,6 +68,8 @@ struct ShellView: View {
             if sessionList == nil { sessionList = SessionListModel(app: app) }
             if pending == nil { pending = PendingModel(app: app) }
             pending?.start()
+            if background == nil { background = BackgroundModel(app: app) }
+            background?.start()
             takeLink()
             takeDraft()
         }
@@ -91,6 +96,11 @@ struct ShellView: View {
         .sheet(isPresented: $showingPending) {
             if let pending {
                 NavigationStack { PendingSheet(model: pending, go: navigate) }
+            }
+        }
+        .sheet(isPresented: $showingBackground) {
+            if let background {
+                NavigationStack { BackgroundSheet(model: background, go: navigate) }
             }
         }
     }
@@ -148,7 +158,14 @@ struct ShellView: View {
                                 PendingButton(model: pending) { showingPending = true }
                             }
                         }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            if let background {
+                                BackgroundButton(model: background) { showingBackground = true }
+                            }
+                        }
                     }
+                    // The chat's «⋯» opens the same sheet, also while nothing runs.
+                    .environment(\.openBackground, { showingBackground = true })
             }
         }
     }

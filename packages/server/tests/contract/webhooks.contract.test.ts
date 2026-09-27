@@ -76,7 +76,12 @@ describe.skipIf(!doc)('contract: webhooks receive the events they subscribe to',
   async function call(
     operationId: string,
     expectedStatus: number,
-    init: { params?: Record<string, string>; body?: unknown; query?: Record<string, unknown> } = {},
+    init: {
+      params?: Record<string, string>;
+      body?: unknown;
+      query?: Record<string, unknown>;
+      headers?: Record<string, string>;
+    } = {},
   ): Promise<Record<string, unknown>> {
     const op = ops.get(operationId);
     if (!op) throw new Error(`unknown operation ${operationId}`);
@@ -87,6 +92,7 @@ describe.skipIf(!doc)('contract: webhooks receive the events they subscribe to',
         ...(init.params ? { params: init.params } : {}),
         ...(init.query ? { query: init.query } : {}),
         ...(init.body !== undefined ? { body: init.body } : {}),
+        ...(init.headers ? { headers: init.headers } : {}),
       });
       status = res.status;
       data = res.data;
@@ -251,6 +257,45 @@ describe.skipIf(!doc)('contract: webhooks receive the events they subscribe to',
     });
     await call('notify.redeliverWebhookDelivery', 404, {
       params: { webhook_id: hook.id as string, delivery_id: '01J8QK3ZR2W7M5N4P6T8V9X0ZZ' },
+    });
+  });
+
+  it('keeps each webhook in the profile its request names (decision §115)', async () => {
+    for (const operationId of [
+      'notify.listWebhooks',
+      'notify.createWebhook',
+      'notify.updateWebhook',
+      'notify.deleteWebhook',
+      'notify.testWebhook',
+      'notify.listWebhookDeliveries',
+      'notify.redeliverWebhookDelivery',
+    ]) {
+      const op = ops.get(operationId)!;
+      const declared = JSON.stringify([
+        ...(document.paths?.[op.path]?.parameters ?? []),
+        ...(op.operation.parameters ?? []),
+      ]);
+      expect(declared, operationId).toContain('#/components/parameters/Profile');
+    }
+    await call('auth.createProfile', 201, { body: { slug: 'hooks-elsewhere', name: 'Elsewhere' } });
+    const elsewhere = { 'X-Hub-Profile': 'hooks-elsewhere' };
+    const made = await call('notify.createWebhook', 201, {
+      headers: elsewhere,
+      body: { name: 'elsewhere', url: receiverUrl, allow_private_network: true },
+    });
+    const there = await call('notify.listWebhooks', 200, { headers: elsewhere });
+    expect((there.items as { id: string }[]).map((w) => w.id)).toEqual([made.id]);
+    const here = await call('notify.listWebhooks', 200);
+    expect((here.items as { id: string }[]).map((w) => w.id)).not.toContain(made.id);
+    // Found only in its own profile: from `default` it is not there to change.
+    await call('notify.updateWebhook', 404, {
+      params: { webhook_id: made.id as string },
+      body: { enabled: false },
+    });
+    await call('notify.listWebhooks', 404, { headers: { 'X-Hub-Profile': 'nowhere' } });
+    await call('notify.deleteWebhook', 204, {
+      headers: elsewhere,
+      params: { webhook_id: made.id as string },
     });
   });
 

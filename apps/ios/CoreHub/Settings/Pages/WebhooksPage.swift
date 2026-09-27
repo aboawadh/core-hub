@@ -35,7 +35,7 @@ struct WebhooksPage: View {
     var body: some View {
         AsyncContent(key: "webhooks/\(app.currentProfile)/\(generation)") {
             let profile = app.currentProfile
-            return try await app.api.call { try await NotifyAPI.notifyListWebhooks(apiConfiguration: $0.inProfile(profile)) }.items
+            return try await app.api.call { try await NotifyAPI.notifyListWebhooks(xHubProfile: profile, apiConfiguration: $0) }.items
         } content: { hooks, reload in
             List {
                 Section {
@@ -71,7 +71,7 @@ struct WebhooksPage: View {
             WebhookSheet(hook: target.hook, profile: app.currentProfile) { generation += 1 }
         }
         .confirmDelete($deleting, name: { $0.name }, delete: { [api = app.api, profile = app.currentProfile] hook in
-            try await api.call { try await NotifyAPI.notifyDeleteWebhook(webhookId: hook.id, apiConfiguration: $0.inProfile(profile)) }
+            try await api.call { try await NotifyAPI.notifyDeleteWebhook(xHubProfile: profile, webhookId: hook.id, apiConfiguration: $0) }
         }, deleted: { _ in generation += 1 })
         .accessibilityIdentifier("webhooks.page")
     }
@@ -244,7 +244,7 @@ struct WebhookCard: View {
         let profile = profile, id = hook.id
         do {
             _ = try await app.api.call {
-                try await NotifyAPI.notifyUpdateWebhook(webhookId: id, webhookWrite: WebhookWrite(enabled: on, maxRetries: nil), apiConfiguration: $0.inProfile(profile))
+                try await NotifyAPI.notifyUpdateWebhook(xHubProfile: profile, webhookId: id, webhookWrite: WebhookWrite(enabled: on, maxRetries: nil), apiConfiguration: $0)
             }
             error = nil
             changed()
@@ -260,7 +260,7 @@ struct WebhookCard: View {
         defer { testing = false; tick += 1 }
         let profile = profile, id = hook.id
         do {
-            let job = try await app.api.call { try await NotifyAPI.notifyTestWebhook(webhookId: id, apiConfiguration: $0.inProfile(profile)) }
+            let job = try await app.api.call { try await NotifyAPI.notifyTestWebhook(xHubProfile: profile, webhookId: id, apiConfiguration: $0) }
             for _ in 0..<60 {
                 let state = try await app.api.call { try await JobsAPI.jobsGet(xHubProfile: profile, jobId: job.jobId, apiConfiguration: $0) }
                 if let done = NotifyWebhookRules.outcome(state) {
@@ -282,7 +282,7 @@ struct WebhookCard: View {
         let profile = profile, id = hook.id
         do {
             deliveries = try await app.api.call {
-                try await NotifyAPI.notifyListWebhookDeliveries(webhookId: id, limit: 10, apiConfiguration: $0.inProfile(profile))
+                try await NotifyAPI.notifyListWebhookDeliveries(xHubProfile: profile, webhookId: id, limit: 10, apiConfiguration: $0)
             }.items
         } catch is CancellationError {
         } catch {
@@ -294,7 +294,7 @@ struct WebhookCard: View {
         let profile = profile, id = hook.id
         do {
             _ = try await app.api.call {
-                try await NotifyAPI.notifyRedeliverWebhookDelivery(webhookId: id, deliveryId: delivery.id, apiConfiguration: $0.inProfile(profile))
+                try await NotifyAPI.notifyRedeliverWebhookDelivery(xHubProfile: profile, webhookId: id, deliveryId: delivery.id, apiConfiguration: $0)
             }
             redelivered = true
             error = nil
