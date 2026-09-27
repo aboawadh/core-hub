@@ -217,3 +217,74 @@ export function evaluate(condition: Condition, ctx: Context): boolean {
       return numeric ? left <= right : stringify(actual) <= expected;
   }
 }
+
+// ------------------------------------------------------------ several rules (§122)
+
+/** A condition step's rules, as stored (`WorkflowRules`). */
+export interface Rules {
+  match: 'all' | 'any';
+  items: Array<{ path: string; operator: string; value: string | null }>;
+}
+
+/** Whether a path is one `read` can walk. */
+export function isPath(path: string): boolean {
+  return PATH.test(path);
+}
+
+/** A step answers from its rules when it has at least one; otherwise from its `input`. */
+export function hasRules(rules: Rules | null | undefined): rules is Rules {
+  return !!rules && Array.isArray(rules.items) && rules.items.length > 0;
+}
+
+const UNARY = new Set<string>(['exists', 'empty']);
+
+/**
+ * What is wrong with one rule, as a reason code (`rule_path_invalid`, `rule_operator_invalid`,
+ * `rule_value_missing`, `rule_regex_invalid`), or `null` when it can be answered.
+ */
+export function ruleProblem(rule: {
+  path: string;
+  operator: string;
+  value: string | null;
+}): string | null {
+  if (typeof rule.path !== 'string' || !PATH.test(rule.path.trim())) return 'rule_path_invalid';
+  if (!(OPERATORS as readonly string[]).includes(rule.operator)) return 'rule_operator_invalid';
+  if (!UNARY.has(rule.operator) && (rule.value === null || rule.value === undefined)) {
+    return 'rule_value_missing';
+  }
+  if (rule.operator === 'matches') {
+    try {
+      new RegExp(rule.value ?? '');
+    } catch {
+      return 'rule_regex_invalid';
+    }
+  }
+  return null;
+}
+
+/** Every rule held (`all`), or one did (`any`). A rule that cannot be answered is an error. */
+export function evaluateRules(rules: Rules, ctx: Context): boolean {
+  const answers = rules.items.map((rule) => {
+    const reason = ruleProblem(rule);
+    if (reason) throw new ConditionError(reason);
+    return evaluate(
+      {
+        path: rule.path.trim(),
+        operator: rule.operator as Operator,
+        value: UNARY.has(rule.operator) ? undefined : (rule.value ?? ''),
+      },
+      ctx,
+    );
+  });
+  return rules.match === 'any' ? answers.some(Boolean) : answers.every(Boolean);
+}
+
+/** The rules in words, for the step's record: `all: trigger.event == "taskCreated"; …`. */
+export function rulesText(rules: Rules): string {
+  const lines = rules.items.map((rule) =>
+    UNARY.has(rule.operator)
+      ? `${rule.path} ${rule.operator}`
+      : `${rule.path} ${rule.operator} ${JSON.stringify(rule.value ?? '')}`,
+  );
+  return `${rules.match}: ${lines.join('; ')}`;
+}

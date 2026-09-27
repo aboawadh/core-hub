@@ -12,7 +12,7 @@
  * with the field and the reason. A schedule that looks fine and never fires is the failure
  * that makes people stop trusting schedulers.
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Server as SocketServer } from 'socket.io';
 import { loadOpenApiDocument } from '@corehub/contracts';
 import { newUlid } from '../../db/ids.js';
@@ -53,6 +53,20 @@ import {
   type WorkflowPorts,
 } from './workflow-engine.js';
 import { NO_LIMITS, runLimits } from './limits.js';
+import {
+  TriggerDesk,
+  toWorkflowTrigger,
+  toWorkflowTriggerDelivery,
+  type StartRun,
+  type TriggerRow,
+} from './trigger-desk.js';
+import {
+  MAX_TRIGGER_BODY_BYTES,
+  defaultTestEvent,
+  sampleOf,
+  signatureHeaders,
+  type Headers,
+} from './triggers.js';
 import { ScheduleRuns, type ScheduleRunPorts } from './schedule-runs.js';
 import { HubScheduler } from './scheduler.js';
 import type { BackgroundItem, BackgroundSource, BackgroundStatus } from '../audit/index.js';
@@ -123,23 +137,67 @@ export function registerWorkflowPorts(
   return previous;
 }
 const engines = new WeakMap<SocketServer, WorkflowEngine>();
+const portsByHub = new WeakMap<SocketServer, WorkflowPorts>();
+/** The ports the composition root lent, made once per hub. */
+function portsFor(app: FastifyInstance): WorkflowPorts {
+  const existing = portsByHub.get(app.hub.io);
+  if (existing) return existing;
+  const made = workflowPortsFactory?.(app) ?? { agentTurn: null, notice: null };
+  portsByHub.set(app.hub.io, made);
+  return made;
+}
 /** The app's engine; the first use also fails the runs a restart cut short. */
 export function workflowEngineFor(app: FastifyInstance): WorkflowEngine {
   const existing = engines.get(app.hub.io);
   if (existing) return existing;
   const engine = new WorkflowEngine(
-    workflowPortsFactory?.(app) ?? { agentTurn: null, notice: null },
+    portsFor(app),
     (profile, event, payload) =>
       realtimeOf(app).emit(REALTIME_NAMESPACES.schedules, event, { profile }, payload),
     app.log,
     // A run a schedule started settles its history line when it ends — hours later, after
-    // an approval, or after a restart: whenever that is.
-    (run, outcome) => firerFor(app).settleWorkflow(run, outcome),
+    // an approval, or after a restart: whenever that is. A run a trigger's delivery started
+    // settles its delivery line the same way (§122).
+    (run, outcome) => {
+      firerFor(app).settleWorkflow(run, outcome);
+      if (run.workflowTriggerId) deskFor(app).settleRun(run.id);
+    },
   );
   engines.set(app.hub.io, engine);
   const stale = new SchedulesService(requireSqlite(app.hub.database)).failInterruptedRuns();
   if (stale > 0) app.log.warn({ runs: stale }, 'workflows: runs left by a restart failed');
   return engine;
+}
+
+/** The inbound triggers' tables (`trigger-desk.ts`); the secrets are sealed with the lent key ring. */
+function deskFor(app: FastifyInstance): TriggerDesk {
+  return new TriggerDesk(requireSqlite(app.hub.database), () => portsFor(app).sealer ?? null);
+}
+
+/**
+ * A delivery that got through starts the workflow's run as the trigger's owner, in the
+ * trigger's profile, with the event as `{{trigger.*}}` (§122). The run goes on after the
+ * answer; this returns as soon as it is queued.
+ */
+function startFromDelivery(app: FastifyInstance): StartRun {
+  return (trigger: TriggerRow, context, facts) => {
+    const service = new SchedulesService(requireSqlite(app.hub.database));
+    const workflow = service.workflowById(trigger.workflowId);
+    if (!workflow || workflow.archivedAt) throw new Error('the workflow no longer exists');
+    if ((workflow.definition as WorkflowDefinition).nodes.length === 0) {
+      throw new Error('the workflow has no steps');
+    }
+    const scope = runScopeFor(app, trigger.workspace, trigger.ownerId);
+    if (!scope) throw new Error("the trigger's owner can no longer run workflows here");
+    const run = workflowEngineFor(app).start(service, scope, workflow, {
+      trigger: context,
+      input: null,
+      triggerKind: 'event',
+      triggerRef: context.delivery_id,
+      event: { triggerId: trigger.id, eventId: facts.eventId, taskId: facts.taskId },
+    });
+    return { workflowRunId: run.id };
+  };
 }
 
 /**
@@ -583,6 +641,12 @@ function toWorkflowRun(
     limits: (row.definitionSnapshot as WorkflowDefinition).limits ?? { ...NO_LIMITS },
     cost: costOf(row.output),
     stopped_by: stoppedByOf(row.output),
+    // A run a trigger's delivery started (§122): which trigger, which delivery, which event.
+    workflow_trigger_id: row.workflowTriggerId ?? null,
+    delivery_id: row.workflowTriggerId ? (row.triggerRef ?? null) : null,
+    event_id: row.eventId ?? null,
+    task_id: row.taskId ?? null,
+    filtered: (row.output as { filtered?: unknown } | null)?.filtered === true,
   };
 }
 
@@ -1152,7 +1216,10 @@ export const schedulesModule = defineModule({
         const scope = scopeOf(request);
         const service = serviceOf(request);
         const limit = clampLimit(query.limit as number | undefined);
-        const rows = service.workflowRunsOf(scope, params.workflow_id as string, limit);
+        const rows = service.workflowRunsOf(scope, params.workflow_id as string, limit, {
+          eventId: (query.event_id as string | undefined) ?? null,
+          taskId: (query.task_id as string | undefined) ?? null,
+        });
         return {
           items: rows.map((row) => toWorkflowRun(row, scope.profile, service.stepsOf(row.id))),
           next_cursor: null,
@@ -1237,6 +1304,132 @@ export const schedulesModule = defineModule({
     });
 
     // ------------------------------------------------------------- imports
+
+    // ------------------------------------------------ inbound triggers (§122)
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.listWorkflowTriggers',
+      handler: (request, { params }) => {
+        const scope = scopeOf(request);
+        const rows = deskFor(request.server).list(scope, params.workflow_id as string);
+        return { items: rows.map((row) => toWorkflowTrigger(row, scope.profile)) };
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.createWorkflowTrigger',
+      status: 201,
+      handler: (request, { params, body }) => {
+        const scope = scopeOf(request);
+        const row = deskFor(request.server).create(
+          scope,
+          params.workflow_id as string,
+          (body ?? {}) as Record<string, unknown>,
+        );
+        return toWorkflowTrigger(row, scope.profile);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.updateWorkflowTrigger',
+      handler: (request, { params, body }) => {
+        const scope = scopeOf(request);
+        const row = deskFor(request.server).update(
+          scope,
+          params.workflow_trigger_id as string,
+          (body ?? {}) as Record<string, unknown>,
+        );
+        return toWorkflowTrigger(row, scope.profile);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.deleteWorkflowTrigger',
+      status: 204,
+      handler: (request, { params }) => {
+        deskFor(request.server).remove(scopeOf(request), params.workflow_trigger_id as string);
+        return null;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.listWorkflowTriggerDeliveries',
+      handler: (request, { params, query }) => {
+        const limit = clampLimit(query.limit as number | undefined);
+        const rows = deskFor(request.server).deliveries(
+          scopeOf(request),
+          params.workflow_trigger_id as string,
+          limit,
+          decodeCursor(query.cursor as string | undefined),
+        );
+        return pageOf(rows, limit, toWorkflowTriggerDelivery);
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.testWorkflowTrigger',
+      handler: (request, { params, body }) => {
+        const scope = scopeOf(request);
+        const desk = deskFor(request.server);
+        const trigger = desk.get(scope, params.workflow_trigger_id as string);
+        if (!trigger.enabled) throw conflict({ reason: 'trigger_disabled' });
+        const secret = desk.secretOf(trigger);
+        if (!secret) throw conflict({ reason: 'secret_missing', field: 'secret' });
+        // A sample of the preset's own shape, signed with the stored secret, through the
+        // same receiving path as a real delivery. Nothing leaves the hub.
+        const ask = (body ?? {}) as { event?: string | null; task_id?: string | null };
+        const event = ask.event?.trim() || defaultTestEvent(trigger.preset, trigger.events ?? []);
+        const sample = sampleOf(trigger.preset, {
+          event,
+          taskId: ask.task_id?.trim() || 'core-hub-test-task',
+        });
+        const headers = { ...sample.headers, ...signatureHeaders(trigger, secret, sample.raw) };
+        const receipt = desk.receive(trigger, sample.raw, headers, startFromDelivery(app), {
+          test: true,
+        });
+        return toWorkflowTriggerDelivery(receipt.delivery);
+      },
+    });
+
+    // The public door: the body is read raw, in a scope of its own, because the signature is
+    // over the bytes as they were sent.
+    void app.register(async (door) => {
+      door.removeAllContentTypeParsers();
+      door.addContentTypeParser(
+        '*',
+        { parseAs: 'buffer', bodyLimit: MAX_TRIGGER_BODY_BYTES },
+        (_request, body, done) => done(null, body),
+      );
+      defineRoute(door, deps, {
+        operationId: 'schedules.receiveWorkflowTrigger',
+        handler: (request, { params }, reply: FastifyReply) => {
+          const desk = deskFor(app);
+          const trigger = desk.byId(String(params.workflow_trigger_id));
+          if (!trigger || !trigger.enabled) {
+            throw notFound({ resource: 'workflow_trigger', id: params.workflow_trigger_id });
+          }
+          const raw = Buffer.isBuffer(request.body)
+            ? request.body
+            : Buffer.from(typeof request.body === 'string' ? request.body : '');
+          const receipt = desk.receive(
+            trigger,
+            raw,
+            request.headers as Headers,
+            startFromDelivery(app),
+          );
+          if (receipt.httpStatus === 401) {
+            throw new HubError('unauthorized', {
+              details: { reason: 'signature_rejected', delivery_id: receipt.delivery.id },
+            });
+          }
+          return reply.status(receipt.httpStatus).send({
+            status: receipt.status,
+            delivery_id: receipt.delivery.id,
+            workflow_run_id: receipt.delivery.workflowRunId,
+          });
+        },
+      });
+    });
 
     defineRoute(app, deps, {
       operationId: 'schedules.previewWorkflowImport',

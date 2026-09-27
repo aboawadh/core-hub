@@ -44,7 +44,16 @@
  * restart continues it exactly where it stopped.
  */
 import type { FastifyBaseLogger } from 'fastify';
-import { ConditionError, evaluate, parseCondition, render, type Context } from './expr.js';
+import {
+  ConditionError,
+  evaluate,
+  evaluateRules,
+  hasRules,
+  parseCondition,
+  render,
+  rulesText,
+  type Context,
+} from './expr.js';
 import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
 import type {
   WorkflowBudgetUse,
@@ -53,6 +62,7 @@ import type {
   WorkflowLimits,
   WorkflowNode,
 } from './schema.js';
+import type { Sealer } from './trigger-desk.js';
 import type {
   NodeRunRow,
   SchedulesService,
@@ -93,6 +103,11 @@ export interface TurnCost {
 
 /** What the engine needs from the rest of the hub. Composed in `modules/index.ts`. */
 export interface WorkflowPorts {
+  /**
+   * The hub's data key ring, lent to seal an inbound trigger's secret (§122). Absent, a
+   * trigger cannot store a secret and every delivery is refused.
+   */
+  sealer?: Sealer | null;
   /** One whole agent turn; `null` when this hub composes no sessions. */
   agentTurn:
     | ((
@@ -299,6 +314,8 @@ export class WorkflowEngine {
       steps?: Record<string, { output: unknown }>;
       /** This run's limits (`limits.ts` → `runLimits`); the workflow's when not given. */
       limits?: WorkflowLimits;
+      /** A run a trigger's delivery started: the trigger and the event's ids (§122). */
+      event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
     const run = service.createWorkflowRun(scope, workflow, {
@@ -307,6 +324,7 @@ export class WorkflowEngine {
       triggerRef: options.triggerRef ?? null,
       scheduleId: options.scheduleId ?? null,
       ...(options.limits ? { limits: options.limits } : {}),
+      ...(options.event ? { event: options.event } : {}),
     });
     const state: Live = {
       cancelled: false,
@@ -473,6 +491,8 @@ export class WorkflowEngine {
     let unhandled: string | null = null;
     let stoppedBy: StoppedBy | null = null;
     let steps = ran.size;
+    // A condition that said no with nothing to follow: the event was not one to act on (§122).
+    let filtered = false;
 
     /** After a step: its output is readable, its edges fire; `false` ends the run. */
     const advance = (node: WorkflowNode, result: StepResult): boolean => {
@@ -484,8 +504,15 @@ export class WorkflowEngine {
       }
       ctx.steps[node.id] = { output: result.output };
       const edges = outgoing.get(node.id) ?? [];
+      let followed = 0;
       for (const edge of edges) {
-        if (edge.route === 'always' || edge.route === result.route) queue.push(edge.to);
+        if (edge.route === 'always' || edge.route === result.route) {
+          queue.push(edge.to);
+          followed += 1;
+        }
+      }
+      if (node.kind === 'condition' && result.ok && result.route === 'failure' && followed === 0) {
+        filtered = true;
       }
       // A condition's "no" is an answer, not a failure. A failed step that nothing
       // handles ends the run with its own words.
@@ -558,6 +585,7 @@ export class WorkflowEngine {
         steps: summarize(ctx.steps),
         ...state.budget.output(),
         stopped_by: stoppedBy as StoppedBy | null,
+        ...(filtered && !failed ? { filtered: true } : {}),
       },
       finishedAt: now,
     });
@@ -578,7 +606,12 @@ export class WorkflowEngine {
     ctx: Context,
     state: Live,
   ): Promise<StepResult> {
-    const rendered = node.kind === 'condition' ? (node.input ?? '') : render(node.input ?? '', ctx);
+    const rendered =
+      node.kind === 'condition'
+        ? hasRules(node.rules)
+          ? rulesText(node.rules)
+          : (node.input ?? '')
+        : render(node.input ?? '', ctx);
     const row = service.startStep(scope, run.id, node, { input: rendered });
     this.emit(scope.profile, 'step.started', {
       workflow_run_id: run.id,
@@ -765,7 +798,10 @@ export class WorkflowEngine {
       case 'condition': {
         let answer: boolean;
         try {
-          answer = evaluate(parseCondition(rendered), ctx);
+          // Several rules when the step has them (§122), else the one comparison.
+          answer = hasRules(node.rules)
+            ? evaluateRules(node.rules, ctx)
+            : evaluate(parseCondition(rendered), ctx);
         } catch (error) {
           return fail(error instanceof ConditionError ? error.reason : String(error));
         }

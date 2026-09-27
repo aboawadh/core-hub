@@ -14,7 +14,7 @@ import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
-import { ConditionError, parseCondition, pathsIn } from './expr.js';
+import { ConditionError, hasRules, parseCondition, pathsIn, ruleProblem } from './expr.js';
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
 import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
@@ -885,7 +885,10 @@ export class SchedulesService {
       patch.limits !== undefined
     ) {
       const definition = definitionOf({
-        nodes: patch.nodes ?? current.definition.nodes,
+        nodes:
+          patch.nodes !== undefined
+            ? keepRules(patch.nodes as WorkflowNode[], current.definition.nodes)
+            : current.definition.nodes,
         edges: patch.edges ?? current.definition.edges,
         working_dir: patch.working_dir ?? current.definition.workingDir ?? null,
         limits: patch.limits !== undefined ? patch.limits : (current.definition.limits ?? null),
@@ -922,12 +925,23 @@ export class SchedulesService {
 
   // -------------------------------------------------------- workflow runs
 
-  workflowRunsOf(scope: Scope, workflowId: string, limit: number): WorkflowRunRow[] {
+  workflowRunsOf(
+    scope: Scope,
+    workflowId: string,
+    limit: number,
+    only: { eventId?: string | null; taskId?: string | null } = {},
+  ): WorkflowRunRow[] {
     this.workflow(scope, workflowId);
     return this.db
       .select()
       .from(workflowRuns)
-      .where(eq(workflowRuns.workflowId, workflowId))
+      .where(
+        and(
+          eq(workflowRuns.workflowId, workflowId),
+          only.eventId ? eq(workflowRuns.eventId, only.eventId) : undefined,
+          only.taskId ? eq(workflowRuns.taskId, only.taskId) : undefined,
+        ),
+      )
       .orderBy(desc(workflowRuns.id))
       .limit(limit)
       .all();
@@ -970,6 +984,8 @@ export class SchedulesService {
       scheduleId?: string | null;
       /** The limits this run works under; the workflow's when not given. */
       limits?: WorkflowLimits;
+      /** A trigger's delivery started it (§122). */
+      event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
     const id = newUlid();
@@ -993,6 +1009,9 @@ export class SchedulesService {
         },
         input: input.input,
         startedAt: now,
+        workflowTriggerId: input.event?.triggerId ?? null,
+        eventId: input.event?.eventId ?? null,
+        taskId: input.event?.taskId ?? null,
       })
       .run();
     return this.workflowRun(scope, id);
@@ -1294,6 +1313,21 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
   };
 }
 
+/**
+ * An app that does not know a condition's `rules` sends the node without the field; the rules
+ * the saved node with the same id had are kept rather than erased (§122). `null` removes them.
+ */
+export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): WorkflowNode[] {
+  const before = new Map(saved.map((node) => [node.id, node]));
+  return nodes.map((node) => {
+    if (node.kind !== 'condition' || Object.prototype.hasOwnProperty.call(node, 'rules')) {
+      return node;
+    }
+    const rules = before.get(node.id)?.rules;
+    return rules ? { ...node, rules } : node;
+  });
+}
+
 export function definitionOf(input: Record<string, unknown>): WorkflowDefinition {
   return {
     nodes: ((input.nodes as WorkflowNode[] | undefined) ?? []).map((node) => ({ ...node })),
@@ -1367,6 +1401,41 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
   for (const node of definition.nodes) {
     const name = node.title || node.id;
     const input = node.input ?? '';
+    if (node.kind === 'condition' && hasRules(node.rules)) {
+      // Several rules (§122): each one is read now, and a `steps.` path must name a step.
+      node.rules.items.forEach((rule, index) => {
+        const reason = ruleProblem(rule);
+        const path = typeof rule.path === 'string' ? rule.path.trim() : '';
+        if (reason) {
+          problems.push(
+            issue(reason, `rule ${index + 1} of "${name}" cannot be read (${reason})`, {
+              node: node.id,
+              detail: String(index + 1),
+            }),
+          );
+          return;
+        }
+        const [root, second] = path.split('.');
+        if (root !== 'input' && root !== 'trigger' && root !== 'steps') {
+          problems.push(
+            issue(
+              'template_root_unknown',
+              `"${name}" refers to ${path}; a path starts with input, trigger or steps`,
+              { node: node.id, detail: path },
+            ),
+          );
+        } else if (root === 'steps' && (!second || !ids.has(second))) {
+          problems.push(
+            issue(
+              'template_step_unknown',
+              `"${name}" refers to ${path}, but there is no step "${second ?? ''}"`,
+              { node: node.id, detail: path },
+            ),
+          );
+        }
+      });
+      continue;
+    }
     if (node.kind === 'condition') {
       try {
         parseCondition(input);

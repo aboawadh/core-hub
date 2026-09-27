@@ -12069,6 +12069,20 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: event_id
+          in: query
+          required: false
+          description: Only the runs a trigger started for this event (`WorkflowRun.event_id`).
+          schema:
+            type: string
+            maxLength: 200
+        - name: task_id
+          in: query
+          required: false
+          description: Only the runs a trigger started about this task (`WorkflowRun.task_id`).
+          schema:
+            type: string
+            maxLength: 200
       x-rt-events: []
       responses:
         '200':
@@ -12301,6 +12315,325 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /workflows/{workflow_id}/triggers:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      operationId: schedules.listWorkflowTriggers
+      tags: [schedules]
+      summary: The inbound webhook triggers of a workflow
+      description: >-
+        Each trigger is an address on this hub (`path`, put after the hub's public origin) that
+        an outside system — ClickUp, GitHub, or anything that can sign a POST — sends events to.
+        A delivery that passes the trigger's signature check, is not a repeat, and names an
+        event the trigger takes starts a run of the workflow with the event as `{{trigger.*}}`
+        (DECISIONS §122). The secret is never returned; `secret_stored` says whether one is set.
+      x-rt-events: []
+      responses:
+        '200':
+          description: The workflow's triggers, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkflowTrigger'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0TG
+                    profile: work
+                    owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                    created_at: '2026-09-28T08:00:00Z'
+                    updated_at: '2026-09-28T08:05:00Z'
+                    workflow_id: 01J8QK3ZR2W7M5N4P6T8V9X0WF
+                    name: ClickUp tasks
+                    preset: clickup
+                    enabled: true
+                    events: [taskCreated, taskStatusUpdated]
+                    secret_stored: true
+                    signature_header: null
+                    signature_encoding: null
+                    signature_prefix: null
+                    path: /api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG
+                    last_delivery_at: '2026-09-28T09:12:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      operationId: schedules.createWorkflowTrigger
+      tags: [schedules]
+      summary: Add an inbound webhook trigger to a workflow
+      description: >-
+        The secret may be left out and set later: ClickUp, for one, makes the secret when the
+        webhook is registered with the trigger's address. Until a secret is stored every
+        delivery is refused as `signature_rejected`. The secret is stored encrypted like the
+        hub's other secrets and never returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowTriggerWrite'
+            example:
+              name: ClickUp tasks
+              preset: clickup
+              events: [taskCreated, taskStatusUpdated]
+      x-rt-events: []
+      responses:
+        '201':
+          description: The trigger, with its address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTrigger'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0TG
+                profile: work
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                created_at: '2026-09-28T08:00:00Z'
+                updated_at: '2026-09-28T08:00:00Z'
+                workflow_id: 01J8QK3ZR2W7M5N4P6T8V9X0WF
+                name: ClickUp tasks
+                preset: clickup
+                enabled: true
+                events: [taskCreated, taskStatusUpdated]
+                secret_stored: false
+                signature_header: null
+                signature_encoding: null
+                signature_prefix: null
+                path: /api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG
+                last_delivery_at: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workflow-triggers/{workflow_trigger_id}:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/WorkflowTriggerId'
+    patch:
+      operationId: schedules.updateWorkflowTrigger
+      tags: [schedules]
+      summary: Change a trigger — its name, event filter, on/off, signature settings, or secret
+      description: >-
+        Fields left out stay as they are. `secret` replaces the stored secret; an empty string
+        or `null` removes it. The preset and the address never change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowTriggerPatch'
+            example:
+              secret: 'OXCRKFDHP6IE1BX3ND4KZ9R5Y1WLG4XB'
+      x-rt-events: []
+      responses:
+        '200':
+          description: The trigger as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTrigger'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0TG
+                profile: work
+                owner_id: 01J8QK3ZR2W7M5N4P6T8V9X0HM
+                created_at: '2026-09-28T08:00:00Z'
+                updated_at: '2026-09-28T08:05:00Z'
+                workflow_id: 01J8QK3ZR2W7M5N4P6T8V9X0WF
+                name: ClickUp tasks
+                preset: clickup
+                enabled: true
+                events: [taskCreated, taskStatusUpdated]
+                secret_stored: true
+                signature_header: null
+                signature_encoding: null
+                signature_prefix: null
+                path: /api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG
+                last_delivery_at: null
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      operationId: schedules.deleteWorkflowTrigger
+      tags: [schedules]
+      summary: Remove a trigger; its address stops answering and its delivery log goes with it
+      x-rt-events: []
+      responses:
+        '204':
+          description: Removed.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workflow-triggers/{workflow_trigger_id}/deliveries:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/WorkflowTriggerId'
+    get:
+      operationId: schedules.listWorkflowTriggerDeliveries
+      tags: [schedules]
+      summary: What reached a trigger, newest first, and what became of it
+      description: >-
+        One line per delivery: refused (`signature_rejected`), a repeat (`duplicate`), an event
+        the trigger does not take (`filtered_out`), or a run (`run_started`, then
+        `run_succeeded` or `run_failed` when it ends; `filtered` when the workflow's own
+        condition stopped it). Lines older than 7 days are dropped, and at most the latest 500
+        are kept. No secret and no signature is ever kept; the body is kept only as a short
+        preview with secret-looking fields masked.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      x-rt-events: []
+      responses:
+        '200':
+          description: A page of deliveries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WorkflowTriggerDelivery'
+              example:
+                items:
+                  - id: 01J8QK3ZR2W7M5N4P6T8V9X0DK
+                    trigger_id: 01J8QK3ZR2W7M5N4P6T8V9X0TG
+                    workflow_id: 01J8QK3ZR2W7M5N4P6T8V9X0WF
+                    received_at: '2026-09-28T09:12:00Z'
+                    status: run_succeeded
+                    event: taskStatusUpdated
+                    event_id: '2800763136717140857'
+                    task_id: 86a1b2c3d
+                    workflow_run_id: 01J8QK3ZR2W7M5N4P6T8V9X0WR
+                    filtered: false
+                    test: false
+                    error: null
+                    body_preview: '{"event":"taskStatusUpdated","task_id":"86a1b2c3d",…'
+                next_cursor: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /workflow-triggers/{workflow_trigger_id}/test:
+    parameters:
+      - $ref: '#/components/parameters/Profile'
+      - $ref: '#/components/parameters/WorkflowTriggerId'
+    post:
+      operationId: schedules.testWorkflowTrigger
+      tags: [schedules]
+      summary: Send a sample event through the trigger's whole receiving path
+      description: >-
+        The hub builds a sample payload for the trigger's preset (for ClickUp a task event
+        about a made-up task), signs it with the stored secret, and receives it exactly as if
+        it had come from outside: signature check, repeat check, event filter, and a run. It
+        never contacts ClickUp or any other service. `409` with `details.reason =
+        secret_missing` while no secret is stored.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowTriggerTest'
+            example:
+              event: taskStatusUpdated
+      x-rt-events: []
+      responses:
+        '200':
+          description: The delivery the sample produced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTriggerDelivery'
+              example:
+                id: 01J8QK3ZR2W7M5N4P6T8V9X0DT
+                trigger_id: 01J8QK3ZR2W7M5N4P6T8V9X0TG
+                workflow_id: 01J8QK3ZR2W7M5N4P6T8V9X0WF
+                received_at: '2026-09-28T09:20:00Z'
+                status: run_started
+                event: taskStatusUpdated
+                event_id: '9000000000000000001'
+                task_id: test-task-1
+                workflow_run_id: 01J8QK3ZR2W7M5N4P6T8V9X0WS
+                filtered: false
+                test: true
+                error: null
+                body_preview: '{"event":"taskStatusUpdated","task_id":"test-task-1",…'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /workflow-hooks/{workflow_trigger_id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowTriggerId'
+    post:
+      operationId: schedules.receiveWorkflowTrigger
+      tags: [schedules]
+      summary: The public address of a workflow trigger; what an outside service POSTs to
+      description: >-
+        Not a client API. No bearer: the trigger's secret is the permission. The body is read
+        raw (at most 1 MiB) and the signature is checked over those exact bytes with a
+        constant-time compare — `clickup`: `X-Signature` is the hex HMAC-SHA256 of the body;
+        `github`: `X-Hub-Signature-256` is `sha256=` and the hex HMAC-SHA256; `generic_hmac`:
+        the trigger's header, hex or base64, after its optional prefix; `token`: the trigger's
+        header holds the secret itself. Only then is the body read as JSON. `202` once the run
+        is queued (it goes on after the answer); `200` for a repeat of a delivery already taken
+        (`duplicate`) or an event the trigger does not take (`filtered`); `401` for a missing
+        or wrong signature; `404` for no such trigger or one switched off.
+      security: []
+      x-scope: global
+      requestBody:
+        required: true
+        content:
+          '*/*':
+            schema: {}
+      x-rt-events: []
+      responses:
+        '200':
+          description: Received and not run (a repeat, or an event the trigger does not take).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTriggerReceipt'
+              example:
+                status: duplicate
+                delivery_id: 01J8QK3ZR2W7M5N4P6T8V9X0DD
+                workflow_run_id: null
+        '202':
+          description: Accepted; the workflow's run is queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTriggerReceipt'
+              example:
+                status: accepted
+                delivery_id: 01J8QK3ZR2W7M5N4P6T8V9X0DK
+                workflow_run_id: 01J8QK3ZR2W7M5N4P6T8V9X0WR
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
   /workflow-imports:
     post:
       operationId: schedules.previewWorkflowImport
@@ -17385,6 +17718,12 @@ components:
         $ref: '#/components/schemas/Ulid'
     WorkflowRunId:
       name: workflow_run_id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Ulid'
+    WorkflowTriggerId:
+      name: workflow_trigger_id
       in: path
       required: true
       schema:
@@ -24175,6 +24514,16 @@ components:
         approval_required:
           type: boolean
           description: 'Gate the node behind an approval (`kind: workflow_step`) before it runs.'
+        rules:
+          description: >-
+            A `condition` step's several rules (DECISIONS §122). When it has at least one rule
+            the step answers from them and `input` is not read; `null` or absent, the step
+            answers from its single-line `input` as before. On `updateWorkflow`, a condition
+            node sent without this field keeps the rules the saved node with the same id had
+            (an app that does not know the field does not erase them); `null` removes them.
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowRules'
+            - type: 'null'
         position:
           type: object
           required: [x, y]
@@ -24442,6 +24791,27 @@ components:
                 - type: string
                   enum: [max_duration, max_cost, step_timeout]
                 - type: 'null'
+            workflow_trigger_id:
+              description: The trigger whose delivery started the run (DECISIONS §122); `null` otherwise.
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
+            delivery_id:
+              description: The trigger delivery that started the run; `null` otherwise.
+              oneOf:
+                - $ref: '#/components/schemas/Ulid'
+                - type: 'null'
+            event_id:
+              type: [string, 'null']
+              description: The id of the event that started the run (ClickUp's history item ids, a delivery id).
+            task_id:
+              type: [string, 'null']
+              description: The task the event was about (ClickUp's `task_id`), when there is one.
+            filtered:
+              type: boolean
+              description: >-
+                The run ended because a condition step said no and nothing followed it: the
+                event was not one to act on. The run is `succeeded`; nobody is alerted.
     WorkflowLimits:
       type: object
       description: >-
@@ -24565,6 +24935,256 @@ components:
         message:
           type: string
           description: The same thing in English words, as `workflow_invalid` has always said it.
+    WorkflowTriggerPreset:
+      type: string
+      enum: [clickup, github, generic_hmac, token]
+      description: >-
+        How a delivery proves it came from the sender, and how its event is read.
+        `clickup`: `X-Signature` = hex HMAC-SHA256 of the raw body with the webhook's secret;
+        the event is the body's `event`, with `task_id`, `webhook_id` and `history_items[].id`.
+        `github`: `X-Hub-Signature-256`; the event is `X-GitHub-Event`, its id `X-GitHub-Delivery`.
+        `generic_hmac`: an HMAC-SHA256 of the raw body in the trigger's header, hex or base64,
+        after an optional prefix. `token`: the secret itself in the trigger's header.
+    WorkflowTrigger:
+      allOf:
+        - $ref: '#/components/schemas/Scoped'
+        - type: object
+          description: An inbound webhook trigger of a workflow (DECISIONS §122).
+          required:
+            [
+              workflow_id,
+              name,
+              preset,
+              enabled,
+              events,
+              secret_stored,
+              signature_header,
+              signature_encoding,
+              signature_prefix,
+              path,
+              last_delivery_at,
+            ]
+          properties:
+            workflow_id:
+              $ref: '#/components/schemas/Ulid'
+            name:
+              type: string
+            preset:
+              $ref: '#/components/schemas/WorkflowTriggerPreset'
+            enabled:
+              type: boolean
+            events:
+              type: array
+              items:
+                type: string
+              description: The events this trigger takes; empty takes every event.
+            secret_stored:
+              type: boolean
+              description: Whether a secret is stored. The secret itself is never returned.
+            signature_header:
+              type: [string, 'null']
+              description: "`generic_hmac` and `token`: the header read; `null` for the preset's default."
+            signature_encoding:
+              oneOf:
+                - type: string
+                  enum: [hex, base64]
+                - type: 'null'
+              description: '`generic_hmac`: how the signature is written; `null` is hex.'
+            signature_prefix:
+              type: [string, 'null']
+              description: '`generic_hmac`: text before the signature in the header, such as `sha256=`.'
+            path:
+              type: string
+              description: The trigger's address on this hub, to be put after the hub's public origin.
+            last_delivery_at:
+              oneOf:
+                - $ref: '#/components/schemas/Timestamp'
+                - type: 'null'
+    WorkflowTriggerWrite:
+      type: object
+      required: [preset]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        preset:
+          $ref: '#/components/schemas/WorkflowTriggerPreset'
+        enabled:
+          type: boolean
+        events:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        secret:
+          type: [string, 'null']
+          maxLength: 4096
+          description: Stored encrypted; never returned.
+        signature_header:
+          type: [string, 'null']
+          maxLength: 120
+        signature_encoding:
+          oneOf:
+            - type: string
+              enum: [hex, base64]
+            - type: 'null'
+        signature_prefix:
+          type: [string, 'null']
+          maxLength: 40
+    WorkflowTriggerPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        enabled:
+          type: boolean
+        events:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        secret:
+          type: [string, 'null']
+          maxLength: 4096
+          description: Replaces the stored secret; empty or `null` removes it.
+        signature_header:
+          type: [string, 'null']
+          maxLength: 120
+        signature_encoding:
+          oneOf:
+            - type: string
+              enum: [hex, base64]
+            - type: 'null'
+        signature_prefix:
+          type: [string, 'null']
+          maxLength: 40
+    WorkflowTriggerTest:
+      type: object
+      properties:
+        event:
+          type: [string, 'null']
+          maxLength: 120
+          description: The sample's event; the first event the trigger takes when left out.
+        task_id:
+          type: [string, 'null']
+          maxLength: 120
+          description: "`clickup`: the made-up task's id in the sample."
+    WorkflowTriggerDeliveryStatus:
+      type: string
+      enum:
+        [
+          received,
+          duplicate,
+          signature_rejected,
+          filtered_out,
+          run_started,
+          run_succeeded,
+          run_failed,
+        ]
+    WorkflowTriggerDelivery:
+      type: object
+      description: One delivery a trigger received, and what became of it.
+      required:
+        [
+          id,
+          trigger_id,
+          workflow_id,
+          received_at,
+          status,
+          event,
+          event_id,
+          task_id,
+          workflow_run_id,
+          filtered,
+          test,
+          error,
+          body_preview,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/Ulid'
+        trigger_id:
+          $ref: '#/components/schemas/Ulid'
+        workflow_id:
+          $ref: '#/components/schemas/Ulid'
+        received_at:
+          $ref: '#/components/schemas/Timestamp'
+        status:
+          $ref: '#/components/schemas/WorkflowTriggerDeliveryStatus'
+        event:
+          type: [string, 'null']
+        event_id:
+          type: [string, 'null']
+        task_id:
+          type: [string, 'null']
+        workflow_run_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+        filtered:
+          type: boolean
+          description: The run ended because a condition of the workflow said no (it is not a failure).
+        test:
+          type: boolean
+          description: Sent by "Send test event", not by the outside service.
+        error:
+          type: [string, 'null']
+        body_preview:
+          type: [string, 'null']
+          description: At most the first 1000 characters, with secret-looking fields masked.
+    WorkflowTriggerReceipt:
+      type: object
+      required: [status, delivery_id, workflow_run_id]
+      properties:
+        status:
+          type: string
+          enum: [accepted, duplicate, filtered]
+        delivery_id:
+          $ref: '#/components/schemas/Ulid'
+        workflow_run_id:
+          oneOf:
+            - $ref: '#/components/schemas/Ulid'
+            - type: 'null'
+    WorkflowRules:
+      type: object
+      description: >-
+        A condition step's several rules (DECISIONS §122): with `match: all` the step says yes
+        when every rule holds, with `any` when one does. Each rule compares a path —
+        `trigger.event`, `trigger.body.priority`, `steps.<id>.output` — with a value, using
+        the operators of the single-line condition.
+      required: [match, items]
+      properties:
+        match:
+          type: string
+          enum: [all, any]
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/WorkflowRule'
+    WorkflowRule:
+      type: object
+      required: [path, operator, value]
+      properties:
+        path:
+          type: string
+          maxLength: 200
+        operator:
+          type: string
+          maxLength: 10
+          description: >-
+            One of `==`, `!=`, `>=`, `<=`, `>`, `<`, `contains`, `matches`, `exists`, `empty`
+            (a plain string so every generated client can carry it; the hub refuses any other
+            when the workflow is saved, `rule_operator_invalid`).
+        value:
+          type: [string, 'null']
+          maxLength: 1000
+          description: '`null` for `exists` and `empty`.'
     WorkflowValidation:
       type: object
       required: [valid, problems, warnings]
