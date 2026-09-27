@@ -21,6 +21,8 @@ export { groqAdapter } from './groq.js';
 export { googleAdapter, googleChat } from './google.js';
 export { ollamaAdapter } from './ollama.js';
 export { openAiAdapter, openAiChat, perMillionMicroUsd } from './openai.js';
+export { DEFAULT_INSTRUCTIONS, responsesChat } from './responses.js';
+export type { ResponsesOptions } from './responses.js';
 export { joinUrl, requestJson, requestBytes, requestUpload } from './http.js';
 export { chatFailure, openStream, parseFrame, readLines, sseData } from './stream.js';
 export type { StreamOpen, StreamRequest } from './stream.js';
