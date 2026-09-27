@@ -24,6 +24,75 @@ enum TrajectoryRules {
         }
     }
 
+    /// Longer than this with nothing happening is folded out of the timeline; a fold is drawn as
+    /// `foldMS` of axis time (the web's `axisOf`).
+    static let idleMS: Double = 3000
+    static let foldMS: Double = 600
+
+    /// The time a step occupies, in ms since 1970; a running one up to `now`; nil without times.
+    static func span(_ step: TrajectoryStep, now: Date) -> (Double, Double)? {
+        guard let started = step.startedAt else { return nil }
+        let start = started.timeIntervalSince1970 * 1000
+        if let ended = step.endedAt { return (start, max(start, ended.timeIntervalSince1970 * 1000)) }
+        return step.status == .running ? (start, max(start, now.timeIntervalSince1970 * 1000)) : (start, start)
+    }
+
+    struct Axis {
+        let blocks: [(Double, Double)]
+        let offsets: [Double]
+        let length: Double
+
+        /// Where an instant sits, from 0 (start) to 1 (end).
+        func at(_ time: Double) -> Double {
+            guard !blocks.isEmpty else { return 0 }
+            let index = blocks.firstIndex { time <= $0.1 } ?? blocks.count - 1
+            let (start, end) = blocks[index]
+            let within = min(max(time, start), end) - start
+            return min(1, max(0, (offsets[index] + within) / length))
+        }
+
+        /// Where the folded gaps are drawn.
+        var folds: [Double] { offsets.dropFirst().map { ($0 - TrajectoryRules.foldMS / 2) / length } }
+    }
+
+    static func axis(_ spans: [(Double, Double)]) -> Axis {
+        var blocks: [(Double, Double)] = []
+        for (start, end) in spans.sorted(by: { $0.0 < $1.0 }) {
+            if let last = blocks.last, start - last.1 <= idleMS {
+                blocks[blocks.count - 1].1 = max(last.1, end)
+            } else {
+                blocks.append((start, end))
+            }
+        }
+        var offsets: [Double] = []
+        var total: Double = 0
+        for (index, block) in blocks.enumerated() {
+            if index > 0 { total += foldMS }
+            offsets.append(total)
+            total += block.1 - block.0
+        }
+        return Axis(blocks: blocks, offsets: offsets, length: max(total, 1))
+    }
+
+    /// Sub-rows for a lane, so calls that ran at the same time do not hide each other.
+    static func rows(_ spans: [(Double, Double)]) -> [Int] {
+        var ends: [Double] = []
+        var rows = Array(repeating: 0, count: spans.count)
+        for (index, span) in spans.enumerated().sorted(by: { $0.element.0 < $1.element.0 }) {
+            if let row = ends.firstIndex(where: { $0 <= span.0 }) {
+                ends[row] = span.1
+                rows[index] = row
+            } else {
+                rows[index] = ends.count
+                ends.append(span.1)
+            }
+        }
+        return rows
+    }
+
+    /// The file the hub names the log (`session-<id>-log.json`).
+    static func logName(_ sessionID: String) -> String { "session-\(sessionID)-log.json" }
+
     static func icon(_ kind: TrajectoryStepKind) -> Lucide {
         switch kind {
         case .input: return .userRound
@@ -46,9 +115,15 @@ struct TrajectorySheet: View {
     @State private var error: String?
     @State private var lane: TrajectoryLane?
     @State private var query = ""
+    /// A bar tapped on the timeline: its step is brought into view in the list.
+    @State private var focused: String?
+    @State private var saving = false
+    @State private var downloadError: String?
+    @State private var saved: SharedFile?
 
     var body: some View {
         NavigationStack {
+          ScrollViewReader { reader in
             List {
                 if let error { NoticeView(text: error, tone: .danger) }
                 if let trajectory {
@@ -57,6 +132,26 @@ struct TrajectorySheet: View {
                         Text(l10n("trajectory_sheet.untimed")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                     } else if trajectory.timing == .partial {
                         Text(l10n("trajectory_sheet.partial")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    }
+                    if trajectory.timing != ._none && trajectory.steps.contains(where: { TrajectoryRules.span($0, now: Date()) != nil }) {
+                        Section(l10n("trajectory_sheet.timeline")) {
+                            TrajectoryTimeline(steps: trajectory.steps) { step in
+                                lane = nil
+                                query = ""
+                                focused = step.id
+                            }
+                            .listRowInsets(EdgeInsets(top: Space.s2, leading: Space.s2, bottom: Space.s2, trailing: Space.s2))
+                        }
+                    }
+                    Section {
+                        Button {
+                            Task { await download() }
+                        } label: {
+                            LucideLabel(l10n("trajectory_sheet.download"), icon: .download, size: 16)
+                        }
+                        .disabled(saving)
+                        .accessibilityIdentifier("trajectory.download")
+                        if let downloadError { NoticeView(text: downloadError, tone: .danger) }
                     }
                     Section {
                         Picker(l10n("trajectory_sheet.filters"), selection: $lane) {
@@ -77,12 +172,15 @@ struct TrajectorySheet: View {
                             Text(l10n("trajectory_sheet.no_match")).foregroundStyle(Tone.textMuted)
                         }
                         ForEach(steps, id: \.id) { step in
-                            TrajectoryStepRow(step: step)
+                            TrajectoryStepRow(step: step, highlighted: focused == step.id).id(step.id)
                         }
                     }
                 } else if error == nil {
                     SkeletonList(rows: 5).listRowBackground(Color.clear)
                 }
+            }
+            .onChange(of: focused) { _, id in
+                if let id { withAnimation { reader.scrollTo(id, anchor: .center) } }
             }
             .navigationTitle(l10n("trajectory_sheet.tab"))
             .navigationBarTitleDisplayMode(.inline)
@@ -90,6 +188,7 @@ struct TrajectorySheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button(l10n("common.close")) { dismiss() } }
             }
             .refreshable { await load() }
+            .sheet(item: $saved) { file in ActivitySheet(items: [file.url]) }
             .task {
                 await load()
                 // While a run streams, the trajectory grows: read again now and then.
@@ -99,6 +198,7 @@ struct TrajectorySheet: View {
                     await load()
                 }
             }
+          }
         }
         .accessibilityIdentifier("chat.trajectory")
     }
@@ -122,6 +222,24 @@ struct TrajectorySheet: View {
         .accessibilityIdentifier("trajectory.metrics")
     }
 
+    /// The session log: the same document, as the hub sends it for download (`download=true`).
+    private func download() async {
+        saving = true
+        defer { saving = false }
+        let profile = profile, id = sessionID
+        do {
+            let data = try await app.api.call {
+                try await SessionsAPI.sessionsGetTrajectoryWithRequestBuilder(xHubProfile: profile, sessionId: id, download: true, apiConfiguration: $0).execute().bodyData
+            }
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(TrajectoryRules.logName(id))
+            try (data ?? Data()).write(to: url, options: .atomic)
+            downloadError = nil
+            saved = SharedFile(url: url)
+        } catch {
+            downloadError = HubFailure(error).describe(l10n)
+        }
+    }
+
     private func load() async {
         let profile = profile, id = sessionID
         do {
@@ -135,6 +253,7 @@ struct TrajectorySheet: View {
 
 private struct TrajectoryStepRow: View {
     let step: TrajectoryStep
+    var highlighted = false
     @Environment(\.l10n) private var l10n
     @State private var open = false
 
@@ -167,6 +286,8 @@ private struct TrajectoryStepRow: View {
             }
         }
         .buttonStyle(.plain)
+        .listRowBackground(highlighted ? Tone.accentSoft : nil)
+        .onChange(of: highlighted) { _, on in if on { open = true } }
         .accessibilityIdentifier("trajectory.step.\(step.id)")
     }
 
@@ -174,5 +295,76 @@ private struct TrajectoryStepRow: View {
         if step.kind == .tool, let name = step.toolCall?.name { return name }
         if let text = step.text, !text.isEmpty, step.kind == .input { return String(text.prefix(60)) }
         return l10n("trajectory_sheet.kind.\(step.kind.rawValue)")
+    }
+}
+
+/// The three lanes (four with subagents) on one time axis, idle stretches folded, time running in
+/// the reading direction; parallel calls on their own sub-rows. A tap on a bar finds its step.
+struct TrajectoryTimeline: View {
+    let steps: [TrajectoryStep]
+    let pick: (TrajectoryStep) -> Void
+    @Environment(\.l10n) private var l10n
+    private static let rowHeight: CGFloat = 12
+    private static let rowGap: CGFloat = 3
+
+    private struct Bar: Identifiable {
+        let step: TrajectoryStep
+        let from: Double
+        let to: Double
+        let row: Int
+        var id: String { step.id }
+    }
+
+    var body: some View {
+        let now = Date()
+        let spans = steps.compactMap { TrajectoryRules.span($0, now: now) }
+        let axis = TrajectoryRules.axis(spans)
+        let lanes = [TrajectoryLane.input, .model, .tools, .subagents].filter { lane in steps.contains { $0.lane == lane && TrajectoryRules.span($0, now: now) != nil } }
+        VStack(alignment: .leading, spacing: Space.s2) {
+            ForEach(lanes, id: \.self) { lane in
+                let timed = steps.filter { $0.lane == lane }.compactMap { step in TrajectoryRules.span(step, now: now).map { (step, $0) } }
+                let rows = TrajectoryRules.rows(timed.map(\.1))
+                let bars = timed.enumerated().map { index, item in
+                    Bar(step: item.0, from: axis.at(item.1.0), to: axis.at(item.1.1), row: rows[index])
+                }
+                let height = CGFloat((rows.max() ?? 0) + 1) * (Self.rowHeight + Self.rowGap)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(l10n("trajectory_sheet.lane.\(lane.rawValue)")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    GeometryReader { geometry in
+                        ZStack(alignment: .topLeading) {
+                            ForEach(axis.folds, id: \.self) { fold in
+                                Rectangle().fill(Tone.border).frame(width: 1, height: height)
+                                    .padding(.leading, geometry.size.width * fold)
+                            }
+                            ForEach(bars) { bar in
+                                Button { pick(bar.step) } label: {
+                                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                        .fill(colour(bar.step))
+                                        .frame(width: max(3, geometry.size.width * (bar.to - bar.from)), height: Self.rowHeight)
+                                }
+                                .buttonStyle(.plain)
+                                // Leading padding follows the reading direction: time runs as the text does.
+                                .padding(.leading, geometry.size.width * bar.from)
+                                .padding(.top, CGFloat(bar.row) * (Self.rowHeight + Self.rowGap))
+                                .accessibilityLabel(l10n("trajectory_sheet.kind.\(bar.step.kind.rawValue)"))
+                            }
+                        }
+                    }
+                    .frame(height: height)
+                }
+                .accessibilityIdentifier("trajectory.lane.\(lane.rawValue)")
+            }
+        }
+        .accessibilityIdentifier("trajectory.timeline")
+    }
+
+    private func colour(_ step: TrajectoryStep) -> Color {
+        if step.status == .failed { return Tone.danger }
+        switch step.lane {
+        case .input: return Tone.textMuted
+        case .model: return Tone.accent
+        case .tools: return Tone.statusRunning
+        case .subagents: return Tone.link
+        }
     }
 }

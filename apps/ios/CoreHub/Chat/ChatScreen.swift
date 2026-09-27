@@ -30,6 +30,8 @@ struct ChatScreen: View {
     /// `/clear-screen`: the messages shown before it stay in the conversation, hidden here.
     @State private var clearedBefore: String?
     @State private var pickingModel = false
+    /// The agent's skills, read the first time `/skill ` is typed.
+    @State private var skills: [SlashCommands.SkillChoice]?
     @State private var renaming: RenameTarget?
     @State private var deleting: String?
     /// The chat's insight (apps batch 6): the context ring, runs, subagents, changed files and files.
@@ -211,6 +213,14 @@ struct ChatScreen: View {
                 NoticeView(text: failure, tone: .danger)
                     .onTapGesture { controls?.error = nil }
             }
+            if !model.outbox.isEmpty {
+                MessageQueueStrip(
+                    items: model.outbox,
+                    sendNow: { item in Task { await model.release(item, when: .next) } },
+                    steer: { item in Task { await model.release(item, when: .interrupt) } },
+                    remove: { item in model.removeQueued(item) }
+                )
+            }
             if let replyTo {
                 ReplyStrip(message: replyTo) { self.replyTo = nil }
             }
@@ -230,7 +240,12 @@ struct ChatScreen: View {
                 .onAppear { controls.load(profile: model.profile, agentID: model.state.agentID) }
                 .onChange(of: model.state.agentID) { _, id in controls.load(profile: model.profile, agentID: id) }
             }
-            if let query = SlashCommands.query(draft) {
+            if slashOffered.contains(where: { $0.name == "skill" }), let word = SlashCommands.skillQuery(draft) {
+                SkillMenu(skills: SlashCommands.filterSkills(skills ?? [], word), loaded: skills != nil) { skill in
+                    draft = "/skill \(skill.key) "
+                }
+                .task(id: model.state.agentID) { await loadSkills() }
+            } else if let query = SlashCommands.query(draft) {
                 SlashMenu(commands: SlashCommands.filter(slashOffered, query)) { command in
                     if command.argument == .none {
                         draft = ""
@@ -281,6 +296,13 @@ struct ChatScreen: View {
             default: return true
             }
         }
+    }
+
+    private func loadSkills() async {
+        guard skills == nil, let agentID = model.state.agentID else { return }
+        let profile = model.profile
+        let list = try? await app.api.call { try await AgentsAPI.agentsListSkills(xHubProfile: profile, agentId: agentID, apiConfiguration: $0) }
+        skills = SlashCommands.skills(list?.categories ?? [])
     }
 
     private func runSlash(_ command: SlashCommands.Command, argument: String) {

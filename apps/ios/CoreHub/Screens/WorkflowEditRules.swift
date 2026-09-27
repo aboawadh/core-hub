@@ -238,6 +238,15 @@ enum WorkflowEditRules {
         return "\(path) \(condition.op) \(numeric ? value : "\"\(condition.value)\"")"
     }
 
+    // MARK: - Models
+
+    /// A step's model as the picker names it: the catalogue's label, else the id as saved; nil for
+    /// none (the agent's own model).
+    static func modelLabel(_ value: String?, options: [ChatControls.ModelOption]) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return options.first { $0.value == value }?.label ?? value
+    }
+
     // MARK: - Limits
 
     /// The saved limits as typed: an empty field has none; minutes become seconds within the hub's

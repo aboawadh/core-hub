@@ -50,6 +50,24 @@ final class SessionListModel {
     var showHidden = false
     /// Categories folded shut, by id (this phone's own choice).
     var folded: Set<String> = []
+    /// The order the person dragged the chats into, for this view (SessionOrder.swift).
+    private(set) var manual: [String] = []
+    @ObservationIgnored private var orderScope: String?
+
+    private var currentScope: String { profileFilter ?? "all" }
+
+    /// Drops `moved` just before `target` in a group as drawn; false when nothing moved.
+    @discardableResult
+    func reorder(_ moved: String, before target: String, among shown: [String]) -> Bool {
+        guard let next = SessionOrder.drop(moved, before: target, shown: shown) else { return false }
+        setOrder(next)
+        return true
+    }
+
+    func setOrder(_ group: [String]) {
+        manual = SessionOrder.merge(group, into: manual)
+        SessionOrder.write(manual, scope: currentScope)
+    }
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var listener: UUID?
@@ -72,7 +90,7 @@ final class SessionListModel {
     /// The groups the list draws: categories, channels, then the rest (SessionGroups.swift).
     var groups: [SessionGroup] {
         let listed = filter == .archived ? [] : SessionGroups.shown(conversations, showHidden: showHidden, query: query)
-        return SessionGroups.group(sessions, categories: categories, conversations: listed, keepEmpty: query.trimmingCharacters(in: .whitespaces).isEmpty)
+        return SessionGroups.group(sessions, categories: categories, conversations: listed, keepEmpty: query.trimmingCharacters(in: .whitespaces).isEmpty, manual: manual)
     }
 
     var hiddenCount: Int { conversations.filter { $0.hidden == true }.count }
@@ -288,6 +306,10 @@ final class SessionListModel {
         let archived = filter.archivedParameter
         let profiles: SessionsAPI.Profiles_sessionsList? = profileFilter == nil ? .all : nil
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if orderScope != currentScope {
+            orderScope = currentScope
+            manual = SessionOrder.read(currentScope)
+        }
         loading = true
         Task { await loadCategories() }
         Task { await loadConversations() }
@@ -514,6 +536,13 @@ struct SessionListView: View {
         case .category(let category):
             VStack(alignment: .leading, spacing: 2) {
                 categoryHeader(category, count: group.sessions.count)
+                    // A chat dropped on a category's heading is filed there (as on the web).
+                    .dropDestination(for: String.self) { ids, _ in
+                        guard let id = ids.first, let session = model.sessions.first(where: { $0.id == id }),
+                              session.profile == category.profile, session.categoryId != category.id else { return false }
+                        Task { await model.move(session, to: category.id) }
+                        return true
+                    }
                 if !model.folded.contains(category.id) {
                     if group.sessions.isEmpty {
                         Text(l10n("session_groups.categories.empty_group"))
@@ -521,14 +550,14 @@ struct SessionListView: View {
                             .foregroundStyle(Tone.textFaint)
                             .padding(.horizontal, Space.s2)
                     }
-                    ForEach(group.sessions, id: \.id) { session in row(session) }
+                    ForEach(group.sessions, id: \.id) { session in row(session, in: group.sessions) }
                 }
             }
             .accessibilityIdentifier("sessions.category.\(category.id)")
         case .channel(let platform):
             VStack(alignment: .leading, spacing: 2) {
                 groupTitle(SessionGroups.channelHeading(platform, l10n))
-                ForEach(group.sessions, id: \.id) { session in row(session) }
+                ForEach(group.sessions, id: \.id) { session in row(session, in: group.sessions) }
                 ForEach(group.conversations, id: \.id) { conversation in conversationRow(conversation) }
             }
             .accessibilityIdentifier("sessions.channel.\(platform)")
@@ -688,12 +717,33 @@ struct SessionListView: View {
                 .foregroundStyle(Tone.textFaint)
                 .padding(.top, Space.s2)
             ForEach(sessions, id: \.id) { session in
-                row(session)
+                row(session, in: sessions)
             }
         }
     }
 
-    private func row(_ session: Session) -> some View {
+    /// A chat's row. `list` is the rows it is drawn among: dropping another chat on it puts that one
+    /// just before it there (the order is this phone's, SessionOrder.swift).
+    @ViewBuilder
+    private func row(_ session: Session, in list: [Session]) -> some View {
+        if model.selecting {
+            rowBody(session, in: list)
+        } else {
+            rowBody(session, in: list)
+                .draggable(session.id) {
+                    Text(session.title ?? l10n("sessions.untitled"))
+                        .font(.system(size: FontSize.sizeSm, weight: .medium))
+                        .padding(Space.s2)
+                        .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                }
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let moved = ids.first else { return false }
+                    return model.reorder(moved, before: session.id, among: list.map(\.id))
+                }
+        }
+    }
+
+    private func rowBody(_ session: Session, in list: [Session]) -> some View {
         let title = session.title ?? l10n("sessions.untitled")
         let chosen = model.selected.contains(session.id)
         return Button {
@@ -759,6 +809,16 @@ struct SessionListView: View {
                 } label: {
                     Label { Text(l10n(session.archived ? "chat_controls.unarchive" : "chat_controls.archive")) } icon: {
                         Image(lucide: session.archived ? .archiveRestore : .archive)
+                    }
+                }
+                if let up = SessionOrder.step(session.id, by: -1, shown: list.map(\.id)) {
+                    Button { model.setOrder(up) } label: {
+                        Label { Text(l10n("session_order.move_up")) } icon: { Image(lucide: .chevronUp) }
+                    }
+                }
+                if let down = SessionOrder.step(session.id, by: 1, shown: list.map(\.id)) {
+                    Button { model.setOrder(down) } label: {
+                        Label { Text(l10n("session_order.move_down")) } icon: { Image(lucide: .chevronDown) }
                     }
                 }
                 Button { moving = Keyed(id: session.id, value: session) } label: {

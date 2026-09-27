@@ -55,7 +55,7 @@ struct WorkflowEditorPage: View {
                 }
                 ForEach(draft.nodes, id: \.id) { node in
                     NavigationLink {
-                        WorkflowStepPage(draft: $draft, nodeID: node.id, profile: profile, validation: validation)
+                        WorkflowStepPage(draft: $draft, nodeID: node.id, profile: profile, validation: validation, app: app)
                     } label: {
                         stepRow(node)
                     }
@@ -231,6 +231,14 @@ struct WorkflowStepPage: View {
     let nodeID: String
     let profile: String
     let validation: WorkflowValidation?
+
+    init(draft: Binding<WorkflowEditRules.Draft>, nodeID: String, profile: String, validation: WorkflowValidation?, app: AppModel) {
+        _draft = draft
+        self.nodeID = nodeID
+        self.profile = profile
+        self.validation = validation
+        _controls = State(initialValue: ChatControlsModel(app: app))
+    }
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
@@ -238,6 +246,9 @@ struct WorkflowStepPage: View {
     @State private var route: WorkflowEdge.Route = .success
     @State private var rawCondition = false
     @State private var minutes = false
+    @State private var pickingModel = false
+    /// The profile's model catalogue, as the chat's chips read it.
+    @State private var controls: ChatControlsModel
 
     private var index: Int? { draft.nodes.firstIndex { $0.id == nodeID } }
 
@@ -305,20 +316,25 @@ struct WorkflowStepPage: View {
                     ForEach(agents, id: \.id) { agent in Text(agent.name).tag(String?.some(agent.id)) }
                 }
                 .accessibilityIdentifier("workflow.step.agent")
-                TextField(l10n("workflow_editor.form.model_default"), text: Binding(
-                    get: { draft.nodes[index].model ?? "" },
-                    set: { value in
-                        let trimmed = value.trimmingCharacters(in: .whitespaces)
-                        draft.nodes[index].model = trimmed.isEmpty ? nil : trimmed
+                // The profile's chat models, as the chat's model chip offers them; none = the agent's own.
+                Button {
+                    controls.load(profile: profile, agentID: draft.nodes[index].agentId)
+                    pickingModel = true
+                } label: {
+                    LabeledContent(l10n("workflow_editor.form.model")) {
+                        Text(WorkflowEditRules.modelLabel(draft.nodes[index].model, options: controls.models) ?? l10n("workflow_editor.form.model_default"))
+                            .lineLimit(1)
+                    }
+                }
+                .accessibilityIdentifier("workflow.step.model")
+                .sheet(isPresented: $pickingModel) {
+                    ModelPickerSheet(options: controls.models, loaded: controls.modelsLoaded, current: draft.nodes[index].model, allowDefault: true) { value in
+                        draft.nodes[index].model = value
                         draft.nodes[index].provider = nil
                     }
-                ))
-                .monoField()
-                .accessibilityIdentifier("workflow.step.model")
+                }
             } header: {
                 Text(l10n("workflow_editor.form.agent"))
-            } footer: {
-                Text(l10n("workflow_editor.form.model"))
             }
             templateSection(index, label: "workflow_editor.form.prompt", footer: "workflow_editor.form.attachments_note")
         case .condition:

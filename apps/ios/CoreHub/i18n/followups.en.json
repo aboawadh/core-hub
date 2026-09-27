@@ -1,0 +1,16 @@
+{
+  "message_queue": {
+    "title": "Message queue",
+    "send_now": "Send now",
+    "steer": "Steer",
+    "steer_hint": "Stop the live turn and take this instead, in the same context.",
+    "remove": "Remove"
+  },
+  "session_order": {
+    "move_up": "Move up",
+    "move_down": "Move down"
+  },
+  "skill_picker": {
+    "none": "This agent has no skills switched on."
+  }
+}
