@@ -64,6 +64,12 @@ All matched files use Prettier code style!
 $ python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ios-signed.yml'))"
 (no error)
 ```
+CI على الطلب #188 (الدفعة الأولى bce84ff3):
+```
+13 pass, 0 fail — mergeStateStatus CLEAN
+(Lint, typecheck, contracts, client tests, build; Server unit tests 1-3/3; Web smoke journeys;
+iOS simulator; Swift client; Desktop smoke; Docker /health; db:migrate; change record; graphify-out)
+```
 `actionlint` غير مثبت على الجهاز فلم يُشغَّل. لم يُشغَّل سير العمل على App Store Connect الحقيقي
 (ممنوع في هذه المهمة)؛ كل الاختبارات على خادم App Store Connect مزيّف.
 
