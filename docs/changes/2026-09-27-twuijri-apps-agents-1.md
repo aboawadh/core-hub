@@ -74,7 +74,12 @@ $ pnpm typecheck               → exit=0
 المهارات بعلاماتها ومفاتيحها و«⋯»، بطاقة الذاكرة بشريط 98 من 120 (لون التحذير) ومدخلاتها الثلاثة ومنها عربي، وصف الإضافة
 بمصدرها وحالتها وزر الإزالة).
 
-iOS: لا بناء على لينكس؛ `gh workflow run ios.yml --ref night/apps-agents-1` (run 36282775630) — النتيجة تُضاف أدناه.
+```
+$ gh workflow run ios.yml --ref night/apps-agents-1   (run 36282775630)
+✓ Generate the Swift client (CoreHubClient)
+✓ Build and test on the iOS simulator — Executed 244 tests, with 0 failures · ** TEST SUCCEEDED **
+  (AgentToolRulesTests: 9 passed)
+```
 
 ## المخاطر والرجوع
 - متابعة المهمة بالقراءة كل 1.5 ث لا بالمقبس؛ تتوقف حين تغادر الصفحة (ينتهي نطاق الواجهة) والمهمة تكمل في المركز.
