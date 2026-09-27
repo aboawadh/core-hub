@@ -25,7 +25,9 @@
  *
  * Credentials: none of them are in this file. The provider row, the key and the HTTP
  * client all stay in `models` (ADR 0010); what crosses the boundary is
- * `AgentModelsPort.directChat`, which takes a provider row id and gives back events.
+ * `AgentModelsPort.directChat`, which takes a provider row id and gives back events. A
+ * provider signed in through Hermes works here too (DECISIONS §118): `models` borrows its
+ * credential from Hermes's own Python for the one turn, and this file sees none of it.
  */
 import { readFile as readFileFromDisk } from 'node:fs/promises';
 import { notImplemented } from '../../../lib/errors.js';
