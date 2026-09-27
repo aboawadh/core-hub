@@ -33,6 +33,8 @@ struct HubFailure: Error, Equatable {
     var timezone: String?
     /// `details.message`: the words of whoever refused behind the hub (Hermes, Apple, Google).
     var detailMessage: String?
+    /// `details.peer_code`: what a linked hub answered when it refused (ADR 0026).
+    var peerCode: String?
 
     static let signedOut = HubFailure(kind: .signedOut, status: 401, code: "unauthorized", message: nil, operationID: nil, requestID: nil, detail: "")
 
@@ -75,6 +77,7 @@ struct HubFailure: Error, Equatable {
             failure.maxBytes = envelope?.details?.max_bytes
             failure.timezone = envelope?.details?.timezone
             failure.detailMessage = envelope?.details?.message
+            failure.peerCode = envelope?.details?.peer_code
             return failure
         }
         if error is URLError {
@@ -93,8 +96,9 @@ struct HubFailure: Error, Equatable {
             let max_bytes: Int?
             let timezone: String?
             let message: String?
+            let peer_code: String?
 
-            private enum Keys: String, CodingKey { case operationId, request_id, reason, max_bytes, timezone, message }
+            private enum Keys: String, CodingKey { case operationId, request_id, reason, max_bytes, timezone, message, peer_code }
 
             /// Each field on its own: one of an unexpected type must not lose the others.
             init(from decoder: Decoder) throws {
@@ -105,6 +109,7 @@ struct HubFailure: Error, Equatable {
                 max_bytes = try? container.decodeIfPresent(Int.self, forKey: .max_bytes)
                 timezone = try? container.decodeIfPresent(String.self, forKey: .timezone)
                 message = try? container.decodeIfPresent(String.self, forKey: .message)
+                peer_code = try? container.decodeIfPresent(String.self, forKey: .peer_code)
             }
         }
 

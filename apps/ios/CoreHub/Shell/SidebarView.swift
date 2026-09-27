@@ -11,6 +11,7 @@ struct SidebarView: View {
     let selectedRoom: String?
     let navigate: (MainContent) -> Void
     let openSession: (Session) -> Void
+    var selectedChannel: String? = nil
     let close: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
@@ -28,7 +29,11 @@ struct SidebarView: View {
                     segments
                         .padding(.top, Space.s3)
                     if segment == .chat {
-                        SessionListView(model: sessionList, selected: selectedSession, open: openSession)
+                        SessionListView(
+                            model: sessionList, selected: selectedSession, open: openSession,
+                            openChannel: { conversation in navigate(.channel(conversationID: conversation.id, profile: conversation.profile)) },
+                            selectedChannel: selectedChannel
+                        )
                     } else {
                         RoomsList(selected: selectedRoom) { room in
                             navigate(.room(roomID: room.id, profile: room.profile))
@@ -236,6 +241,7 @@ enum Icons {
         case .models: return .box
         case .deviceConnections: return .qrCode
         case .knowledge: return .bookOpen
+        case .linkedHubs: return .network
         case .logs: return .scrollText
         case .usage: return .chartColumn
         case .skillsUsage: return .activity
@@ -245,6 +251,7 @@ enum Icons {
         case .updates: return .circleArrowDown
         case .plugins: return .puzzle
         case .files: return .folder
+        case .terminal: return .squareTerminal
         case .agentSkills: return .sparkles
         case .agentMcp: return .server
         case .agentMemory: return .brain

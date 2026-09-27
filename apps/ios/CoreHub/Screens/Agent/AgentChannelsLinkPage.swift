@@ -1,9 +1,9 @@
 // An agent's Channels (apps batch 9, the web's page): each linked platform as a card — its switch, state
 // and account, and what it offers (its settings, WhatsApp's mode and reply header, its fields, Unlink or
 // Forget identity, Restart when the gateway does not serve it yet); linking a platform (a bot token or
-// credentials here; a platform linked by scanning a code (WhatsApp) cannot be scanned from this phone's
-// own screen, so the page says to pair it from a computer and opens the web); the senders waiting for
-// approval and the approved ones; and the agent's incoming webhooks. Android's AgentChannelsPage.kt is
+// credentials, or — for a platform linked by scanning a code (WhatsApp) — the code itself, drawn here
+// for the phone that has the account: AgentChannelPair.swift); the senders waiting for approval and
+// the approved ones; and the agent's incoming webhooks. Android's AgentChannelsPage.kt is
 // its twin.
 import CoreHubClient
 import SwiftUI
@@ -41,7 +41,6 @@ struct AgentChannelsLinkPage: View {
     let agent: Agent
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
-    @Environment(\.openURL) private var openURL
     @State private var list: AgentsListChannels200Response?
     @State private var specs: [ChannelPlatform] = []
     @State private var pairing: PairingList?
@@ -136,10 +135,10 @@ struct AgentChannelsLinkPage: View {
         .task(id: app.currentProfile) { await load() }
         .toolQuestion($question)
         .sheet(isPresented: $picking, onDismiss: { Task { await load() } }) {
-            NavigationStack { ChannelLinkSheet(agent: agent, start: nil, openWeb: openWeb) }
+            NavigationStack { ChannelLinkSheet(agent: agent, start: nil) }
         }
         .sheet(item: $linking, onDismiss: { Task { await load() } }) { spec in
-            NavigationStack { ChannelLinkSheet(agent: agent, start: spec.value, openWeb: openWeb) }
+            NavigationStack { ChannelLinkSheet(agent: agent, start: spec.value) }
         }
         .sheet(item: $settings) { channel in
             ChannelSettingsSheet(agent: agent, platform: channel.id, name: specs.first { $0.platform == channel.id }?.label ?? channel.value.label, gateway: list?.gateway)
@@ -177,12 +176,6 @@ struct AgentChannelsLinkPage: View {
                 Task { await act { _ = try await AgentsAPI.agentsClearChannel(xHubProfile: $0, agentId: agent.id, platform: channel.platform, apiConfiguration: $1) } }
             }
         }
-    }
-
-    private func openWeb() {
-        guard let hub = app.credentials?.hubURL, let path = AppRoutes.routes[.agentChannels]?.replacingOccurrences(of: ":agentId", with: agent.id),
-              let url = URL(string: hub.absoluteString + path) else { return }
-        openURL(url)
     }
 
     private func load() async {
@@ -239,15 +232,13 @@ struct ChannelLinkSheet: View {
     let agent: Agent
     /// A platform to open straight at (a card's Link or Pair), or nil for the list.
     let start: ChannelPlatform?
-    let openWeb: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
 
     var body: some View {
         if let start {
-            ChannelLinkForm(agent: agent, platform: start, openWeb: openWeb, done: { dismiss() })
+            ChannelLinkForm(agent: agent, platform: start, done: { dismiss() })
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button(l10n("common.close")) { dismiss() } }
                 }
@@ -263,7 +254,7 @@ struct ChannelLinkSheet: View {
         } content: { platforms, _ in
             List(platforms, id: \.platform) { platform in
                 NavigationLink {
-                    ChannelLinkForm(agent: agent, platform: platform, openWeb: openWeb, done: { dismiss() })
+                    ChannelLinkForm(agent: agent, platform: platform, done: { dismiss() })
                 } label: {
                     HStack {
                         LucideIcon(ChannelLinks.onPhone(platform) ? .link : .qrCode, size: 16).foregroundStyle(Tone.textMuted)
@@ -289,7 +280,6 @@ struct ChannelLinkSheet: View {
 struct ChannelLinkForm: View {
     let agent: Agent
     let platform: ChannelPlatform
-    let openWeb: () -> Void
     let done: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
@@ -300,20 +290,16 @@ struct ChannelLinkForm: View {
     @State private var error: String?
 
     var body: some View {
+        if !ChannelLinks.onPhone(platform) {
+            // A code to scan with the phone that has the account (WhatsApp → Linked devices).
+            ChannelPairForm(agent: agent, platform: platform, done: done)
+        } else {
+            form
+        }
+    }
+
+    private var form: some View {
         Form {
-            if !ChannelLinks.onPhone(platform) {
-                // A code shown on this screen cannot be scanned by this phone's own camera.
-                Section {
-                    NoticeView(text: l10n("agents2.ch.qr_note", ["platform": platform.label]), tone: .info)
-                        .accessibilityIdentifier("platform.qr_note")
-                    Button {
-                        openWeb()
-                    } label: {
-                        LucideLabel(l10n("channels.open_web"), icon: .externalLink, size: 16)
-                    }
-                    .accessibilityIdentifier("platform.web")
-                }
-            } else {
                 if let error { NoticeView(text: error, tone: .danger) }
                 Section {
                     ForEach(ChannelLinks.fields(platform), id: \.key) { field in
@@ -353,7 +339,6 @@ struct ChannelLinkForm: View {
                         Button(l10n("channels.docs")) { openURL(url) }
                     }
                 }
-            }
         }
         .navigationTitle(platform.label)
         .navigationBarTitleDisplayMode(.inline)

@@ -50,6 +50,8 @@ struct ModelsProvidersTab: View {
                         }
                     }
                 }
+                // What the agent runtime received (the web's Runtime card).
+                RuntimeCardSection()
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }

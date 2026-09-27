@@ -29,7 +29,8 @@ struct AgentsScreen: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            AsyncContent(key: app.currentProfile) {
+            // Read again when an agent changed on the hub (`agent.updated` on `/rt/jobs`).
+            AsyncContent(key: "\(app.currentProfile)#\(JobsFeed.shared.agentsRevision)") {
                 let profile = app.currentProfile
                 return try await app.api.call { try await AgentsAPI.agentsList(xHubProfile: profile, apiConfiguration: $0) }.items
             } content: { agents, reload in

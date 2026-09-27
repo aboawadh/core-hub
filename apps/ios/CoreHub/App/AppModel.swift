@@ -38,6 +38,8 @@ final class AppModel {
     private(set) var currentProfile: String = "default"
     /// The agents of the current profile, from the hub's registry.
     private(set) var agents: [Agent] = []
+    /// The person's display preferences (Settings → Display), as the chat draws them (ChatLook).
+    var preferences: Preferences?
     private(set) var connection: RealtimeClient.State = .offline
     /// Why the last sign-out happened, shown once on the sign-in screen.
     var notice: String?
@@ -276,6 +278,8 @@ final class AppModel {
             await self?.handshake(all: true) ?? [:]
         }
         LocalNotices.shared.start(app: self)
+        // Jobs as they move (`/rt/jobs`): pages following one wake at once (JobsFeed.swift).
+        JobsFeed.shared.start(app: self)
         // An agent may ask where this phone is (§105): requests reach `/rt/devices`.
         LocationRequests.shared.start(app: self)
         takeShared()
@@ -330,6 +334,7 @@ final class AppModel {
             let list = try await api.call { try await AuthAPI.authListProfiles(apiConfiguration: $0) }
             let allowed = Set(credentials?.profiles ?? [])
             profiles = list.items.filter { allowed.contains($0.slug) }
+            if let saved = try? await api.call({ try await AuthAPI.authGetPreferences(apiConfiguration: $0) }) { preferences = saved }
         } catch {
             // The chat list says what failed; the shell keeps what it had.
         }
@@ -376,6 +381,7 @@ final class AppModel {
 
     private func clearSession() async {
         LocalNotices.shared.stop()
+        JobsFeed.shared.stop()
         PushCenter.shared.reset()
         Speaker.shared.stop()
         realtime.stop()
@@ -428,6 +434,10 @@ final class AppModel {
         case .chat:
             guard let id = params["sessionId"] else { return .newChat }
             let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            // `?source=channel`: the id is a conversation Hermes keeps on a channel (web `channelHref`).
+            if components.queryItems?.first(where: { $0.name == "source" })?.value == "channel" {
+                return .channel(conversationID: id, profile: profile)
+            }
             return .chat(sessionID: id, profile: profile)
         case .rooms:
             guard let id = params["roomId"] else { return .newChat }

@@ -1,0 +1,35 @@
+{
+  "models_runtime": {
+    "title": "Runtime",
+    "hint": "What the agent runtime received from this profile.",
+    "runtime_writable": {
+      "ok": "The hub manages the agent runtime.",
+      "missing": "No agent runtime this hub can configure."
+    },
+    "provider_keys": {
+      "ok": "Provider keys are in the runtime's environment.",
+      "missing": "A provider key has not reached the runtime."
+    },
+    "provider_verified": {
+      "ok": "Every provider answered its last check.",
+      "missing": "A provider refused its last check — open it and fix the key."
+    },
+    "model_selected": {
+      "ok": "A chat model is selected for the runtime.",
+      "missing": "No chat model is selected — choose one under Defaults."
+    },
+    "gateway_reloaded": {
+      "ok": "The runtime restarted after the last change.",
+      "missing": "Settings changed after Hermes last started — restart it to apply them."
+    },
+    "ready": "Runtime ready · {passed}/{total} checks",
+    "passed": "{passed} of {total} checks pass",
+    "restart_now": "Restart now",
+    "fetch": "Fetch",
+    "fetching": "Asking the provider…",
+    "fetched": "{count} models found.",
+    "fetch_failed": "The provider did not return a model list.",
+    "fetch_empty": "The provider answered, but listed no models.",
+    "fetch_hint": "Asks the endpoint for its models with this address and key, before anything is saved."
+  }
+}

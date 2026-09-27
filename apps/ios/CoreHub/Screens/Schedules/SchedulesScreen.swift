@@ -18,6 +18,8 @@ struct SchedulesScreen: View {
     @State private var pendingDelete: Schedule?
     @State private var note: String?
     @State private var failure: String?
+    @State private var newWorkflow = false
+    @State private var workflowsRefresh = 0
 
     var body: some View {
         // Schedules and workflows share the page, as on the web: one segmented switch above them.
@@ -32,7 +34,7 @@ struct SchedulesScreen: View {
             .accessibilityIdentifier("schedules.half")
             switch half {
             case .jobs: jobs
-            case .workflows: WorkflowsList()
+            case .workflows: WorkflowsList(refresh: workflowsRefresh)
             }
         }
         .navigationTitle(l10n("nav.schedules"))
@@ -48,9 +50,27 @@ struct SchedulesScreen: View {
                     .accessibilityLabel(l10n("schedules.new"))
                     .accessibilityIdentifier("schedules.new")
                 }
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        newWorkflow = true
+                    } label: {
+                        LucideIcon(.plus, size: 20)
+                    }
+                    .accessibilityLabel(l10n("workflow_editor.new"))
+                    .accessibilityIdentifier("workflows.new")
+                }
             }
         }
+        .navigationDestination(isPresented: $newWorkflow) {
+            WorkflowEditorPage(original: nil, profile: app.currentProfile) { _ in workflowsRefresh += 1 }
+        }
         .onAppear { if list == nil { list = makeList() } }
+        // Schedules and workflows changed by an agent or another device (`/rt/schedules`).
+        .liveReload("/rt/schedules", events: ["schedule.", "schedule_run.", "workflow."]) {
+            await list?.refresh()
+            workflowsRefresh += 1
+        }
         .sheet(item: $opened) { item in
             ScheduleDetailView(schedule: item.schedule, changed: { _ in reload() }, deleted: { gone in list?.remove(gone.id) })
         }

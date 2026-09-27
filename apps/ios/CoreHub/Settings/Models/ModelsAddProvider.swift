@@ -158,6 +158,9 @@ private struct ProviderForm: View {
                     BaseURLField(placeholder: preset.baseUrlExample ?? "https://", url: $baseURL, host: host)
                 }
             }
+            if !preset.signIn {
+                ProviderProbeSection(preset: preset.id, baseURL: baseURL, key: key)
+            }
             Section {
                 Button {
                     Task { await add() }
@@ -223,6 +226,7 @@ private struct CustomProviderForm: View {
             Section {
                 ProviderKeyField(title: l10n("models_page.key_optional"), key: $key)
             }
+            ProviderProbeSection(preset: nil, baseURL: baseURL, key: key, kind: kind)
             Section {
                 Button {
                     guard let draft else { return }

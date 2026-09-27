@@ -177,6 +177,8 @@ enum MarkdownParser {
 struct MarkdownView: View {
     let text: String
     var foreground: Color = Tone.agentBubbleText
+    /// The text size the person chose (Settings → Display).
+    @Environment(\.chatLook) private var look
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
@@ -221,7 +223,7 @@ struct MarkdownView: View {
 
     private func inlineText(_ text: String, size: CGFloat = FontSize.sizeMd, weight: Font.Weight = .regular) -> some View {
         Text(MarkdownParser.inline(text))
-            .font(.system(size: size, weight: weight))
+            .font(.system(size: look.size(size), weight: weight))
             .lineSpacing(4)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
@@ -241,6 +243,7 @@ struct CodeBlockView: View {
     let language: String?
     let code: String
     @Environment(\.l10n) private var l10n
+    @Environment(\.chatLook) private var look
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -261,7 +264,7 @@ struct CodeBlockView: View {
             .padding(.vertical, Space.s1)
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: FontSize.sizeSm, design: .monospaced))
+                    .font(.system(size: look.size(FontSize.sizeSm), design: .monospaced))
                     .foregroundStyle(Tone.codeText)
                     .textSelection(.enabled)
                     .padding(Space.s3)

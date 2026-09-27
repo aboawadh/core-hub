@@ -62,6 +62,7 @@ struct TaskDetailView: View {
     @State private var reason = ""
     @State private var archiving: BoardLogic.Drop?
     @State private var deleting: TaskFacts?
+    @State private var handing = false
 
     private enum Sheet: Identifiable {
         case edit
@@ -87,6 +88,14 @@ struct TaskDetailView: View {
                 lists
                 dependencies
                 runSection
+                if let worktree = detail?.worktree ?? task.worktree {
+                    TaskWorktreeSection(worktree: worktree, running: shown.status == .running) {
+                        let facts = shown
+                        Task {
+                            await act { _ = try await TasksAPI.tasksDeleteWorktree(xHubProfile: facts.profile, taskId: facts.id, apiConfiguration: $0) }
+                        }
+                    }
+                }
                 CommentsSection(comments: detail?.comments ?? [], send: say)
                 actions
             }
@@ -101,6 +110,10 @@ struct TaskDetailView: View {
                     Menu {
                         Button { sheet = .edit } label: { LucideLabel(l10n("tasks.edit"), icon: .pencil) }
                             .accessibilityIdentifier("task.edit")
+                        if TaskExtrasRules.handable(shown) {
+                            Button { handing = true } label: { LucideLabel(l10n("task_extras.handover.open"), icon: .share2) }
+                                .accessibilityIdentifier("task.handover")
+                        }
                         Button(role: .destructive) { deleting = shown } label: { LucideLabel(l10n("kit.delete"), icon: .trash) }
                             .accessibilityIdentifier("task.delete")
                     } label: {
@@ -112,6 +125,14 @@ struct TaskDetailView: View {
             }
             .refreshable { await load() }
             .task { await load() }
+            .sheet(isPresented: $handing) {
+                NavigationStack {
+                    HandOverSheet(facts: shown) {
+                        changed()
+                        dismiss()
+                    }
+                }
+            }
             .sheet(item: $sheet) { which in
                 switch which {
                 case .edit: editSheet

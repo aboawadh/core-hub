@@ -1,0 +1,36 @@
+{
+  "task_extras": {
+    "worktree": {
+      "title": "Worktree",
+      "branch": "Branch",
+      "path": "Folder",
+      "changes": "Changes",
+      "counts": "{files} changed files · {ahead} commits ahead of {base}",
+      "remove": "Remove worktree",
+      "confirm_remove": "Remove this task's worktree?",
+      "confirm_remove_body": "The folder is removed. The branch {branch} stays in the repository, and uncommitted changes are lost.",
+      "running": "The task is running in this worktree. Stop it first.",
+      "failed": "Git could not make the task's worktree: {message}",
+      "no_repository": "This task's project has no repository. Set one in Project settings.",
+      "status": {
+        "creating": "Being made",
+        "ready": "Ready",
+        "dirty": "Has changes",
+        "merged": "Merged",
+        "removed": "Removed",
+        "error": "Git refused"
+      }
+    },
+    "handover": {
+      "open": "Hand to another profile…",
+      "title": "Hand to another profile",
+      "workspace": "Profile",
+      "submit": "Hand over",
+      "hint": "Hermes gives the card to that profile's Hermes, and the card moves to that profile.",
+      "no_workspaces": "There is no other profile to hand it to.",
+      "confirm_running": "Hand over “{title}” while it runs?",
+      "confirm_running_body": "Hermes stops its current run first, then hands the card over.",
+      "no_hermes": "This profile has no Hermes to hand the card over."
+    }
+  }
+}

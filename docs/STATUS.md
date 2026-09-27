@@ -388,8 +388,8 @@ its approval.
   builds the AAB with self-update off and the release key and uploads it and/or the listing with
   fastlane supply, as a draft by default; the Play Console answers (Data safety, content rating,
   App access, Play App Signing, closed test) are written down. **Never run against Play** (the
-  account is still being verified, no `PLAY_SERVICE_ACCOUNT_JSON`), and the app still targets API
-  35 while Play wants 36 for new apps since 2026-08-31. Since 2026-09-26 **push**: a build with Firebase takes an FCM
+  account is still being verified, no `PLAY_SERVICE_ACCOUNT_JSON`), and since 2026-09-27 the app
+  compiles against and targets API 36 (Android 16), as Play wants for new apps since 2026-08-31. Since 2026-09-26 **push**: a build with Firebase takes an FCM
   token after sign-in and registers it with the hub (`devices.registerPush`; a password sign-in
   first registers this install as a device, a paired phone uses the device its pairing made),
   again when Firebase rotates it, and removes it before sign-out; a tapped push opens the page its
@@ -777,7 +777,7 @@ its approval.
   gateway's line; and the agent's **webhooks** (listener state, address and secret to copy, test,
   delete, new webhook with events and where the answer goes). Not built on the phones: the web's
   per-platform "how to start" guides and the grouped Approvals panel; WhatsApp's QR pairing stays on
-  the web. Android: JVM tests against a scripted hub and Robolectric pictures; iOS: unit tests on the
+  the web on Android (iOS draws the code itself since 2026-09-27, below). Android: JVM tests against a scripted hub and Robolectric pictures; iOS: unit tests on the
   CI simulator; **not yet tried on the owner's phones**.
 - **Knowledge, Skills usage, hub Plugins and Webhooks on both phones** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-knowledge.md`, apps night batch 10), as the web's Settings
@@ -873,10 +873,39 @@ its approval.
   default) and **language** (detect, popular languages by name, or a typed code), the voice list says
   when it is documented or absent and takes a typed voice id. **Images**: only models that draw on
   providers that draw, image-only first (§87, §110), the subscription's named «Images via your …
-  subscription», «from the default profile», and going back to it. Not on the phones: models probe
-  («Fetch» in the add dialog), visible-model lists and per-model tuning, the Runtime card, the
-  inheriting agents list; **signing out** of a signed-in provider has no contract operation (the web
+  subscription», «from the default profile», and going back to it. Not on the phones: visible-model
+  lists and per-model tuning, the inheriting agents list (models probe — «Fetch» — and the Runtime
+  card are on iOS since 2026-09-27, below); **signing out** of a signed-in provider has no contract operation (the web
   has none either). Unit tests on both, Android shots; not yet tried on the owner's phones.
+- **Every iPhone section works in the app on its own** (since 2026-09-27, owner's requirement;
+  `docs/changes/2026-09-27-twuijri-ios-self-sufficient.md`, iOS only): no screen or button sends the
+  person to the hub's web pages any more, and no control saves something the app then ignores.
+  **Settings → Linked hubs** (invite, use an invite, approve/refuse, on/off, questions per hour,
+  rename, their agents and one question, the log, unlink; which agents may be asked) and
+  **Settings → Terminal** (owner, only when `GET /terminal` answers 200: the sessions as tabs, a
+  VT100/xterm screen written in the app, Esc/Tab/Ctrl/arrow keys, copy and paste, re-attached after a
+  dropped connection) are phone pages (`navigation.json` gives both `ios`). **WhatsApp pairing by QR**
+  is drawn on the phone (mode first, the code redrawn as Hermes replaces it, leaving cancels the job).
+  A link in a reply to one of the hub's own pages opens that page in the app. **Display** is honoured
+  in the chat: reasoning and tool steps shown or not, compact, text size, links in the app or Safari,
+  what sending does while the agent works. **Workflows** are drawn, edited (steps as a list, what
+  follows each, the hub's check as you type), copied, deleted, their limits changed, a run re-run from a
+  step and a waiting approval's question shown. **Chat list**: categories (make, rename, colour,
+  reorder, delete, move a chat) and the conversations Hermes keeps on each channel (read-only
+  transcript with pictures and older pages, hide/show again, an admin's delete, «Continue in Core
+  Hub»). Also: the **Runtime card** and «Fetch» on Models, the **updates shelf** and source (admin),
+  a task's **worktree** and **hand-over** to another profile, the pairing code saying when it was
+  claimed, the conversation's **trajectory**, the composer's **`/` commands**, three **starters** in an
+  empty chat, and the task board and Schedules following `/rt/tasks` and `/rt/schedules`. Since the
+  follow-up (`docs/changes/2026-09-27-twuijri-ios-self-sufficient-2.md`): chats **dragged into an
+  order** kept on the phone per view (and Move up/down in a chat's menu; a chat dropped on a
+  category's heading is filed there), the **message queue** strip (a message sent while a turn runs
+  on «wait in line» waits on the phone: send now, steer, remove; sent in order as turns end), **jobs
+  heard live** on `/rt/jobs` (a followed job wakes at once, the Agents page reads again on
+  `agent.updated`), the trajectory's **timeline** (lanes, idle folded, parallel calls on their own
+  rows, a bar finds its step) and **session log** download, a **skill picker** after `/skill `, and
+  a workflow agent step's **model** from the profile's catalogue. Unit tests
+  on the CI simulator; **not yet tried on the owner's phone or hub**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still

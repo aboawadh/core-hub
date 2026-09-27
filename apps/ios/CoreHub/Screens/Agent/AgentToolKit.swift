@@ -6,15 +6,22 @@ import SwiftUI
 enum AgentJobs {
     /// Reads the job again every `every` until it ends, telling `update` each time (web `useJob`). A read
     /// that fails is tried again; cancelling the task ends the wait.
+    /// Since `/rt/jobs` is heard (JobsFeed), an event about the job wakes the wait at once; the read
+    /// every `every` stays for a dropped connection.
     static func follow(_ id: String, profile: String, api: HubAPI, every: Duration = .milliseconds(1500),
                        update: @escaping @MainActor (Job) -> Void) async throws -> Job {
         while true {
             try Task.checkCancellation()
+            if let heard = await JobsFeed.shared.jobs[id], AgentCardRules.terminal(heard.status) {
+                await update(heard)
+                return heard
+            }
             if let job = try? await api.call({ try await JobsAPI.jobsGet(xHubProfile: profile, jobId: id, apiConfiguration: $0) }) {
                 await update(job)
                 if AgentCardRules.terminal(job.status) { return job }
             }
-            try await Task.sleep(for: every)
+            await JobsFeed.shared.wait(for: id, timeout: every)
+            try Task.checkCancellation()
         }
     }
 }

@@ -1,0 +1,8 @@
+{
+  "pairing_state": {
+    "waiting": "Waiting for the other device to scan it…",
+    "claimed": "Linked: the other device is signed in. It shows under Devices.",
+    "expired": "The code expired. Make a new one.",
+    "cancelled": "This code was cancelled."
+  }
+}

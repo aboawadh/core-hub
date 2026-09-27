@@ -206,8 +206,7 @@
       },
       "edit": "Fields",
       "restarting": "Restarting Hermes…",
-      "restarted": "Hermes restarted.",
-      "qr_note": "{platform} pairs by scanning a code with the phone that has the account, and this phone cannot scan its own screen. Pair it from a computer or a tablet: open this page on the web there."
+      "restarted": "Hermes restarted."
     },
     "chs": {
       "title": "Telegram settings",

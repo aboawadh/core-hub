@@ -40,10 +40,39 @@ final class SessionListModel {
     var batchError: String?
     /// The last one-chat action (rename, pin, archive, delete) that failed.
     var actionError: String?
+    /// The categories of the listed profiles (contract decision §60).
+    private(set) var categories: [SessionCategory] = []
+    /// The conversations Hermes keeps on each channel, hidden ones marked (§61, §88).
+    private(set) var conversations: [ChannelConversation] = []
+    /// Hermes could not be read for some profile: the list says so and keeps what it had.
+    private(set) var channelsUnavailable = false
+    /// Hidden channel conversations shown too ("Show hidden chats").
+    var showHidden = false
+    /// Categories folded shut, by id (this phone's own choice).
+    var folded: Set<String> = []
+    /// The order the person dragged the chats into, for this view (SessionOrder.swift).
+    private(set) var manual: [String] = []
+    @ObservationIgnored private var orderScope: String?
+
+    private var currentScope: String { profileFilter ?? "all" }
+
+    /// Drops `moved` just before `target` in a group as drawn; false when nothing moved.
+    @discardableResult
+    func reorder(_ moved: String, before target: String, among shown: [String]) -> Bool {
+        guard let next = SessionOrder.drop(moved, before: target, shown: shown) else { return false }
+        setOrder(next)
+        return true
+    }
+
+    func setOrder(_ group: [String]) {
+        manual = SessionOrder.merge(group, into: manual)
+        SessionOrder.write(manual, scope: currentScope)
+    }
 
     @ObservationIgnored private weak var app: AppModel?
     @ObservationIgnored private var listener: UUID?
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var poller: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
 
     init(app: AppModel) {
@@ -58,7 +87,16 @@ final class SessionListModel {
         profileFilter == nil && (app?.enterableProfiles.count ?? 0) > 1
     }
 
+    /// The groups the list draws: categories, channels, then the rest (SessionGroups.swift).
+    var groups: [SessionGroup] {
+        let listed = filter == .archived ? [] : SessionGroups.shown(conversations, showHidden: showHidden, query: query)
+        return SessionGroups.group(sessions, categories: categories, conversations: listed, keepEmpty: query.trimmingCharacters(in: .whitespaces).isEmpty, manual: manual)
+    }
+
+    var hiddenCount: Int { conversations.filter { $0.hidden == true }.count }
+
     func start() {
+        startPolling()
         guard listener == nil, let namespace = app?.sessions else {
             reload()
             return
@@ -74,6 +112,112 @@ final class SessionListModel {
     func stop() {
         if let listener { app?.sessions?.remove(listener) }
         listener = nil
+        poller?.cancel()
+        poller = nil
+    }
+
+    /// Hermes announces nothing when a channel message arrives: the list asks again now and then
+    /// while it is on screen (the web's 45 seconds).
+    private func startPolling() {
+        guard poller == nil else { return }
+        poller = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 45_000_000_000)
+                guard !Task.isCancelled else { return }
+                await self?.loadConversations()
+            }
+        }
+    }
+
+    func loadCategories() async {
+        guard let app else { return }
+        let header = profileFilter ?? app.currentProfile
+        let all = profileFilter == nil
+        if let list = try? await app.api.call({ try await SessionsAPI.sessionsListCategories(xHubProfile: header, profiles: all ? .all : nil, apiConfiguration: $0) }) {
+            categories = list.items
+        }
+    }
+
+    func loadConversations() async {
+        guard let app else { return }
+        let header = profileFilter ?? app.currentProfile
+        let all = profileFilter == nil
+        do {
+            let list = try await app.api.call {
+                try await SessionsAPI.sessionsListChannelConversations(xHubProfile: header, profiles: all ? .all : nil, hidden: .include, apiConfiguration: $0)
+            }
+            conversations = list.items
+            channelsUnavailable = list.unavailable.contains { $0.reason == .hermesUnreachable }
+        } catch {
+            // No Hermes, or not reachable: the chats list stands on its own.
+            channelsUnavailable = !conversations.isEmpty
+        }
+    }
+
+    /// Hide one from the person's own list, or show it again (§88), in its own profile.
+    func setHidden(_ conversation: ChannelConversation, _ hidden: Bool) async {
+        guard let app else { return }
+        let profile = conversation.profile, id = conversation.id
+        do {
+            if hidden {
+                try await app.api.call { try await SessionsAPI.sessionsHideChannelConversation(xHubProfile: profile, conversationId: id, apiConfiguration: $0) }
+            } else {
+                try await app.api.call { try await SessionsAPI.sessionsUnhideChannelConversation(xHubProfile: profile, conversationId: id, apiConfiguration: $0) }
+            }
+            actionError = nil
+        } catch {
+            actionError = HubFailure(error).describe(app.l10n)
+        }
+        await loadConversations()
+    }
+
+    /// An admin deletes it from Hermes for everyone (§88).
+    func deleteConversation(_ conversation: ChannelConversation) async throws {
+        guard let app else { return }
+        let profile = conversation.profile, id = conversation.id
+        try await app.api.call { try await SessionsAPI.sessionsDeleteChannelConversation(xHubProfile: profile, conversationId: id, apiConfiguration: $0) }
+        conversations.removeAll { $0.id == id }
+    }
+
+    // MARK: - Categories
+
+    func createCategory(_ name: String, profile: String) async -> SessionCategory? {
+        guard let app else { return nil }
+        do {
+            let made = try await app.api.call { try await SessionsAPI.sessionsCreateCategory(xHubProfile: profile, sessionCategoryInput: SessionCategoryInput(name: name), apiConfiguration: $0) }
+            actionError = nil
+            await loadCategories()
+            return made
+        } catch {
+            actionError = HubFailure(error).describe(app.l10n)
+            return nil
+        }
+    }
+
+    func updateCategory(_ category: SessionCategory, _ input: SessionCategoryInput) async {
+        guard let app else { return }
+        let profile = category.profile, id = category.id
+        do {
+            _ = try await app.api.call { try await SessionsAPI.sessionsUpdateCategory(xHubProfile: profile, categoryId: id, sessionCategoryInput: input, apiConfiguration: $0) }
+            actionError = nil
+        } catch {
+            actionError = HubFailure(error).describe(app.l10n)
+        }
+        await loadCategories()
+    }
+
+    func deleteCategory(_ category: SessionCategory) async throws {
+        guard let app else { return }
+        let profile = category.profile, id = category.id
+        try await app.api.call { try await SessionsAPI.sessionsDeleteCategory(xHubProfile: profile, categoryId: id, apiConfiguration: $0) }
+        await loadCategories()
+        reload()
+    }
+
+    /// Files a chat under a category of its profile, or under none.
+    func move(_ session: Session, to category: String?) async {
+        let patch = category.map { SessionPatch(categoryId: $0) } ?? SessionPatch(sendNull: [.categoryId])
+        await change(session, patch)
     }
 
     var selecting: Bool { !selected.isEmpty }
@@ -162,7 +306,13 @@ final class SessionListModel {
         let archived = filter.archivedParameter
         let profiles: SessionsAPI.Profiles_sessionsList? = profileFilter == nil ? .all : nil
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if orderScope != currentScope {
+            orderScope = currentScope
+            manual = SessionOrder.read(currentScope)
+        }
         loading = true
+        Task { await loadCategories() }
+        Task { await loadConversations() }
         Task {
             do {
                 let page = try await app.api.call {
@@ -193,11 +343,19 @@ struct SessionListView: View {
     @Bindable var model: SessionListModel
     let selected: String?
     let open: (Session) -> Void
+    /// A channel conversation Hermes keeps opens as its read-only transcript.
+    var openChannel: (ChannelConversation) -> Void = { _ in }
+    var selectedChannel: String? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var confirmingDelete = false
     @State private var renaming: RenameTarget?
     @State private var deleting: Session?
+    /// Categories: a new one's name, a rename, a delete; a chat being filed.
+    @State private var naming: CategoryNaming?
+    @State private var deletingCategory: SessionCategory?
+    @State private var moving: Keyed<Session>?
+    @State private var deletingConversation: ChannelConversation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
@@ -217,15 +375,56 @@ struct SessionListView: View {
                     .foregroundStyle(Tone.textMuted)
                     .padding(.vertical, Space.s4)
             }
-            if !model.pinned.isEmpty {
-                section(l10n("sessions.pinned"), model.pinned)
+            if model.channelsUnavailable {
+                Text(l10n("session_groups.channels.unreachable"))
+                    .font(.system(size: FontSize.sizeXs))
+                    .foregroundStyle(Tone.textMuted)
             }
-            if !model.recent.isEmpty {
-                section(l10n("sessions.recent") + " · \(model.recent.count)", model.recent)
+            ForEach(model.groups) { group in
+                groupView(group)
             }
+            footerButtons
         }
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+        .alert(naming?.title ?? "", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            TextField(l10n("session_groups.categories.new_label"), text: Binding(get: { naming?.text ?? "" }, set: { naming?.text = $0 }))
+            Button(l10n("common.cancel"), role: .cancel) { naming = nil }
+            Button(l10n("common.save")) {
+                guard let target = naming else { return }
+                naming = nil
+                let name = target.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                Task {
+                    if let category = target.category {
+                        await model.updateCategory(category, SessionCategoryInput(name: name))
+                    } else if let made = await model.createCategory(name, profile: target.profile), let session = target.fileAfter {
+                        await model.move(session, to: made.id)
+                    }
+                }
+            }
+        } message: {
+            if let naming, naming.category == nil {
+                Text(l10n("session_groups.categories.new_in_profile", ["profile": app.profileName(naming.profile)]))
+            }
+        }
+        .confirmDelete($deletingCategory, name: { $0.name }) { category in
+            try await model.deleteCategory(category)
+        }
+        .confirmDelete($deletingConversation, name: { SessionGroups.title($0, l10n) }) { conversation in
+            try await model.deleteConversation(conversation)
+        }
+        .sheet(item: $moving) { keyed in
+            let session = keyed.value
+            NavigationStack {
+                MoveToCategorySheet(session: session, categories: model.categories.filter { $0.profile == session.profile }) { choice in
+                    Task { await model.move(session, to: choice) }
+                } newCategory: {
+                    naming = CategoryNaming(title: l10n("session_groups.categories.new"), profile: session.profile, fileAfter: session)
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .renameChat($renaming) { target, typed in
             guard let title = ChatControls.renameTitle(typed),
                   let session = model.sessions.first(where: { $0.id == target.id }) else { return }
@@ -331,6 +530,186 @@ struct SessionListView: View {
         .accessibilityIdentifier("sessions.profile_filter")
     }
 
+    @ViewBuilder
+    private func groupView(_ group: SessionGroup) -> some View {
+        switch group.kind {
+        case .category(let category):
+            VStack(alignment: .leading, spacing: 2) {
+                categoryHeader(category, count: group.sessions.count)
+                    // A chat dropped on a category's heading is filed there (as on the web).
+                    .dropDestination(for: String.self) { ids, _ in
+                        guard let id = ids.first, let session = model.sessions.first(where: { $0.id == id }),
+                              session.profile == category.profile, session.categoryId != category.id else { return false }
+                        Task { await model.move(session, to: category.id) }
+                        return true
+                    }
+                if !model.folded.contains(category.id) {
+                    if group.sessions.isEmpty {
+                        Text(l10n("session_groups.categories.empty_group"))
+                            .font(.system(size: FontSize.sizeXs))
+                            .foregroundStyle(Tone.textFaint)
+                            .padding(.horizontal, Space.s2)
+                    }
+                    ForEach(group.sessions, id: \.id) { session in row(session, in: group.sessions) }
+                }
+            }
+            .accessibilityIdentifier("sessions.category.\(category.id)")
+        case .channel(let platform):
+            VStack(alignment: .leading, spacing: 2) {
+                groupTitle(SessionGroups.channelHeading(platform, l10n))
+                ForEach(group.sessions, id: \.id) { session in row(session, in: group.sessions) }
+                ForEach(group.conversations, id: \.id) { conversation in conversationRow(conversation) }
+            }
+            .accessibilityIdentifier("sessions.channel.\(platform)")
+        case .rest:
+            let pinned = group.sessions.filter(\.pinned)
+            let recent = group.sessions.filter { !$0.pinned }
+            if !pinned.isEmpty {
+                section(l10n("sessions.pinned"), pinned)
+            }
+            if !recent.isEmpty {
+                section(l10n("sessions.recent") + " · \(recent.count)", recent)
+            }
+        }
+    }
+
+    private func groupTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: FontSize.sizeXs, weight: .semibold))
+            .foregroundStyle(Tone.textFaint)
+            .padding(.top, Space.s2)
+    }
+
+    private func categoryHeader(_ category: SessionCategory, count: Int) -> some View {
+        HStack(spacing: Space.s2) {
+            Button {
+                if model.folded.contains(category.id) { model.folded.remove(category.id) } else { model.folded.insert(category.id) }
+            } label: {
+                HStack(spacing: Space.s1) {
+                    LucideIcon(model.folded.contains(category.id) ? .chevronRight : .chevronDown, size: 12)
+                        .flipsForRightToLeftLayoutDirection(true)
+                    if let colour = SessionGroups.colour(category.color) {
+                        Circle().fill(colour).frame(width: 8, height: 8)
+                    }
+                    Text(category.name).lineLimit(1).contentDirection(of: category.name, fill: false)
+                    Text(String(count)).foregroundStyle(Tone.textFaint)
+                    if model.showsProfileBadges { ProfileBadge(name: app.profileName(category.profile)) }
+                }
+                .font(.system(size: FontSize.sizeXs, weight: .semibold))
+                .foregroundStyle(Tone.textMuted)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(category.name + " · " + l10n("session_groups.categories.count", ["count": String(count)]))
+            Spacer()
+            Menu {
+                Button {
+                    naming = CategoryNaming(title: l10n("session_groups.categories.rename"), profile: category.profile, category: category, text: category.name)
+                } label: { Label { Text(l10n("session_groups.categories.rename")) } icon: { Image(lucide: .pencil) } }
+                Menu {
+                    Button(l10n("session_groups.categories.colour_none")) { Task { await model.updateCategory(category, SessionCategoryInput(sendNull: [.color])) } }
+                    ForEach(SessionGroups.colours, id: \.id) { swatch in
+                        Button(l10n("session_groups.categories.colours.\(swatch.id)")) {
+                            Task { await model.updateCategory(category, SessionCategoryInput(color: swatch.hex)) }
+                        }
+                    }
+                } label: { Label { Text(l10n("session_groups.categories.colour")) } icon: { Image(lucide: .palette) } }
+                if let up = SessionGroups.moved(category, by: -1, in: model.categories) {
+                    Button { Task { await model.updateCategory(category, SessionCategoryInput(position: up)) } } label: {
+                        Label { Text(l10n("session_groups.categories.move_up")) } icon: { Image(lucide: .chevronUp) }
+                    }
+                }
+                if let down = SessionGroups.moved(category, by: 1, in: model.categories) {
+                    Button { Task { await model.updateCategory(category, SessionCategoryInput(position: down)) } } label: {
+                        Label { Text(l10n("session_groups.categories.move_down")) } icon: { Image(lucide: .chevronDown) }
+                    }
+                }
+                Button(role: .destructive) { deletingCategory = category } label: {
+                    Label { Text(l10n("session_groups.categories.delete")) } icon: { Image(lucide: .trash) }
+                }
+            } label: {
+                LucideIcon(.ellipsis, size: 14).foregroundStyle(Tone.textFaint).tapTarget(32)
+            }
+            .accessibilityLabel(l10n("session_groups.categories.more", ["name": category.name]))
+            .accessibilityIdentifier("sessions.category.\(category.id).more")
+        }
+        .padding(.top, Space.s2)
+    }
+
+    private func conversationRow(_ conversation: ChannelConversation) -> some View {
+        let title = SessionGroups.title(conversation, l10n)
+        let preview = SessionGroups.preview(conversation, l10n)
+        return Button {
+            openChannel(conversation)
+        } label: {
+            HStack(spacing: Space.s2) {
+                LucideIcon(.radio, size: 16).foregroundStyle(Tone.textMuted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: FontSize.sizeSm, weight: .medium))
+                        .foregroundStyle(Tone.text)
+                        .lineLimit(1)
+                        .contentDirection(of: title)
+                    if !preview.isEmpty {
+                        Text(preview)
+                            .font(.system(size: FontSize.sizeXs))
+                            .foregroundStyle(Tone.textMuted)
+                            .lineLimit(1)
+                            .contentDirection(of: preview)
+                    }
+                }
+                if conversation.hidden == true {
+                    LucideIcon(.eyeOff, size: 12).foregroundStyle(Tone.textFaint)
+                }
+                if model.showsProfileBadges {
+                    ProfileBadge(name: app.profileName(conversation.profile))
+                }
+            }
+            .padding(.horizontal, Space.s2)
+            .padding(.vertical, Space.s2)
+            .background(selectedChannel == conversation.id ? Tone.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if conversation.hidden == true {
+                Button { Task { await model.setHidden(conversation, false) } } label: {
+                    Label { Text(l10n("session_groups.channels.unhide")) } icon: { Image(lucide: .eye) }
+                }
+            } else {
+                Button { Task { await model.setHidden(conversation, true) } } label: {
+                    Label { Text(l10n("session_groups.channels.hide")) } icon: { Image(lucide: .eyeOff) }
+                }
+            }
+            if app.isAdmin {
+                Button(role: .destructive) { deletingConversation = conversation } label: {
+                    Label { Text(l10n("session_groups.channels.delete")) } icon: { Image(lucide: .trash) }
+                }
+            }
+        }
+        .accessibilityIdentifier("channel_conversation.\(conversation.id)")
+    }
+
+    @ViewBuilder
+    private var footerButtons: some View {
+        if model.filter != .archived && model.hiddenCount > 0 {
+            Button(model.showHidden ? l10n("session_groups.channels.hide_hidden") : l10n("session_groups.channels.show_hidden", ["count": String(model.hiddenCount)])) {
+                model.showHidden.toggle()
+            }
+            .font(.system(size: FontSize.sizeXs))
+            .accessibilityIdentifier("sessions.show_hidden")
+        }
+        if model.filter == .active && model.query.isEmpty {
+            Button {
+                naming = CategoryNaming(title: l10n("session_groups.categories.new"), profile: model.profileFilter ?? app.currentProfile)
+            } label: {
+                LucideLabel(l10n("session_groups.categories.new"), icon: .folderPlus, size: 14)
+            }
+            .font(.system(size: FontSize.sizeXs))
+            .padding(.top, Space.s2)
+            .accessibilityIdentifier("sessions.category.new")
+        }
+    }
+
     private func section(_ title: String, _ sessions: [Session]) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
@@ -338,12 +717,33 @@ struct SessionListView: View {
                 .foregroundStyle(Tone.textFaint)
                 .padding(.top, Space.s2)
             ForEach(sessions, id: \.id) { session in
-                row(session)
+                row(session, in: sessions)
             }
         }
     }
 
-    private func row(_ session: Session) -> some View {
+    /// A chat's row. `list` is the rows it is drawn among: dropping another chat on it puts that one
+    /// just before it there (the order is this phone's, SessionOrder.swift).
+    @ViewBuilder
+    private func row(_ session: Session, in list: [Session]) -> some View {
+        if model.selecting {
+            rowBody(session, in: list)
+        } else {
+            rowBody(session, in: list)
+                .draggable(session.id) {
+                    Text(session.title ?? l10n("sessions.untitled"))
+                        .font(.system(size: FontSize.sizeSm, weight: .medium))
+                        .padding(Space.s2)
+                        .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                }
+                .dropDestination(for: String.self) { ids, _ in
+                    guard let moved = ids.first else { return false }
+                    return model.reorder(moved, before: session.id, among: list.map(\.id))
+                }
+        }
+    }
+
+    private func rowBody(_ session: Session, in list: [Session]) -> some View {
         let title = session.title ?? l10n("sessions.untitled")
         let chosen = model.selected.contains(session.id)
         return Button {
@@ -411,6 +811,19 @@ struct SessionListView: View {
                         Image(lucide: session.archived ? .archiveRestore : .archive)
                     }
                 }
+                if let up = SessionOrder.step(session.id, by: -1, shown: list.map(\.id)) {
+                    Button { model.setOrder(up) } label: {
+                        Label { Text(l10n("session_order.move_up")) } icon: { Image(lucide: .chevronUp) }
+                    }
+                }
+                if let down = SessionOrder.step(session.id, by: 1, shown: list.map(\.id)) {
+                    Button { model.setOrder(down) } label: {
+                        Label { Text(l10n("session_order.move_down")) } icon: { Image(lucide: .chevronDown) }
+                    }
+                }
+                Button { moving = Keyed(id: session.id, value: session) } label: {
+                    Label { Text(l10n("session_groups.categories.move_to")) } icon: { Image(lucide: .folderInput) }
+                }
                 Button(role: .destructive) { deleting = session } label: {
                     Label { Text(l10n("chat_controls.delete")) } icon: { Image(lucide: .trash) }
                 }
@@ -418,6 +831,70 @@ struct SessionListView: View {
         }
         .accessibilityIdentifier("session.\(session.id)")
         .accessibilityAction(named: Text(l10n("sessions.batch_select"))) { model.toggle(session.id) }
+    }
+}
+
+/// A category being named: a new one (in a profile, maybe to file a chat in at once) or a rename.
+struct CategoryNaming: Equatable {
+    var title: String
+    var profile: String
+    var category: SessionCategory? = nil
+    var text: String = ""
+    var fileAfter: Session? = nil
+}
+
+/// "Move to category": the chat's profile's categories, "No category", and a new one.
+struct MoveToCategorySheet: View {
+    let session: Session
+    let categories: [SessionCategory]
+    let choose: (String?) -> Void
+    let newCategory: () -> Void
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                row(nil, name: l10n("session_groups.categories.none"), colour: nil)
+                ForEach(categories.sorted { ($0.position, $0.name) < ($1.position, $1.name) }, id: \.id) { category in
+                    row(category.id, name: category.name, colour: category.color)
+                }
+            } footer: {
+                Text(l10n("session_groups.categories.move_hint", ["profile": app.profileName(session.profile)]))
+            }
+            Section {
+                Button {
+                    dismiss()
+                    newCategory()
+                } label: {
+                    LucideLabel(l10n("session_groups.categories.new_and_move"), icon: .folderPlus, size: 16)
+                }
+                .accessibilityIdentifier("move.new")
+            }
+        }
+        .navigationTitle(l10n("session_groups.categories.move_title", ["title": session.title ?? l10n("sessions.untitled")]))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button(l10n("common.close")) { dismiss() } }
+        }
+    }
+
+    private func row(_ id: String?, name: String, colour: String?) -> some View {
+        Button {
+            if id != session.categoryId { choose(id) }
+            dismiss()
+        } label: {
+            HStack(spacing: Space.s2) {
+                if let dot = SessionGroups.colour(colour) { Circle().fill(dot).frame(width: 8, height: 8) }
+                Text(name).foregroundStyle(Tone.text).contentDirection(of: name, fill: false)
+                Spacer()
+                if id == session.categoryId {
+                    Text(l10n("session_groups.categories.current")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                }
+            }
+        }
+        .accessibilityIdentifier("move.\(id ?? "none")")
     }
 }
 

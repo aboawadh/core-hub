@@ -318,7 +318,13 @@ struct AgentPresetsSection: View {
 
     private func remove(_ preset: AgentPreset) async {
         let profile = app.currentProfile
-        _ = try? await app.api.call { try await AgentsAPI.agentsDeletePreset(xHubProfile: profile, agentId: agent.id, presetId: preset.id, apiConfiguration: $0) }
+        do {
+            try await app.api.call { try await AgentsAPI.agentsDeletePreset(xHubProfile: profile, agentId: agent.id, presetId: preset.id, apiConfiguration: $0) }
+            note = nil
+        } catch {
+            // A refusal is said, never swallowed.
+            note = (HubFailure(error).describe(l10n), .danger)
+        }
         await load()
     }
 }
