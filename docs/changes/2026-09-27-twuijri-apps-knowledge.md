@@ -65,6 +65,20 @@ iOS: لا يُبنى على لينكس. التشغيل الأول لـ`ios.yml` 
 الأندرويد (`KnowledgeReportsTest` 12، `KnowledgeShots` 2، `NavigationParityTest` 10، `StringsParityTest` 4، lint: EXIT 0) و`i18n:check`
 و`contracts:check-clients` و`lint` و`typecheck` و`change-record:check` (كلها EXIT 0).
 
+صفحة «وجهات الإشعار» في إعدادات الويب هي وجهات notify (`notify/WebhooksTab.tsx`)، لا مسارات Hermes؛ فلا تكرار مع صفحة قنوات الوكيل
+(`AgentWebhooks` في الدفعة 9).
+
+```
+$ gh workflow run ios.yml --ref night/apps-knowledge   (run 36286785244، الالتزام 13715b76 بعد الدمج)
+** BUILD SUCCEEDED **
+Executed 277 tests, with 0 failures (0 unexpected)
+Test Case '-[CoreHubTests.HubDataRulesTests testAChosenAgentGoneFromThePeriodStaysChoosable]' passed
+Test Case '-[CoreHubTests.HubDataRulesTests testTheBodyDropsUnknownEventsKeepsOrStopsTheSecret]' passed
+Test Case '-[CoreHubTests.HubDataRulesTests testEveryStringThePagesUseExistsInBothLanguages]' passed
+… (10 of 10 HubDataRulesTests passed)
+** TEST SUCCEEDED **
+```
+
 ## المخاطر والرجوع
 - صفحات iOS لم تُبنَ محليًا؛ تعتمد على مهمة iOS في CI.
 - ترويسة البروفايل تُضاف يدويًا لعمليات notify؛ إن أعلن العقد لاحقًا معاملًا لها تُحذف الإضافة.
