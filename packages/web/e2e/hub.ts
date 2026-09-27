@@ -958,6 +958,12 @@ function seedPairing(): void {
     },
   });
 }
+/** The MCP OAuth sign-ins the scripted Hermes has started (journey: DECISIONS §121). */
+const mcpOAuth = new Map<
+  string,
+  { id: string; name: string; profile: string; state: string; status: string }
+>();
+let oauthFlows = 0;
 const scriptedHermesApi: HermesApiCall = async <T>(
   method: string,
   route: string,
@@ -1021,7 +1027,88 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     writePairing(profile, 'approved', approved, platform);
     return answer({ ok: true });
   }
+  // MCP OAuth (journey: DECISIONS §121), as Hermes's dashboard runs it: `…/auth` names the
+  // provider's page, and the "provider" here signs the person in at once — its page is the
+  // redirect the hub wrote into the server's block, with a code and the flow's state — so the
+  // tab the MCP page opens lands straight on the hub's callback, which hands it back here.
+  const oauthStart = /^\/api\/mcp\/servers\/([^/]+)\/auth$/.exec(url.pathname);
+  if (method === 'POST' && oauthStart) {
+    const profile = url.searchParams.get('profile') ?? 'default';
+    const name = decodeURIComponent(oauthStart[1]!);
+    const config = readFileSync(path.join(hermesHome(profile), 'config.yaml'), 'utf8');
+    const redirect = /redirect_uri:\s*(\S+)/.exec(config)?.[1] ?? '';
+    oauthFlows += 1;
+    const flow = {
+      id: `e2e-oauth-${oauthFlows}`,
+      name,
+      profile,
+      state: `e2e-state-${oauthFlows}`,
+      status: 'authorization_required',
+    };
+    mcpOAuth.set(flow.id, flow);
+    return answer({
+      flow_id: flow.id,
+      server_name: name,
+      status: flow.status,
+      authorization_url: `${redirect}?code=e2e-code&state=${flow.state}`,
+      error: null,
+    });
+  }
+  const oauthFlow = /^\/api\/mcp\/oauth\/flows\/([^/]+)$/.exec(url.pathname);
+  if (oauthFlow) {
+    const flow = mcpOAuth.get(decodeURIComponent(oauthFlow[1]!));
+    if (!flow) throw new Error('OAuth flow not found or expired');
+    if (method === 'DELETE') flow.status = 'error';
+    return answer({
+      flow_id: flow.id,
+      server_name: flow.name,
+      status: flow.status,
+      authorization_url: null,
+      error: flow.status === 'error' ? 'Cancelled by user' : null,
+      tools:
+        flow.status === 'approved'
+          ? [
+              { name: 'get_tasks', description: 'List the tasks of a list.' },
+              { name: 'create_task', description: 'Create a task.' },
+              { name: 'get_workspace_hierarchy', description: 'The spaces, folders and lists.' },
+            ]
+          : [],
+    });
+  }
+  const oauthBack = /^\/api\/mcp\/oauth\/callback\/([^/]+)$/.exec(url.pathname);
+  if (oauthBack) {
+    const flow = [...mcpOAuth.values()].find(
+      (each) =>
+        each.status === 'authorization_required' && each.state === url.searchParams.get('state'),
+    );
+    if (!flow || url.searchParams.get('code') !== 'e2e-code') throw new Error('OAuth flow expired');
+    const tokens = path.join(hermesHome(flow.profile), 'mcp-tokens');
+    mkdirSync(tokens, { recursive: true });
+    writeFileSync(
+      path.join(tokens, `${flow.name}.json`),
+      JSON.stringify({
+        access_token: 'e2e-access',
+        refresh_token: 'e2e-refresh',
+        expires_at: Date.now() / 1000 + 3600,
+      }),
+    );
+    flow.status = 'approved';
+    return answer('<h1>Authorization received</h1>');
+  }
   const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
+  if (mcp && mcp[1] === 'clickup') {
+    const profile = url.searchParams.get('profile') ?? 'default';
+    return existsSync(path.join(hermesHome(profile), 'mcp-tokens', 'clickup.json'))
+      ? answer({
+          ok: true,
+          tools: [
+            { name: 'get_tasks', description: 'List the tasks of a list.' },
+            { name: 'create_task', description: 'Create a task.' },
+            { name: 'get_workspace_hierarchy', description: 'The spaces, folders and lists.' },
+          ],
+        })
+      : answer({ ok: false, error: 'OAuth authentication required — no token found.', tools: [] });
+  }
   if (mcp) {
     return mcp[1] === 'broken'
       ? answer({

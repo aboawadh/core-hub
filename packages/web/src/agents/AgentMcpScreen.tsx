@@ -17,6 +17,10 @@
  * **Test asks Hermes.** The button has Hermes connect to the server as configured in this
  * profile, list its tools and disconnect; what Hermes says is shown under the row, its words
  * unchanged. The row itself still claims nothing about a connection nobody holds open.
+ *
+ * **A remote server can be signed in by OAuth from here** (DECISIONS §121): the chip says
+ * whether this profile is signed in, and Connect runs Hermes's own browser sign-in
+ * (`McpOAuthControls.tsx`).
  */
 import { useState } from 'react';
 import { useParams } from 'react-router';
@@ -42,6 +46,7 @@ import { IconTool, IconTrash } from '../ui/icons.js';
 import {
   useCreateMcpServer,
   useDeleteMcpServer,
+  needsOAuth,
   useHubTools,
   useMcpServers,
   useTestMcpServer,
@@ -51,6 +56,12 @@ import {
 import { describeToolError } from './toolErrors.js';
 import { HubToolsCard } from './HubToolsCard.js';
 import { TestResult } from './McpTestResultView.js';
+import {
+  McpOAuthChip,
+  McpOAuthControls,
+  offersOAuth,
+  useMcpOAuthConnect,
+} from './McpOAuthControls.js';
 
 const TEMPLATE = `{
   "command": "npx",
@@ -132,7 +143,26 @@ function ServerRow({
   const update = useUpdateMcpServer(agentId);
   const remove = useDeleteMcpServer(agentId);
   const probe = useTestMcpServer(agentId);
+  const oauth = useMcpOAuthConnect(agentId, server.name);
   const { ask, dialog } = useConfirm();
+  // Hermes said the server wants a sign-in: offer it where the failure is read (§121).
+  const signInHere =
+    probe.data && !probe.data.ok && offersOAuth(server) && needsOAuth(probe.data.error) ? (
+      <>
+        <span className="text-sm">{t('mcp.oauth.test_needs')}</span>
+        <Button
+          size="sm"
+          variant="primary"
+          data-testid={`mcp-test-connect-${server.name}`}
+          onClick={() => {
+            probe.reset();
+            oauth.connect();
+          }}
+        >
+          {t('mcp.oauth.connect')}
+        </Button>
+      </>
+    ) : null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -150,6 +180,7 @@ function ServerRow({
               {server.name}
             </span>
             <Badge>{server.transport}</Badge>
+            <McpOAuthChip server={server} />
           </span>
           <span className="skill-description" dir="ltr">
             {summarise(server)}
@@ -188,7 +219,13 @@ function ServerRow({
           <Notice tone="danger">{describeToolError(probe.error, t)}</Notice>
         </div>
       )}
-      {probe.data && <TestResult name={server.name} result={probe.data} />}
+      {probe.data && <TestResult name={server.name} result={probe.data} action={signInHere} />}
+      <McpOAuthControls
+        agentId={agentId}
+        server={server}
+        oauth={oauth}
+        onTest={() => probe.mutate(server.name)}
+      />
     </div>
   );
 }

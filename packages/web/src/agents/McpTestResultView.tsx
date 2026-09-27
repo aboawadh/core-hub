@@ -2,12 +2,25 @@
  * What Hermes found when it tested an MCP server: the tools it listed, or why it could not
  * connect, in its words. Shared by the server rows and the hub's own tools card.
  */
+import type { ReactNode } from 'react';
 import { useI18n } from '../i18n/context.js';
 import { Badge, Notice, Tooltip } from '../ui/index.js';
 import type { McpTestResult } from './skills.js';
 
-/** What Hermes found: the tools it listed, or why it could not connect, in its words. */
-export function TestResult({ name, result }: { name: string; result: McpTestResult }) {
+/**
+ * What Hermes found: the tools it listed, or why it could not connect, in its words. `action`
+ * goes under a failure — the MCP page puts the OAuth sign-in there when Hermes said the server
+ * wants one (DECISIONS §121).
+ */
+export function TestResult({
+  name,
+  result,
+  action,
+}: {
+  name: string;
+  result: McpTestResult;
+  action?: ReactNode;
+}) {
   const { t } = useI18n();
   if (!result.ok) {
     return (
@@ -15,6 +28,7 @@ export function TestResult({ name, result }: { name: string; result: McpTestResu
         <Notice tone="danger">
           <span className="font-medium">{t('mcp.test.failed')}</span>{' '}
           <span dir="auto">{result.error}</span>
+          {action ? <div className="mt-2 flex flex-wrap items-center gap-2">{action}</div> : null}
         </Notice>
       </div>
     );
