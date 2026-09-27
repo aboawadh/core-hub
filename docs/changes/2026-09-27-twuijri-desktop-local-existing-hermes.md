@@ -140,8 +140,40 @@ added   f ~/.hermes/installs/8f4d41295e258a07/pm-runtime/generations/19af…/.le
 ```
 سجل المركز: `hermes: this home runs on the installed Hermes's runtime` ثم `gateway healthy` بعد ثانيتين.
 
-### اختبارات محلية (الملفات التي أُضيفت أو غُيّرت فقط)
-الناتج في القسم التالي بعد تشغيلها.
+### اختبارات وفحوص محلية (ما لمسه التغيير فقط؛ الباقي على CI)
+```
+$ mj-run pnpm --filter @corehub/server exec vitest run src/modules/agents/hermes-shared-install.test.ts \
+    src/modules/agents/adapters/hermes-version.test.ts src/modules/agents/hermes-runtime.test.ts \
+    src/modules/agents/adapters/hermes.test.ts src/modules/agents/agents.test.ts
+ Test Files  5 passed (5)
+      Tests  71 passed (71)
+$ mj-run pnpm --filter @corehub/web exec vitest run tests/channels-pairing.test.tsx
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+$ mj-run pnpm --filter @corehub/desktop exec vitest run tests/unit/shared.test.ts tests/unit/hermes.test.ts tests/unit/local-hub.test.ts
+ Test Files  3 passed (3)
+      Tests  51 passed (51)
+$ mj-run pnpm typecheck            → exit 0
+$ mj-run pnpm i18n:check           → i18n:check  OK
+$ mj-run pnpm change-record:check  → change-record  OK — 1 record(s) valid
+$ eslint . && prettier --check .   → exit 0 (مجلد إعادة الإنتاج المؤقت .tmp-repro مستثنى؛ غير مُلتزَم)
+```
+الاختبارات الجديدة تفشل على الكود القديم (أُعيد الكود القديم مؤقتًا بـ`git stash` مع إبقاء الاختبارات):
+```
+ × starts the gateway on the installed runtime instead of letting Hermes build a second one
+ × says why the gateway stopped in Hermes's own words, and keeps saying it while it restarts
+ × tells a gateway that is alive but silent after the warm-up apart from one that is starting
+ × reads Hermes's own line, `v` and build suffix included
+ × shows the version as soon as it is printed, without an error, and does not wait 5011ms
+ × reads a Python program line by line (its pipe output is not held back) 5011ms
+ × says plainly when no version comes in time, instead of "Command failed" 5009ms
+ × says what the hub knows about the gateway it runs, not only `fetch failed`
+ × wraps a path or command with no spaces instead of running past the edge   (الويب)
+```
+اختبار الدخان لسطح المكتب (`tests/smoke/desktop.spec.ts`، سطر الشاشة الأولى) يعمل على CI فقط (Electron + Xvfb).
+
+### CI
+يُحدَّث بعد الدفع.
 
 ## المخاطر والرجوع
 - الربط يعتمد على تخطيط هرمز الداخلي (`installs/`): إن تغيّر، يصير الرابط بلا أثر ويرجع هرمز لسلوكه (بيئة خاصة).
