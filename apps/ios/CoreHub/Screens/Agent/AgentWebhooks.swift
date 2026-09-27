@@ -275,7 +275,8 @@ struct CreateWebhookSheet: View {
         let profile = app.currentProfile
         let trimmed = description.trimmingCharacters(in: .whitespaces)
         let write = HermesWebhookCreate(name: name.trimmingCharacters(in: .whitespaces).lowercased(), prompt: prompt,
-                                        description: trimmed.isEmpty ? nil : trimmed, events: WebhookRules.events(events), deliver: deliver)
+                                        description: trimmed.isEmpty ? nil : trimmed, events: WebhookRules.events(events), deliver: deliver,
+                                        sendNull: trimmed.isEmpty ? [.description] : [])
         saving = true
         defer { saving = false }
         do {

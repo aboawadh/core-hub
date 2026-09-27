@@ -94,6 +94,8 @@ class AgentsTwoOps(private val apis: () -> HubApis?, val profile: String, val ag
             HermesWebhookCreate(
                 name = name.trim().lowercase(), prompt = prompt, description = description.trim().ifEmpty { null },
                 events = WebhookRules.eventsOf(events), deliver = deliver,
+                // No description is sent as an explicit null, as the web does (§114).
+                sendNull = if (description.isBlank()) setOf(HermesWebhookCreate.Clearable.DESCRIPTION) else emptySet(),
             ),
         )
     }

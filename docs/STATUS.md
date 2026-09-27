@@ -668,6 +668,30 @@ its approval.
   job is followed with a progress bar and its outcome (installed version, «up to date» or the update
   found, the failure in the hub's words). Android: JVM tests against a scripted hub and a Robolectric
   picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Agents II on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-agents-2.md`,
+  apps night batch 9), as the web's agent pages have it. **MCP servers**: the **Core Hub tools** card
+  (switch, groups with their tools and "allow changes", test, recent calls with the refusal's reason),
+  then each server with its switch, transport, what it runs or where it points, state and Hermes's
+  error; **Test** shows the tools Hermes listed and how long it took, or Hermes's sentence; **new
+  server / edit** as a form — a command (arguments one per line, environment variables) or an address
+  (headers), each variable or header a name and a hidden value, a stored one kept unless typed again,
+  other keys kept — or as the server's JSON (the form is proposed — owner to confirm; the web edits
+  JSON only); **delete** after a question. **Settings**: `list` (one item per line) and `json` fields
+  are edited on the phone now (JSON checked before it is sent, proposed — owner to confirm), a save
+  says when it applies (restarting now, after a restart, from the next message); cards for **signing
+  a coding agent in** to its own account (device code, copy, open, wait, outcome), **context
+  compression** for the profile, and Hermes's **writes waiting for review** (approve / reject, read
+  again every 15 s). **Channels**: each linked platform as a card — switch, marks (one identity,
+  linked, state, WhatsApp's mode), account, senders waiting — offering pair (a QR platform says to
+  pair it from a computer and opens the web), link (straight to its form), **its settings** (every
+  option in its five sections with its default, shared options marked, reset, one save = one gateway
+  restart), **WhatsApp's mode** and **reply header**, a platform's **fields**, **unlink** and **forget
+  identity** (after a question), and **Restart now** when the gateway does not serve it yet; the
+  gateway's line; and the agent's **webhooks** (listener state, address and secret to copy, test,
+  delete, new webhook with events and where the answer goes). Not built on the phones: the web's
+  per-platform "how to start" guides and the grouped Approvals panel; WhatsApp's QR pairing stays on
+  the web. Android: JVM tests against a scripted hub and Robolectric pictures; iOS: unit tests on the
+  CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still

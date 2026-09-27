@@ -314,7 +314,7 @@ class AgentsTwoTest {
         val (_, hook) = last("POST", "/webhooks")
         assertEquals("ci", hook["name"]!!.jsonPrimitive.content)
         assertEquals(listOf("push"), (hook["events"] as JsonArray).map { it.jsonPrimitive.content })
-        assertFalse(hook.containsKey("description"))
+        assertEquals(JsonNull, hook["description"])
 
         assertEquals("01J8QK3ZR2W7M5N4P6T8V9X0PF", ops().profileId().getOrThrow())
     }
