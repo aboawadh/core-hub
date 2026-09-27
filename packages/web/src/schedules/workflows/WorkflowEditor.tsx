@@ -45,6 +45,7 @@ import {
   initialState,
   issuesByTarget,
   latestSteps,
+  nextNodeId,
   nodeStates,
   placeRefusedFields,
   reducer,
@@ -457,6 +458,21 @@ export default function WorkflowEditor({
                     {t(`workflows.kinds.${kind}`)}
                   </Button>
                 ))}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<IconPlus size={14} />}
+                  tooltip={t('workflows.send.hint')}
+                  onClick={() => {
+                    // A notice that sends (§124): kept as a `notify` node, so older apps load it.
+                    const id = nextNodeId('notify', draft.nodes);
+                    dispatch({ type: 'add', kind: 'notify', title: t('workflows.send.title') });
+                    dispatch({ type: 'update', id, patch: { send: { targets: [] } } });
+                  }}
+                  data-testid="workflow-add-send"
+                >
+                  {t('workflows.send.title')}
+                </Button>
               </div>
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
                 <WorkflowCanvas
@@ -479,6 +495,7 @@ export default function WorkflowEditor({
                     problems={problems}
                     onRunFrom={(id) => void runFrom([id]).catch(() => undefined)}
                     runFromBusy={writes.run.isPending}
+                    profile={profile}
                     settings={
                       <section
                         className="flex flex-col gap-2 border-t border-line pt-3"

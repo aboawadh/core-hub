@@ -34,7 +34,22 @@ export interface WfNode {
   approval_required: boolean;
   /** A condition's several rules (DECISIONS §123); `null` answers from `input`. */
   rules: Rules | null;
+  /** A notice that sends its words to Telegram and/or a conversation (§124); `null`: the inbox. */
+  send: Send | null;
   position: Position;
+}
+
+/** One place a "Send message" step's words go (`WorkflowSendTarget`). */
+export interface SendTarget {
+  platform: string;
+  chat_id?: string | null;
+  session_id?: string | null;
+  title?: string | null;
+  agent_id?: string | null;
+}
+
+export interface Send {
+  targets: SendTarget[];
 }
 
 /** One rule of a condition: a path, an operator, a value (`null` for `exists`/`empty`). */
@@ -157,6 +172,7 @@ export function newNode(
     input: defaultInput(kind),
     approval_required: false,
     rules: null,
+    send: null,
     position,
   };
 }
@@ -310,6 +326,7 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
       input: raw.input ?? null,
       approval_required: raw.approval_required === true,
       rules: raw.kind === 'condition' ? rulesOf(raw.rules) : null,
+      send: raw.kind === 'notify' ? sendOf(raw.send) : null,
       position: {
         x: Number(raw.position?.x ?? 0) || 0,
         y: Number(raw.position?.y ?? 0) || 0,
@@ -356,6 +373,11 @@ export function toWrite(draft: Draft) {
       rules:
         node.kind === 'condition' && node.rules && node.rules.items.length > 0
           ? { match: node.rules.match, items: node.rules.items.map((rule) => ({ ...rule })) }
+          : null,
+      // A notice with targets sends there instead of the inbox (§124).
+      send:
+        node.kind === 'notify' && node.send
+          ? { targets: node.send.targets.map((target) => ({ ...target })) }
           : null,
       position: { x: node.position.x, y: node.position.y },
     })),
@@ -663,4 +685,18 @@ export function firstRule(input: string | null): Rule {
     };
   }
   return { path: 'trigger.event', operator: '==', value: '' };
+}
+
+/** A saved notice's targets, or `null` (§124). Targets of a platform this client does not know are kept. */
+export function sendOf(value: unknown): Send | null {
+  if (!value || typeof value !== 'object') return null;
+  const targets = (value as { targets?: unknown }).targets;
+  if (!Array.isArray(targets)) return null;
+  return {
+    targets: targets.flatMap((target: unknown) =>
+      target && typeof target === 'object' && typeof (target as SendTarget).platform === 'string'
+        ? [{ ...(target as SendTarget) }]
+        : [],
+    ),
+  };
 }

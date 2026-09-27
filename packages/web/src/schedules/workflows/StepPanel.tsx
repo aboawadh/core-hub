@@ -27,6 +27,7 @@ import {
   type BadgeTone,
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
+import { SendForm } from './SendForm.js';
 import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
 import type { Agent, Model } from '../../types.js';
@@ -138,6 +139,7 @@ export function StepPanel({
   onRunFrom,
   runFromBusy,
   settings,
+  profile,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -151,6 +153,8 @@ export function StepPanel({
   runFromBusy: boolean;
   /** The workflow's own settings (its limits), shown while no step is selected (§102). */
   settings?: ReactNode;
+  /** The workflow's profile, where a "Send message" step's test goes (§124). */
+  profile?: string;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -173,7 +177,9 @@ export function StepPanel({
   return (
     <div className="flex flex-col gap-3" data-testid="workflow-panel" data-node-id={node.id}>
       <div className="flex items-center gap-2">
-        <Badge tone="accent">{t(`workflows.kinds.${node.kind}`)}</Badge>
+        <Badge tone="accent">
+          {node.send ? t('workflows.send.title') : t(`workflows.kinds.${node.kind}`)}
+        </Badge>
         <span className="text-xs text-muted">{t(`workflows.kind_hints.${node.kind}`)}</span>
       </div>
       <IssueList issues={issues} problems={problems} t={t} />
@@ -203,11 +209,15 @@ export function StepPanel({
           <TemplateField
             draft={draft}
             node={node}
-            label={t('workflows.form.notify_text')}
+            label={t(node.send ? 'workflows.send.message' : 'workflows.form.notify_text')}
             update={update}
             testId="workflow-step-text"
           />
-          <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>
+          {node.send ? (
+            <SendForm node={node} profile={profile ?? 'default'} update={update} />
+          ) : (
+            <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>
+          )}
         </>
       )}
       {node.kind === 'approval' && (

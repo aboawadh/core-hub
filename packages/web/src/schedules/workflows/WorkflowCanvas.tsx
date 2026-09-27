@@ -511,7 +511,7 @@ export function WorkflowCanvas({
                   style={{ height: NODE_HEIGHT, cursor: readOnly ? 'pointer' : 'grab' }}
                   aria-pressed={chosen}
                   aria-label={[
-                    t(`workflows.kinds.${node.kind}`),
+                    node.send ? t('workflows.send.title') : t(`workflows.kinds.${node.kind}`),
                     node.title || node.id,
                     state ? t(`workflows.states.${state}`) : null,
                     found.length
@@ -532,7 +532,7 @@ export function WorkflowCanvas({
                 >
                   <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
                     <span aria-hidden>{KIND_GLYPH[node.kind]}</span>
-                    {t(`workflows.kinds.${node.kind}`)}
+                    {node.send ? t('workflows.send.title') : t(`workflows.kinds.${node.kind}`)}
                     {node.approval_required && node.kind !== 'approval' && (
                       <span aria-hidden>⏸</span>
                     )}
