@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +116,8 @@ internal fun HubToolsView(
                 Text(stringResource(R.string.agents2_hub_title), fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold)
                 Text(stringResource(R.string.agents2_hub_subtitle), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             }
-            HubSwitch(data.enabled, onSwitch, Modifier.testTag("hub.tools.switch"), enabled = !busy && (data.available || data.enabled))
+            val named = stringResource(R.string.agents2_hub_enabled)
+            HubSwitch(data.enabled, onSwitch, Modifier.testTag("hub.tools.switch").semantics { contentDescription = named }, enabled = !busy && (data.available || data.enabled))
         }
         if (!data.available) NoticeBox(wordsOf(Agents2Words.unavailable, data.unavailableReason?.value ?: "runtime_absent"), BadgeTone.Warning)
         Text(stringResource(R.string.agents2_hub_acts_as), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)

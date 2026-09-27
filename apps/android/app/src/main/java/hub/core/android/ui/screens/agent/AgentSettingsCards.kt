@@ -86,6 +86,7 @@ internal fun SignInCard(agent: Agent, ops: AgentsTwoOps) {
     var current by remember { mutableStateOf<ProviderSignIn?>(null) }
     var starting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
+    var copied by remember { mutableStateOf(false) }
     // While the sign-in waits, the hub is asked again every two seconds (a failed read is tried again).
     LaunchedEffect(current?.id) {
         while (true) {
@@ -107,7 +108,10 @@ internal fun SignInCard(agent: Agent, ops: AgentsTwoOps) {
                         code, fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp,
                         modifier = Modifier.background(t.surface2, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 2.dp).testTag("agent.signin.code"),
                     )
-                    HubIconButton(Lucide.Copy, stringResource(R.string.agents2_signin_copy), { clipboard.setText(AnnotatedString(code)) }, size = 32.dp, iconSize = 16.dp)
+                    HubIconButton(
+                        if (copied) Lucide.Check else Lucide.Copy, stringResource(if (copied) R.string.agents2_signin_copied else R.string.agents2_signin_copy),
+                        { clipboard.setText(AnnotatedString(code)); copied = true }, size = 32.dp, iconSize = 16.dp,
+                    )
                 }
             }
             HubButton(
@@ -137,6 +141,7 @@ internal fun SignInCard(agent: Agent, ops: AgentsTwoOps) {
                 stringResource(if (current == null) R.string.agents2_signin_action else R.string.agents2_signin_retry), {
                     starting = true
                     error = null
+                    copied = false
                     scope.launch {
                         ops.startSignIn().onSuccess { current = it }.onFailure { error = it as HubError }
                         starting = false

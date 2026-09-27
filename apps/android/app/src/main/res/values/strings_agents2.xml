@@ -119,15 +119,9 @@
     <string name="agents2_settings_saved_next_message">Saved in Hermes\'s settings; applies from the next message.</string>
     <string name="agents2_settings_saved_restart_needed">Saved in Hermes\'s settings; applies once Hermes restarts.</string>
     <string name="agents2_settings_saved_restarting">Saved; Hermes is restarting now so it applies.</string>
-    <string name="agents2_settings_default_is">Hermes\'s default: %1$s</string>
-    <string name="agents2_settings_default_none">none</string>
-    <string name="agents2_settings_default_on">on</string>
-    <string name="agents2_settings_default_off">off</string>
     <string name="agents2_settings_hint_list">One item per line.</string>
     <string name="agents2_settings_hint_json">Valid JSON.</string>
     <string name="agents2_settings_json_bad">Not valid JSON yet.</string>
-    <string name="agents2_settings_items">%1$s items</string>
-    <string name="agents2_ch_enabled">Enabled</string>
     <string name="agents2_ch_exclusive">one identity</string>
     <string name="agents2_ch_not_configured">not configured</string>
     <string name="agents2_ch_fields_n">%1$s fields</string>
@@ -148,7 +142,6 @@
     <string name="agents2_ch_status_online">online</string>
     <string name="agents2_ch_status_offline">offline</string>
     <string name="agents2_ch_status_error">error</string>
-    <string name="agents2_ch_status_unknown">unknown</string>
     <string name="agents2_ch_gateway_running">gateway running</string>
     <string name="agents2_ch_gateway_starting">gateway starting</string>
     <string name="agents2_ch_gateway_stopped">no gateway running</string>
@@ -184,11 +177,8 @@
     <string name="agents2_ch_reply_no_none">Hermes always puts a header over replies here, so it can be changed but not removed.</string>
     <string name="agents2_ch_reply_save">Save</string>
     <string name="agents2_ch_edit">Fields</string>
-    <string name="agents2_ch_more">More</string>
     <string name="agents2_ch_restarting">Restarting Hermes…</string>
     <string name="agents2_ch_restarted">Hermes restarted.</string>
-    <string name="agents2_ch_saved">Saved.</string>
-    <string name="agents2_ch_cleared">The identity is forgotten and the channel is off.</string>
     <string name="agents2_ch_qr_note">%1$s pairs by scanning a code with the phone that has the account, and this phone cannot scan its own screen. Pair it from a computer or a tablet: open this page on the web there.</string>
     <string name="agents2_chs_title">Telegram settings</string>
     <string name="agents2_chs_applies_now">Saving restarts this profile\'s gateway, so changes apply at once.</string>
@@ -386,8 +376,6 @@
     <string name="agents2_wh_secret_global">Signed with the listener\'s shared secret from config.yaml.</string>
     <string name="agents2_wh_show_secret">Show secret</string>
     <string name="agents2_wh_hide_secret">Hide secret</string>
-    <string name="agents2_wh_copy">Copy</string>
-    <string name="agents2_wh_copied">Copied</string>
     <string name="agents2_wh_test">Test</string>
     <string name="agents2_wh_testing">Testing…</string>
     <string name="agents2_wh_test_accepted">Accepted: the agent is running with this webhook\'s prompt. This test came from the hub itself, so it does not prove the public address.</string>

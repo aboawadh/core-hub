@@ -137,17 +137,11 @@
       "saved_next_message": "Saved in Hermes's settings; applies from the next message.",
       "saved_restart_needed": "Saved in Hermes's settings; applies once Hermes restarts.",
       "saved_restarting": "Saved; Hermes is restarting now so it applies.",
-      "default_is": "Hermes's default: {value}",
-      "default_none": "none",
-      "default_on": "on",
-      "default_off": "off",
       "hint_list": "One item per line.",
       "hint_json": "Valid JSON.",
-      "json_bad": "Not valid JSON yet.",
-      "items": "{count} items"
+      "json_bad": "Not valid JSON yet."
     },
     "ch": {
-      "enabled": "Enabled",
       "exclusive": "one identity",
       "not_configured": "not configured",
       "fields_n": "{count} fields",
@@ -168,8 +162,7 @@
       "status": {
         "online": "online",
         "offline": "offline",
-        "error": "error",
-        "unknown": "unknown"
+        "error": "error"
       },
       "gateway": {
         "running": "gateway running",
@@ -212,11 +205,8 @@
         "save": "Save"
       },
       "edit": "Fields",
-      "more": "More",
       "restarting": "Restarting Hermes…",
       "restarted": "Hermes restarted.",
-      "saved": "Saved.",
-      "cleared": "The identity is forgotten and the channel is off.",
       "qr_note": "{platform} pairs by scanning a code with the phone that has the account, and this phone cannot scan its own screen. Pair it from a computer or a tablet: open this page on the web there."
     },
     "chs": {
@@ -592,8 +582,6 @@
       "secret_global": "Signed with the listener's shared secret from config.yaml.",
       "show_secret": "Show secret",
       "hide_secret": "Hide secret",
-      "copy": "Copy",
-      "copied": "Copied",
       "test": "Test",
       "testing": "Testing…",
       "test_accepted": "Accepted: the agent is running with this webhook's prompt. This test came from the hub itself, so it does not prove the public address.",

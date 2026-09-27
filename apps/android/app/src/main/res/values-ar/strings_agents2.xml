@@ -119,15 +119,9 @@
     <string name="agents2_settings_saved_next_message">حُفظ في إعدادات هرمز، ويسري من الرسالة التالية.</string>
     <string name="agents2_settings_saved_restart_needed">حُفظ في إعدادات هرمز، ويسري بعد إعادة تشغيله.</string>
     <string name="agents2_settings_saved_restarting">حُفظ، ويُعاد تشغيل هرمز الآن ليسري.</string>
-    <string name="agents2_settings_default_is">الافتراضي في هرمز: %1$s</string>
-    <string name="agents2_settings_default_none">لا شيء</string>
-    <string name="agents2_settings_default_on">يعمل</string>
-    <string name="agents2_settings_default_off">متوقف</string>
     <string name="agents2_settings_hint_list">سطر لكل عنصر.</string>
     <string name="agents2_settings_hint_json">JSON صالح.</string>
     <string name="agents2_settings_json_bad">النصّ ليس JSON صالحًا بعد.</string>
-    <string name="agents2_settings_items">%1$s عناصر</string>
-    <string name="agents2_ch_enabled">مفعّلة</string>
     <string name="agents2_ch_exclusive">هوية واحدة</string>
     <string name="agents2_ch_not_configured">غير مهيّأة</string>
     <string name="agents2_ch_fields_n">الحقول: %1$s</string>
@@ -148,7 +142,6 @@
     <string name="agents2_ch_status_online">متّصلة</string>
     <string name="agents2_ch_status_offline">غير متّصلة</string>
     <string name="agents2_ch_status_error">خطأ</string>
-    <string name="agents2_ch_status_unknown">غير معروف</string>
     <string name="agents2_ch_gateway_running">البوابة تعمل</string>
     <string name="agents2_ch_gateway_starting">البوابة تُقلع</string>
     <string name="agents2_ch_gateway_stopped">لا بوابة تعمل</string>
@@ -184,11 +177,8 @@
     <string name="agents2_ch_reply_no_none">هرمز يضع عنوانًا فوق الردود هنا دائمًا، فيمكن تغييره لا حذفه.</string>
     <string name="agents2_ch_reply_save">حفظ</string>
     <string name="agents2_ch_edit">الحقول</string>
-    <string name="agents2_ch_more">المزيد</string>
     <string name="agents2_ch_restarting">يُعاد تشغيل هرمز…</string>
     <string name="agents2_ch_restarted">أُعيد تشغيل هرمز.</string>
-    <string name="agents2_ch_saved">حُفظ.</string>
-    <string name="agents2_ch_cleared">نُسيت الهوية وأُطفئت القناة.</string>
     <string name="agents2_ch_qr_note">%1$s يُقرن بمسح رمز بالهاتف الذي فيه الحساب، وهذا الهاتف لا يمسح شاشته. اقرنه من حاسوب أو جهاز لوحي: افتح هذه الصفحة على الويب هناك.</string>
     <string name="agents2_chs_title">إعدادات تيليجرام</string>
     <string name="agents2_chs_applies_now">الحفظ يعيد تشغيل بوابة هذا البروفايل، فتسري التغييرات فورًا.</string>
@@ -386,8 +376,6 @@
     <string name="agents2_wh_secret_global">يُوقَّع بالسر المشترك للمستقبِل في config.yaml.</string>
     <string name="agents2_wh_show_secret">إظهار السر</string>
     <string name="agents2_wh_hide_secret">إخفاء السر</string>
-    <string name="agents2_wh_copy">نسخ</string>
-    <string name="agents2_wh_copied">نُسخ</string>
     <string name="agents2_wh_test">اختبار</string>
     <string name="agents2_wh_testing">يختبر…</string>
     <string name="agents2_wh_test_accepted">قُبل الطلب: الوكيل يعمل الآن بموجّه هذا الرابط. جاء هذا الاختبار من المركز نفسه، فلا يثبت أن العنوان العام يعمل.</string>
