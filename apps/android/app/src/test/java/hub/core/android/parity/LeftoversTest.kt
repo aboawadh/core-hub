@@ -38,7 +38,7 @@ class LeftoversTest {
         Attachment.serializer(),
         """{"id":"$id","profile":"$profile","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HM","created_at":"2026-09-25T10:14:50Z",
             "updated_at":"2026-09-25T10:14:50Z","name":"plan.md","mime":"text/markdown","size_bytes":7,"kind":"$kind",
-            "url":"/api/v1/attachments/$id/content","purpose":"message","width":null,"height":null,"duration_ms":null,
+            "url":"https://hub.example/$id","purpose":"message","width":null,"height":null,"duration_ms":null,
             "sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}""",
     )
 

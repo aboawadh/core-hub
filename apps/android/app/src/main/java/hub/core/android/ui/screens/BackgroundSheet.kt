@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +51,7 @@ import hub.core.android.ui.kit.ButtonKind
 import hub.core.android.ui.kit.ControlSize
 import hub.core.android.ui.kit.EmptyState
 import hub.core.android.ui.kit.HubButton
+import hub.core.android.ui.kit.HubCard
 import hub.core.android.ui.kit.HubIconButton
 import hub.core.android.ui.kit.HubSheet
 import hub.core.android.ui.kit.IconKind
@@ -315,10 +314,7 @@ private fun BackgroundRow(item: BackgroundItem, now: Long, stopping: Boolean, pr
     val t = LocalTokens.current
     val route = BackgroundRules.routeOf(item)
     val ms = BackgroundRules.elapsedMs(item, now)
-    Column(
-        Modifier.fillMaxWidth().background(t.bgRaised, RoundedCornerShape(12.dp)).padding(12.dp).testTag("background.item.${item.id}"),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    HubCard(Modifier.testTag("background.item.${item.id}"), padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Badge(kindLabel(item.kind))
             if (profileName != null) Badge(profileName, tone = BadgeTone.Accent)

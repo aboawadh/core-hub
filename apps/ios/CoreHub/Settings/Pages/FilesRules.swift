@@ -112,6 +112,15 @@ enum FilesRules {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// How many of the profile's recent chats «Attach to chat» offers besides a new one (as the web).
+    static let recentChatLimit = 8
+
+    /// The chats «Attach to chat» offers: this profile's recent ones as the hub lists them, without
+    /// the global agent's conversation (it is not in the chats list, §46), at most `recentChatLimit`.
+    static func recentChats(_ sessions: [Session]) -> [Session] {
+        Array(sessions.filter { $0.source != .globalAgent }.prefix(recentChatLimit))
+    }
+
     /// A file the phone need not even send: over the hub's upload cap.
     static func tooLarge(_ size: Int, max: Int?) -> Bool {
         guard let max, max > 0 else { return false }
@@ -258,6 +267,22 @@ struct FilesOps {
             defer { watcher.stop() }
             return try await builder.execute().body
         }
+    }
+
+    /// The file as an attachment of this profile, copied on the hub (`knowledge.attachWorkspaceFile`):
+    /// nothing is fetched to the phone or sent back; a chat's composer takes it ready (`AttachmentHandOff`).
+    func attach(_ path: String) async throws -> Attachment {
+        try await api.call {
+            try await KnowledgeAPI.knowledgeAttachWorkspaceFile(xHubProfile: profile, workspacePathBody: WorkspacePathBody(path: path), apiConfiguration: $0)
+        }
+    }
+
+    /// The chats «Attach to chat» offers (`FilesRules.recentChats`).
+    func recentChats() async throws -> [Session] {
+        let page = try await api.call {
+            try await SessionsAPI.sessionsList(xHubProfile: profile, archived: ._false, limit: 20, apiConfiguration: $0)
+        }
+        return FilesRules.recentChats(page.items)
     }
 
     /// A folder as one zip in the caches, named after it (the top folder after the profile).

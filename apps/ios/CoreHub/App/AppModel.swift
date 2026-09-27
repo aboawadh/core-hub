@@ -53,6 +53,8 @@ final class AppModel {
     let agentDirectory = AgentDirectory()
     /// Text shared from another app, waiting to become a new chat.
     var pendingDraft: String?
+    /// Profile files made attachments on the hub, waiting for the chat the Files page opens.
+    let handOff = AttachmentHandOff()
     /// Pictures and files shared from another app, waiting to become a new chat's attachments.
     var pendingFiles: [URL] = []
     private let defaults: UserDefaults

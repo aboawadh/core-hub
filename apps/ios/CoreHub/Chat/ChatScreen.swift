@@ -15,6 +15,7 @@ struct ChatScreen: View {
     var leave: (() -> Void)? = nil
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    @Environment(\.openBackground) private var openBackground
     @State private var draft = ""
     @State private var tray: AttachmentTray?
     /// The latest message is on screen (the list's bottom marker is laid out).
@@ -61,6 +62,15 @@ struct ChatScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if let insight { ChatInsightMenu(insight: insight) }
+                    // What works in the background, in every profile (the top bar shows it only while something runs).
+                    if let openBackground {
+                        Button {
+                            openBackground()
+                        } label: {
+                            Label { Text(l10n("background.title")) } icon: { Image(lucide: .activity) }
+                        }
+                        .accessibilityIdentifier("chat.background")
+                    }
                     chatMenu
                 } label: {
                     LucideIcon(.ellipsis, size: 20)
@@ -88,6 +98,8 @@ struct ChatScreen: View {
             if insight == nil { insight = ChatInsightModel(app: app, sessionID: model.sessionID, profile: model.profile) }
             insight?.start()
             if tray == nil { tray = AttachmentTray(app: app) }
+            // A profile file the Files page made an attachment of: in the tray, ready.
+            if let tray { app.handOff.take(model.profile).forEach { tray.addReady($0) } }
             if controls == nil { controls = ChatControlsModel(app: app) }
             model.start()
             LocalNotices.shared.openSessionID = model.sessionID

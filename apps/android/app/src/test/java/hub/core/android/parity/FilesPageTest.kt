@@ -159,7 +159,7 @@ class FilesPageTest {
 
     private val attachmentJson = """{"id":"01J8QK3ZR2W7M5N4P6T8V9X0AT","profile":"work","owner_id":"01J8QK3ZR2W7M5N4P6T8V9X0HM",
         "created_at":"2026-09-25T10:14:50Z","updated_at":"2026-09-25T10:14:50Z","name":"plan.md","mime":"text/markdown",
-        "size_bytes":7,"kind":"file","url":"/api/v1/attachments/01J8QK3ZR2W7M5N4P6T8V9X0AT/content","purpose":"message",
+        "size_bytes":7,"kind":"file","url":"https://hub.example/attachment","purpose":"message",
         "width":null,"height":null,"duration_ms":null,"sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}"""
 
     private fun sessionJson(id: String, source: String) =
