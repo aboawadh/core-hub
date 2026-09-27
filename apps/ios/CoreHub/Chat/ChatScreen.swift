@@ -27,6 +27,9 @@ struct ChatScreen: View {
     /// The composer's chips (model, approvals) and the chat's own actions (apps batch 1).
     @State private var controls: ChatControlsModel?
     @State private var replyTo: Message?
+    /// `/clear-screen`: the messages shown before it stay in the conversation, hidden here.
+    @State private var clearedBefore: String?
+    @State private var pickingModel = false
     @State private var renaming: RenameTarget?
     @State private var deleting: String?
     /// The chat's insight (apps batch 6): the context ring, runs, subagents, changed files and files.
@@ -86,6 +89,11 @@ struct ChatScreen: View {
             leave?()
         }
         .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
+        .sheet(isPresented: $pickingModel) {
+            ModelPickerSheet(options: controls?.models ?? [], loaded: controls?.modelsLoaded ?? false, current: model.state.model, allowDefault: true) { value in
+                Task { await model.setModel(value) }
+            }
+        }
         .sheet(item: Binding(get: { insight?.sheet }, set: { insight?.sheet = $0 })) { which in
             if let insight {
                 ChatInsightSheet(
@@ -129,7 +137,13 @@ struct ChatScreen: View {
                     if model.state.deleted {
                         NoticeView(text: l10n("chat.deleted"), tone: .warning)
                     }
-                    let visible = model.state.messages.filter { !$0.isEmpty }
+                    if clearedBefore != nil {
+                        Button(l10n("slash_commands.show_cleared")) { clearedBefore = nil }
+                            .font(.system(size: FontSize.sizeXs))
+                            .frame(maxWidth: .infinity)
+                            .accessibilityIdentifier("chat.show_cleared")
+                    }
+                    let visible = SlashCommandRun.afterClear(model.state.messages.filter { !$0.isEmpty }, clearedBefore)
                     ForEach(Array(visible.enumerated()), id: \.element.id) { index, message in
                         MessageRow(
                             message: message,
@@ -216,12 +230,32 @@ struct ChatScreen: View {
                 .onAppear { controls.load(profile: model.profile, agentID: model.state.agentID) }
                 .onChange(of: model.state.agentID) { _, id in controls.load(profile: model.profile, agentID: id) }
             }
+            if let query = SlashCommands.query(draft) {
+                SlashMenu(commands: SlashCommands.filter(slashOffered, query)) { command in
+                    if command.argument == .none {
+                        draft = ""
+                        runSlash(command, argument: "")
+                    } else {
+                        draft = "/\(command.name) "
+                    }
+                }
+            }
             Composer(
                 text: $draft,
                 placeholder: l10n("chat.placeholder", ["agent": agentName]),
                 busy: model.state.isBusy,
                 sending: model.sending,
                 onSend: {
+                    // A `/command` this chat offers runs instead of being sent (decision §57).
+                    if tray?.isEmpty ?? true, let parsed = SlashCommands.parse(draft, offered: slashOffered), parsed.command.kind != .message {
+                        if parsed.command.argument == .required && parsed.argument.isEmpty {
+                            model.notice = l10n("slash_commands.needs_argument", ["command": "/" + parsed.command.name])
+                            return
+                        }
+                        draft = ""
+                        runSlash(parsed.command, argument: parsed.argument)
+                        return
+                    }
                     let message = tray?.message(draft) ?? OutgoingMessage(text: draft)
                     let reply = replyTo?.id
                     draft = ""
@@ -237,6 +271,44 @@ struct ChatScreen: View {
         }
         .padding(.horizontal, Space.s3)
         .padding(.bottom, Space.s2)
+    }
+
+    /// The `/` commands this chat offers: its agent's, and the app's (not in the global agent's chat).
+    private var slashOffered: [SlashCommands.Command] {
+        SlashCommands.available(agent?.capabilities ?? []).filter { command in
+            switch command.name {
+            case "fork", "new", "archive": return !isGlobalAgent && (command.name != "fork" || openChat != nil)
+            default: return true
+            }
+        }
+    }
+
+    private func runSlash(_ command: SlashCommands.Command, argument: String) {
+        switch command.name {
+        case "compress":
+            Task { await model.compress(focus: argument) }
+        case "steer":
+            Task { await model.steer(argument) }
+        case "new":
+            leave?()
+        case "fork":
+            Task { if let session = await model.fork() { openChat?(session) } }
+        case "archive":
+            Task { if await model.change(SessionPatch(archived: true)) { leave?() } }
+        case "model":
+            if argument.isEmpty {
+                pickingModel = true
+            } else if let value = SlashCommands.model(named: argument, in: controls?.models ?? []) {
+                Task { await model.setModel(value) }
+            } else {
+                model.notice = l10n("slash_commands.model_unknown", ["model": argument])
+            }
+        case "clear-screen":
+            clearedBefore = model.state.messages.last?.id
+            model.notice = l10n("slash_commands.cleared")
+        default:
+            break
+        }
     }
 
     /// The chat's agent, for what it can do (steer, compress).

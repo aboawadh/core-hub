@@ -1,0 +1,24 @@
+{
+  "slash_commands": {
+    "title": "Commands",
+    "skills_title": "Skills — pick one to use in this message",
+    "no_match": "No command matches. Press Enter to send it as a message.",
+    "needs_argument": "{command} needs words after it.",
+    "model_unknown": "No model called “{model}” in this profile.",
+    "cleared": "The screen was cleared; the messages are still in the conversation.",
+    "show_cleared": "Show them",
+    "describe": {
+      "compress": "Compress this conversation’s context now (add words to say what to keep)",
+      "steer": "Guide the running turn without stopping it",
+      "skill": "Use one of the agent’s skills in this message",
+      "plan": "Have the agent write a plan without doing the work",
+      "goal": "Set a standing goal the agent works on across turns, or show it",
+      "learn": "Turn the recent work, or what you describe, into a skill",
+      "new": "Start a new chat with this agent",
+      "fork": "Fork this conversation into a new one",
+      "archive": "Archive this conversation",
+      "model": "Change the model (add a name, or pick from the list)",
+      "clear-screen": "Clear the screen; nothing is deleted"
+    }
+  }
+}

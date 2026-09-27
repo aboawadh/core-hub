@@ -53,6 +53,24 @@ struct NewChatScreen: View {
                 NoticeView(text: l10n("chat.no_agent"), tone: .warning)
             } else {
                 agentChips
+                if draft.isEmpty {
+                    // Three things worth doing (the web's starters): a tap puts one in the composer.
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Space.s2) {
+                            ForEach(Starters.suggestions(app.language), id: \.self) { text in
+                                Button { draft = text } label: {
+                                    Text(text).font(.system(size: FontSize.sizeXs)).lineLimit(1)
+                                        .padding(.horizontal, Space.s3).padding(.vertical, Space.s2)
+                                        .foregroundStyle(Tone.text)
+                                        .background(Tone.surface, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                                        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous).strokeBorder(Tone.border))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("chat.starter")
+                            }
+                        }
+                    }
+                }
             }
             if let error {
                 NoticeView(text: error, tone: .danger)
@@ -162,6 +180,20 @@ struct NewChatScreen: View {
             } catch {
                 self.error = HubFailure(error).describe(l10n)
             }
+        }
+    }
+}
+
+/// Three things worth doing, under an empty chat's composer (the web's `starters.ts`). Written in
+/// both languages here, as the web does, because they are content a person sends — not interface
+/// text.
+enum Starters {
+    static func suggestions(_ language: AppLanguage) -> [String] {
+        switch language {
+        case .ar:
+            return ["اشرح لي بنية هذا المشروع وأين أبدأ", "اقرأ الملفات في مجلد العمل ولخّص ما تجده", "اكتب اختبارًا يفشل للسلوك الذي أصفه لك"]
+        case .en:
+            return ["Explain this project’s structure and where to start", "Read the files in the working folder and summarise them", "Write a failing test for the behaviour I describe"]
         }
     }
 }

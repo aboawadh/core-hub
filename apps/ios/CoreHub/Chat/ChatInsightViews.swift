@@ -64,7 +64,7 @@ struct ContextRing: View {
     }
 }
 
-/// The insight's five places in the chat's «…» menu, in their own section.
+/// The insight's places in the chat's «…» menu, in their own section.
 struct ChatInsightMenu: View {
     let insight: ChatInsightModel
     @Environment(\.l10n) private var l10n
@@ -76,6 +76,7 @@ struct ChatInsightMenu: View {
             item(.subagents, "chat_insight.subagents", .bot)
             item(.changes, "chat_insight.changes", .fileDiff)
             item(.files, "chat_insight.files", .folder)
+            item(.trajectory, "trajectory_sheet.tab", .activity)
         }
     }
 
@@ -108,6 +109,8 @@ struct ChatInsightSheet: View {
             ChangesSheet(chat: chat)
         case .files:
             ChatFilesSheet(sessionID: chat.sessionID, profile: chat.profile, revision: ChatInsight.changesRevision(Array(chat.state.runs.values)))
+        case .trajectory:
+            TrajectorySheet(sessionID: chat.sessionID, profile: chat.profile, live: chat.state.runs.values.contains { $0.status == .running || $0.status == .queued })
         }
     }
 }
