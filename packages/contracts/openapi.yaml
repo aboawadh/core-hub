@@ -5371,7 +5371,11 @@ paths:
         A job that installs the exact `latest_version` (never the registry's moving `latest`
         tag) — the catalog's `pinned_version` when nothing newer is known. A run of the agent
         asked for while it works waits for it to end. The same job runs on its own for an
-        agent with `auto_update`, only while no run of it is in flight.
+        agent with `auto_update`, only while no run of it is in flight. For an agent with
+        `install.self_update` (Hermes the person installed on the computer the hub runs on) it
+        runs that agent's own updater instead (`hermes update --yes`) and then restarts the
+        Hermes the hub runs; never on its own. Any other agent the hub did not install is
+        refused, as before.
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed, agent.updated]
       responses:
@@ -20836,6 +20840,25 @@ components:
           description: >-
             The agent can be signed in to its own vendor account from the hub
             (`agents.startSignIn`), once installed. Absent means false.
+        minimum_version:
+          type: [string, 'null']
+          description: >-
+            The oldest version of this agent the hub is known to work with, for an agent the hub
+            does not install itself: Hermes, `0.21.3` (release v2026.9.14, the version the image
+            pins and every real-Hermes test runs against). Absent when there is none, and from
+            hubs older than 2026-09-27.
+        below_minimum:
+          type: boolean
+          description: >-
+            `version` is older than `minimum_version`, so some of the hub's features may fail
+            with it. Clients say so without blocking anything. Absent means false.
+        self_update:
+          type: boolean
+          description: >-
+            `agents.upgrade` runs the agent's own updater on the install the person made
+            (Hermes installed on this computer with Hermes's installer: `hermes update --yes`),
+            which also updates it for everything else on the computer that uses it. Clients ask
+            the person before starting it. Absent means false.
         checked_at:
           oneOf:
             - $ref: '#/components/schemas/Timestamp'

@@ -138,7 +138,7 @@ import {
   createPackageRegistry,
   type PackageRegistry,
 } from './update-policy.js';
-import { AgentsService, type AgentPatchInput } from './service.js';
+import { AgentsService, type AgentPatchInput, type HermesUpdater } from './service.js';
 import {
   ChannelError,
   clearChannel,
@@ -309,6 +309,8 @@ export {
 /** Test seams: a fake PATH, a fake adapter set, a fake installer. Set before the app boots. */
 export interface AgentsOverrides {
   adapters?: AdapterSet;
+  /** Hermes's own updater for `agents.upgrade` (a scripted one in tests). */
+  hermesUpdate?: HermesUpdater;
   installer?: AgentInstaller;
   pathValue?: string;
   /** Options for the real adapter set (a stubbed `fetch` for the Hermes gateway probe). */
@@ -738,6 +740,16 @@ function contextOf(app: FastifyInstance): AgentsContext {
     systemScope: () => {
       const row = defaultWorkspace(requireSqlite(hub.database));
       return row ? { id: row.id, slug: row.slug, name: row.name, isDefault: row.isDefault } : null;
+    },
+    // A Hermes the person installed on this computer is updated by its own updater when they
+    // ask from its card; the image's Hermes comes with the image (`personalInstall`).
+    hermesUpdate: own.hermesUpdate ?? {
+      available: () => runtime.personalInstall(),
+      run: (onLine) => runtime.selfUpdate(onLine),
+      restart: async () => {
+        if (runtime.status().mode === 'managed') await runtime.restart();
+        runtime.refreshTui();
+      },
     },
   });
   const leases = new RunLeases();

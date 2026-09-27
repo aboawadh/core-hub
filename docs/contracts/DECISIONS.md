@@ -3749,3 +3749,29 @@ sets the limit from its input again). Tag pushes still do not upload to TestFlig
 Rejected: submitting without sign-in details (Apple rejects an app reviewers cannot use); inventing
 or storing the owner's contact details in the repository or in secrets; a new external group per
 release (the link would change every time).
+
+## 118. The oldest Hermes the hub works with, said on its card; a person's own Hermes updated by its own updater
+
+Proposed (2026-09-27) — the owner asked for it ("what if Hermes was already installed before?");
+the floor and the wording are the owner's to confirm.
+
+In the desktop app's local mode (and a hub run beside Hermes) the Hermes is the person's own and may
+be of any age. `AgentInstall` gains three optional fields, absent from older hubs:
+- `minimum_version` — for an agent the hub does not install, the oldest version it is known to work
+  with. Hermes: `0.21.3`, release v2026.9.14 — the version the image pins (`HERMES_REF`) and every
+  `*.real.test.ts` runs against, and the source the hub's Hermes calls were read from. An older
+  Hermes is not proven (spot checks against v2026.8.13 found the commands and TUI methods the hub
+  calls, so the floor is conservative, not a known break).
+- `below_minimum` — the installed version (build metadata ignored) is older. Clients say so and
+  block nothing: the agent still runs.
+- `self_update` — `agents.upgrade` runs the agent's own updater on the person's install: for Hermes,
+  `hermes update --yes` (no prompt; config migrations accepted) in the person's environment, never
+  with the hub's `HERMES_HOME`; then the Hermes the hub runs is restarted and probed again. True only
+  where Hermes's home is the person's and not the hub's (never in the image, whose Hermes comes with
+  the image), for owners and admins as every upgrade. Never automatic: the web asks first, because it
+  updates Hermes for everything else on the computer too.
+
+`agents.upgrade` keeps its meaning for every other agent; one the hub did not install and that has no
+`self_update` is refused as before. A newer Hermes than the pin is not flagged (the one Hermes's
+installer puts on a computer today is past it and was tested for real,
+`docs/changes/2026-09-27-twuijri-desktop-local-existing-hermes.md`).

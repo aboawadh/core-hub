@@ -158,6 +158,11 @@ export interface CatalogEntry {
   subagents: 'full' | 'observe' | 'none';
   /** Present when the agent can be signed in to its vendor account from the hub. */
   signIn?: AgentSignInRecipe;
+  /**
+   * For an agent the hub does not install (Hermes): the oldest version it is known to work
+   * with. An older one still runs; the card says so (`AgentInstall.below_minimum`).
+   */
+  minimumVersion?: string;
 }
 
 /** The pinned version an entry should be at, or null when the hub does not install it. */

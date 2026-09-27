@@ -261,6 +261,9 @@ function hub(
     if (path.endsWith(`/agents/${HERMES}/restart`) && method === 'POST') {
       return json({ job_id: 'JOBRESTART' }, 202);
     }
+    if (path.endsWith(`/agents/${HERMES}/update`) && method === 'POST') {
+      return json({ job_id: 'JOBUPDATE' }, 202);
+    }
     const job = /\/jobs\/(JOB[A-Z]+)$/.exec(path);
     if (job) {
       return json({
@@ -669,5 +672,47 @@ describe("Hermes's card: long errors (the desktop report of 2026-09-27)", () => 
     const gateway = screen.getByTestId('agent-gateway-default');
     expect(gateway.getAttribute('data-state')).toBe('starting');
     expect(within(gateway).getByText(stalled).className).toContain('wrap-anywhere');
+  });
+});
+
+describe("Hermes's card: a Hermes older than Core Hub is tested with (2026-09-27)", () => {
+  const older = (selfUpdate: boolean) =>
+    ({
+      ...AGENT,
+      install: {
+        ...AGENT.install,
+        source: 'user_cli',
+        version: '0.20.1',
+        minimum_version: '0.21.3',
+        below_minimum: true,
+        ...(selfUpdate ? { self_update: true } : {}),
+      },
+    }) as unknown as Agent;
+
+  it('says so without blocking, and updates it only after the person agrees', async () => {
+    const { fetchImpl, sent } = hub({ agent: older(true) });
+    mount('/agents', fetchImpl);
+    const notice = await screen.findByTestId('agent-below-minimum');
+    expect(notice.textContent).toContain('0.20.1');
+    expect(notice.textContent).toContain('0.21.3');
+    // Nothing else on the card is taken away.
+    expect(screen.getByTestId('agent-settings-link')).toBeTruthy();
+    fireEvent.click(within(notice).getByTestId('agent-update-hermes'));
+    const confirm = await screen.findByTestId('confirm-dialog');
+    expect(confirm.textContent).toContain('hermes update --yes');
+    expect(sent.some((call) => call.path.endsWith(`/agents/${HERMES}/update`))).toBe(false);
+    fireEvent.click(within(confirm).getAllByRole('button').at(-1)!);
+    await waitFor(() =>
+      expect(sent.find((call) => call.path.endsWith(`/agents/${HERMES}/update`))).toMatchObject({
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('only says so where the hub may not update that Hermes', async () => {
+    const { fetchImpl } = hub({ agent: older(false) });
+    mount('/agents', fetchImpl);
+    const notice = await screen.findByTestId('agent-below-minimum');
+    expect(within(notice).queryByTestId('agent-update-hermes')).toBeNull();
   });
 });

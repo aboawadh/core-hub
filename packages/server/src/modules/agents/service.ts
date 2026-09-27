@@ -110,6 +110,21 @@ export interface AgentsServiceOptions {
    * auto-update. The hub's default workspace; absent or `null`, no auto-update starts.
    */
   systemScope?: () => WorkspaceScope | null;
+  /**
+   * Hermes's own updater, where the Hermes the hub runs is one the person installed on this
+   * computer (the desktop app's local mode): `agents.upgrade` runs it (`AgentInstall.self_update`).
+   * Absent, Hermes cannot be updated from the hub (the image carries its own).
+   */
+  hermesUpdate?: HermesUpdater;
+}
+
+export interface HermesUpdater {
+  /** Whether the Hermes on this host is the person's own install, updated by itself. */
+  available(): boolean;
+  /** Runs Hermes's own updater, each line of output to `onLine`; rejects with its last line. */
+  run(onLine: (line: string) => void): Promise<void>;
+  /** After an update: the Hermes processes the hub runs start again on the new code. */
+  restart(): Promise<void>;
 }
 
 /** How long a run asked for during an install or update waits for it (`settled`). */
@@ -392,7 +407,81 @@ export class AgentsService implements UpdatePolicyStore {
   }
 
   upgrade(scope: WorkspaceScope, actor: Actor, id: string): JobRow {
+    const row = this.db.select().from(agents).where(eq(agents.id, id)).get();
+    if (row && this.selfUpdates(row)) return this.hermesSelfUpdate(scope, actor, row);
     return this.lifecycleJob(scope, actor, id, 'update');
+  }
+
+  /** `AgentInstall.self_update`: Hermes the person installed here, updated by its own updater. */
+  private selfUpdates(row: AgentRow): boolean {
+    return (
+      row.adapterKind === 'hermes' &&
+      row.source === 'user_cli' &&
+      row.installState === 'installed' &&
+      (this.options.hermesUpdate?.available() ?? false)
+    );
+  }
+
+  /**
+   * `hermes update --yes` on the person's own Hermes, asked for from its card (the person
+   * confirmed there), then the Hermes the hub runs is restarted on the new code and probed
+   * again. A run asked for meanwhile waits for it, as for any update.
+   */
+  private hermesSelfUpdate(scope: WorkspaceScope, actor: Actor, row: AgentRow): JobRow {
+    const updater = this.options.hermesUpdate!;
+    if (this.lifecycles.has(row.id)) throw conflict({ reason: 'already_running' });
+    let settle: () => void = () => undefined;
+    this.lifecycles.set(
+      row.id,
+      new Promise<void>((resolve) => {
+        settle = resolve;
+      }),
+    );
+    const finish = () => {
+      this.lifecycles.delete(row.id);
+      settle();
+    };
+    const started = t('jobs.update_started', this.language);
+    const before = row.version;
+    return this.options.jobs.start(
+      {
+        kind: 'agents.update',
+        workspace: scope.id,
+        ownerId: actor.userId,
+        entityKind: 'agent',
+        entityId: row.id,
+        message: started,
+      },
+      async (handle) => {
+        handle.progress(5, started);
+        try {
+          await updater.run((line) => handle.progress(50, line));
+          handle.progress(80, t('jobs.restart_started', this.language));
+          await updater.restart();
+          await this.reprobe(row.slug);
+        } catch (error) {
+          finish();
+          this.announce(this.loadAgent(row.id), scope);
+          throw error;
+        }
+        finish();
+        const fresh = this.loadAgent(row.id);
+        this.announce(fresh, scope);
+        this.options.audit.record({
+          actorKind: 'user',
+          actorId: actor.userId,
+          ownerId: actor.userId,
+          workspace: scope.id,
+          action: 'agents.updated',
+          entityKind: 'agent',
+          entityId: fresh.id,
+          summary: `${fresh.name} update`,
+          data: { version: fresh.version, previous_version: before, updater: 'hermes update' },
+        });
+        handle.progress(100, t('jobs.update_done', this.language));
+        return { version: fresh.version };
+      },
+    );
   }
 
   uninstall(scope: WorkspaceScope, actor: Actor, id: string): JobRow {
@@ -1103,6 +1192,7 @@ export class AgentsService implements UpdatePolicyStore {
       runtime: this.runtimeOf(row),
       defaultModel: this.defaultModelOf(row, scope.id),
       name: this.displayName(row, language),
+      selfUpdate: this.selfUpdates(row),
     });
   }
 
