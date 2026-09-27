@@ -1,5 +1,5 @@
 # الدفعتان 11 و13: أداة الملفات (ملفات البروفايل) في التطبيقين
-المسؤول: twuijri · الفرع: night/apps-files · الحالة: in-progress
+المسؤول: twuijri · الفرع: night/apps-files · الحالة: review
 
 ## المشكلة والهدف
 في قائمة الفجوات كانت «الملفات» (مجلد عمل البروفايل، §65) غائبة عن الجوال: الآيفون يعرض «قريبًا» والأندرويد يفتح صفحة الويب.
@@ -88,6 +88,8 @@ Test Case '-[CoreHubTests.PageKitTests testASaveRefusedAsChangedElsewhereIsToldA
 Executed 284 tests, with 0 failures (0 unexpected)
 ** TEST SUCCEEDED **
 ```
+
+بعد الدفع إلى `night/2026-09-27-apps` (الالتزام 726bbe0d، #181): CI وAndroid وiOS وChange record وDesktop installers — كلها success.
 
 ## المخاطر والرجوع
 - لم تُجرَّب على هاتفي المالك؛ صفحة iOS لا صور لها (اختبارات القواعد فقط في CI).
