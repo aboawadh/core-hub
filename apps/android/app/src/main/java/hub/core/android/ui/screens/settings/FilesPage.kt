@@ -36,7 +36,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -660,6 +662,8 @@ internal fun FileEntryRow(
                         entry.name, Modifier.weight(1f, fill = false), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium,
                         color = if (entry.kind == WorkspaceFileEntry.Kind.LINK) t.textMuted else t.text,
                         maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                        // A name reads in its own direction: «خطة الإطلاق.md» keeps its extension at the end.
+                        style = TextStyle(textDirection = TextDirection.Content),
                     )
                     if (entry.kind == WorkspaceFileEntry.Kind.LINK) Badge(words.linkOutsideBadge, tone = BadgeTone.Warning)
                     else if (entry.link) Badge(words.linkBadge)
