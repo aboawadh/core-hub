@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Models → Runtime card (ADR 0010), native since 2026-09-27; words as the web's models.runtime.* -->
+<resources>
+    <string name="runtime_title">Runtime</string>
+    <string name="runtime_hint">What the agent runtime received from this profile.</string>
+    <string name="runtime_runtime_writable_ok">The hub manages the agent runtime.</string>
+    <string name="runtime_runtime_writable_missing">No agent runtime this hub can configure.</string>
+    <string name="runtime_provider_keys_ok">Provider keys are in the runtime\'s environment.</string>
+    <string name="runtime_provider_keys_missing">A provider key has not reached the runtime.</string>
+    <string name="runtime_provider_verified_ok">Every provider answered its last check.</string>
+    <string name="runtime_provider_verified_missing">A provider refused its last check — open it and fix the key.</string>
+    <string name="runtime_model_selected_ok">A chat model is selected for the runtime.</string>
+    <string name="runtime_model_selected_missing">No chat model is selected — choose one under Defaults.</string>
+    <string name="runtime_gateway_reloaded_ok">The runtime restarted after the last change.</string>
+    <string name="runtime_gateway_reloaded_missing">Settings changed after Hermes last started — restart it to apply them.</string>
+    <string name="runtime_ready">Runtime ready · %1$s/%2$s checks</string>
+    <string name="runtime_passed">%1$s of %2$s checks pass</string>
+    <string name="runtime_restart_now">Restart now</string>
+</resources>
