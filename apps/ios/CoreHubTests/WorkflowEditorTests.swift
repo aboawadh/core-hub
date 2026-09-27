@@ -81,6 +81,20 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertFalse(WorkflowEditRules.canSave(draft, validation: nil))
     }
 
+    func testTheLiveCheckSendsTheDrawingWithoutTheName() {
+        // A new drawing has no name yet; the check never reads it and an older hub refused "".
+        var draft = empty()
+        WorkflowEditRules.add(.agent, title: "A", to: &draft, agentID: "A1")
+        WorkflowEditRules.add(.notify, title: "B", to: &draft)
+        WorkflowEditRules.connect("agent_1", to: "notify_1", route: .success, in: &draft)
+        let check = WorkflowEditRules.check(draft)
+        XCTAssertNil(check.name)
+        XCTAssertEqual(check.nodes, WorkflowEditRules.write(draft, clearing: false).nodes)
+        XCTAssertEqual(check.edges?.map(\.id), ["e1"])
+        draft.name = "Morning"
+        XCTAssertNil(WorkflowEditRules.check(draft).name, "named or not, the check leaves the name out")
+    }
+
     func testFindingsAreSaidPerStepInThePersonsLanguage() {
         let l10n = L10n(.en, bundle: Bundle(for: AppModel.self))
         let mine = WorkflowIssue(code: "agent_missing", nodeId: "agent_1", message: "hub words")

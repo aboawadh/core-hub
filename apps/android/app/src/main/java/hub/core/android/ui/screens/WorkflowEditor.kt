@@ -53,6 +53,7 @@ import hub.core.android.ui.kit.ToggleRow
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.SchedulesRerunWorkflowFromNodeRequest
 import hub.core.client.model.Workflow
+import hub.core.client.model.WorkflowCheck
 import hub.core.client.model.WorkflowEdge
 import hub.core.client.model.WorkflowIssue
 import hub.core.client.model.WorkflowNode
@@ -172,6 +173,15 @@ object WorkflowDraftRules {
         )
     }
 
+    /**
+     * The drawing as the hub's live check takes it (`WorkflowCheck`): what saving sends, without the
+     * name — the check never reads it, and a hub older than the check's own body refused an empty one.
+     */
+    fun toCheck(draft: WorkflowDraft): WorkflowCheck {
+        val write = toWrite(draft)
+        return WorkflowCheck(description = write.description, workingDir = write.workingDir, nodes = write.nodes, edges = write.edges)
+    }
+
     /** An agent step's model: a catalogue key, or null for the agent's own; the provider goes with the key. */
     fun withModel(node: WorkflowNode, model: String?): WorkflowNode = node.copy(model = model?.takeIf { it.isNotBlank() }, provider = null)
 
@@ -236,7 +246,7 @@ class WorkflowEditOps(private val apis: () -> HubApis?) {
         return hubCall { block(api) }
     }
 
-    suspend fun validate(profile: String, write: WorkflowWrite) = call { it.schedules.schedulesValidateWorkflow(profile, write) }
+    suspend fun validate(profile: String, check: WorkflowCheck) = call { it.schedules.schedulesValidateWorkflow(profile, check) }
     suspend fun create(profile: String, write: WorkflowWrite) = call { it.schedules.schedulesCreateWorkflow(profile, write) }
     suspend fun update(profile: String, id: String, write: WorkflowWrite) = call { it.schedules.schedulesUpdateWorkflow(profile, id, write) }
     suspend fun delete(workflow: Workflow) = call { it.schedules.schedulesDeleteWorkflow(workflow.profile, workflow.id) }
@@ -323,7 +333,7 @@ fun WorkflowEditorSheet(
         if (draft.nodes.isEmpty()) { validation = null; return@LaunchedEffect }
         delay(600)
         checking = true
-        ops.validate(where, WorkflowDraftRules.toWrite(draft)).onSuccess { validation = it; checkError = null }.onFailure { checkError = it as HubError }
+        ops.validate(where, WorkflowDraftRules.toCheck(draft)).onSuccess { validation = it; checkError = null }.onFailure { checkError = it as HubError }
         checking = false
     }
     HubSheet(onDismiss, Modifier.testTag("workflow.editor"), title = stringResource(if (workflow == null) R.string.wfe_new else R.string.wfe_edit)) {
