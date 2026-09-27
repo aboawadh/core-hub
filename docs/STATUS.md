@@ -664,6 +664,26 @@ its approval.
   for every member). Seats have no order in the contract, so there is no reorder on any
   client. Android: JVM tests (rules, reducer, requests against a scripted hub) and a Robolectric
   picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Agents I on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-agents-1.md`,
+  apps night batch 8), as the web's agent pages have it. **Skills**: search, a chip for whose skills
+  (all, yours, the Core Hub library, Hermes's), the skills by category with their switch and marks
+  (pinned, unreadable, built into Hermes, library, edited); a skill opens to read (Hermes's own) or to
+  edit its `SKILL.md` (Markdown with preview); a **new skill** (key + text from the front-matter
+  template); pin/unpin, **restore** an edited library skill and **delete** (both after a question);
+  **import** a `SKILL.md` or zip from the phone's files (uploaded as `purpose: skill`, installed, the
+  uploads deleted either way; a refusal says which rule in our words with the hub's sentence); the
+  **Core Hub library card** (how many installed and edited, Install, switch off after a question).
+  **Memory**: the three documents with each memory list's **entries** — edit or **remove one** (after
+  a question), add one, edit all — and its **budget bar** (warning from 80 %, a save that would grow
+  past the limit is refused before it is sent); the persona as one text. The contract's
+  `deleteMemoryItem` is for Ekko entries the web does not show, so it is not offered. **Plugins**: the
+  source and Hermes's status, the switch, **install** by catalog name / `owner/repo` / Git URL
+  (Hermes's job followed to its end, its outcome said) and **remove** (after a question). **Agent
+  cards**: the one button the agent needs (Install, Update to x.y, or Restart for a supervised Hermes)
+  and «⋯» with check for updates, update automatically on/off and **remove** (after a question); every
+  job is followed with a progress bar and its outcome (installed version, «up to date» or the update
+  found, the failure in the hub's words). Android: JVM tests against a scripted hub and a Robolectric
+  picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
