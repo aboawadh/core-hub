@@ -74,6 +74,9 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1 e2e/zz
   ✓  2 … the owner opens Secrets with the password each time, and reveals one value at a time (1.9s)
   2 passed (12.6s)
 ```
+على CI في #209 سقط `packages/web/tests/desktop-surface.test.tsx` (يسرد تبويبات الإعدادات بين «الخصوصية» و«حول» في
+سطح المكتب)، فأُضيف `secrets` إلى توقّعه: `Tests  28 passed (28)` محليًا بعدها.
+
 ما يثبته اختبار الخادم: المالك وحده (المشرف ورمز التطبيق مرفوضان)، كلمة المرور في كل مرة (بلا إذن، أو إذن منتهٍ
 بعد 5 دقائق، أو إذن ملغى، أو إذن جلسة أخرى ← `403 step_up_required`)، القفل بعد 5 محاولات خاطئة (`429` ويشمل تسجيل
 الدخول)، أنواع الأسرار الخمسة بالاسم ثم قيمها، صفوف التدقيق بلا قيم، ولا قيمة ولا كلمة مرور في أي سطر سجل.
