@@ -89,5 +89,11 @@ final class PageKitTests: XCTestCase {
     func testASaveRefusedAsChangedElsewhereIsToldApart() {
         XCTAssertTrue(DocumentRules.changedElsewhere(HubFailure(kind: .http, status: 409, code: "changed", message: nil, operationID: nil, requestID: nil, detail: "")))
         XCTAssertFalse(DocumentRules.changedElsewhere(HubFailure(kind: .http, status: 409, code: "conflict", message: nil, operationID: nil, requestID: nil, detail: "")))
+        // What the hub actually sends (config files, profile files): `conflict` with `details.reason = changed`.
+        var changed = HubFailure(kind: .http, status: 409, code: "conflict", message: nil, operationID: nil, requestID: nil, detail: "")
+        changed.reason = "changed"
+        XCTAssertTrue(DocumentRules.changedElsewhere(changed))
+        changed.reason = "exists"
+        XCTAssertFalse(DocumentRules.changedElsewhere(changed))
     }
 }

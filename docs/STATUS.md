@@ -754,6 +754,29 @@ its approval.
   pending sheet (the bell) now also lists senders waiting to pair with the profile's channel agent,
   approved or denied there. Android: JVM tests against a scripted hub and Robolectric pictures; iOS:
   unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Files (the profile's working folder) on both phones** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-files.md`, apps night batches 11 and 13), as the web's Files
+  tool has it (§65); Android no longer opens it on the web and iOS no longer shows "coming later".
+  Browse by the folder trail (the profile's name, each folder, «Up», Android's back walks up), search
+  and sort the folder (name, newest, largest; folders first), each entry with its kind, size and time
+  and a badge for a link (one that leads out cannot be opened). A file opens the way a chat's file
+  opens — the chat's opener is reused, with a new kind of hub file for the profile's folder: pictures
+  drawn, documents in the phone's viewer, sound and video streamed from a ticket; a text file opens
+  in the shared editor, which saves against the file's etag and offers **Reload** when it changed on
+  disk. **Share** (iOS: the share sheet, «Save to Files»), **save to the phone** (Android's Downloads),
+  **share a folder as a zip**, and **attach to a new chat** (the file lands in the new chat's tray the
+  way another app's share does). **Upload** files or photos and videos, one at a time with a progress
+  bar, checked against the hub's cap first, asking to replace a name already there. **New folder**,
+  **new text file**, **rename**, **move**, **copy** (as a path) and **delete** after a question. The
+  hub's refusals are said in one line of the page's own words (not an owner or admin, already there,
+  too large, not text, outside the profile's files…). Not built: the web's "attach to one of the
+  recent chats" (the phones' chat screens take handed files only when a chat is new) and resumable
+  upload of a big file (the contract has one multipart upload for these files, capped by the hub; the
+  resumable flow belongs to chat attachments). The shared editor's conflict check now also reads the
+  hub's `409` with `details.reason = changed` (it only knew a `changed` code, which the hub never
+  sends for these files), so Reload shows on any page of the shared editor whose refusal carries it. Android: JVM tests against a
+  scripted hub and Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the
+  owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still

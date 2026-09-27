@@ -109,6 +109,9 @@ class PageKitTest {
     @Test fun `a save refused as changed elsewhere is told apart`() {
         assertTrue(changedElsewhere(HubError(409, "changed", null)))
         assertFalse(changedElsewhere(HubError(409, "conflict", null)))
+        // What the hub actually sends (config files, profile files): `conflict` with `details.reason = changed`.
+        assertTrue(changedElsewhere(HubError(409, "conflict", null, reason = "changed")))
+        assertFalse(changedElsewhere(HubError(409, "conflict", null, reason = "exists")))
         assertFalse(changedElsewhere(null))
     }
 }

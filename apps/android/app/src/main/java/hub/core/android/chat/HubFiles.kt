@@ -3,6 +3,7 @@ package hub.core.android.chat
 import hub.core.android.data.HubError
 import hub.core.android.data.apiBase
 import hub.core.android.data.hubCall
+import hub.core.client.api.KnowledgeApi
 import hub.core.client.api.MetaApi
 import hub.core.client.api.SessionsApi
 import hub.core.client.model.SessionFile
@@ -60,6 +61,21 @@ sealed interface HubFile {
         val modified: String? = null,
     ) : HubFile {
         override val cacheKey: String get() = "file-" + sha1("$sessionId\u0000$path\u0000$sizeBytes\u0000$modified").take(24)
+    }
+
+    /**
+     * A file of the profile's working folder (Settings → Files, `knowledge.downloadWorkspaceFile`):
+     * it may change, so the key carries its profile, size and time.
+     */
+    data class Profile(
+        val profile: String,
+        val path: String,
+        override val name: String,
+        override val mime: String? = null,
+        override val sizeBytes: Long? = null,
+        val modified: String? = null,
+    ) : HubFile {
+        override val cacheKey: String get() = "ws-" + sha1("$profile\u0000$path\u0000$sizeBytes\u0000$modified").take(24)
     }
 
     companion object {
@@ -215,6 +231,7 @@ class HubFileFetcher(private val client: OkHttpClient, private val root: File) {
                 when (file) {
                     is HubFile.Attachment -> sessions.sessionsDownloadAttachment(xHubProfile = profile, attachmentId = file.id)
                     is HubFile.Working -> sessions.sessionsReadFile(xHubProfile = profile, sessionId = file.sessionId, path = file.path, download = true)
+                    is HubFile.Profile -> KnowledgeApi(apiBase(hub), counting).knowledgeDownloadWorkspaceFile(xHubProfile = profile, path = file.path)
                 }
             }.getOrThrow()
         } catch (e: HubError) {
@@ -249,6 +266,7 @@ class HubFileFetcher(private val client: OkHttpClient, private val root: File) {
             when (file) {
                 is HubFile.Attachment -> sessions.sessionsCreateAttachmentStream(xHubProfile = profile, attachmentId = file.id)
                 is HubFile.Working -> sessions.sessionsCreateFileStream(profile, file.sessionId, SessionsCreateFileStreamRequest(path = file.path))
+                is HubFile.Profile -> KnowledgeApi(apiBase(hub), client).knowledgeCreateWorkspaceFileStream(xHubProfile = profile, path = file.path)
             }
         }.getOrThrow()
         return resolve(hub, ticket.url) ?: throw HubError(-1, "bad_address", ticket.url)

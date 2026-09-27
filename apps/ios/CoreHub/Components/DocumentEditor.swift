@@ -24,10 +24,11 @@ struct DocumentEditor: View {
 }
 
 enum DocumentRules {
-    /// Whether a save was refused because the text changed elsewhere since it was read (`409 changed`).
+    /// Whether a save was refused because the text changed elsewhere since it was read: `409` with
+    /// `details.reason = changed` (the hub's `conflict` code), or a `changed` code.
     static func changedElsewhere(_ error: Error) -> Bool {
         let failure = HubFailure(error)
-        return failure.status == 409 && failure.code == "changed"
+        return failure.status == 409 && (failure.reason == "changed" || failure.code == "changed")
     }
 }
 
