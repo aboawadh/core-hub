@@ -141,7 +141,7 @@ enum ProfileRules {
             return ProfileImport(attachmentId: attachmentID, slug: slug, name: trimmed.isEmpty ? nil : trimmed)
         }
         // Replacing the default makes no new profile: the hub does not use the slug, which is still sent (decision §116).
-        let sent = slugProblem(slug, taken: []) == nil ? slug : "imported"
+        let sent = !slug.isEmpty && slugProblem(slug, taken: []) == nil ? slug : "imported"
         return ProfileImport(attachmentId: attachmentID, slug: sent, name: trimmed.isEmpty ? nil : trimmed, replaceDefault: true)
     }
 

@@ -176,7 +176,7 @@ object ProfileRules {
             // Replacing the default makes no new profile: the hub does not use the slug, which is still sent (decision §116).
             ProfileImport(
                 attachmentId = attachmentId,
-                slug = if (slugProblem(slug, emptyList()) == null) slug else "imported",
+                slug = if (slug.isNotEmpty() && slugProblem(slug, emptyList()) == null) slug else "imported",
                 name = name.trim().ifEmpty { null },
                 replaceDefault = true,
             )
