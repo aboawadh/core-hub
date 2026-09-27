@@ -92,7 +92,7 @@ an artifact. A release keeps them for 14 days. A release's Android `versionCode`
 | Workflow | Makes | Secrets |
 |---|---|---|
 | `android-signed.yml` | signed `app-release.apk` + `app-release.aab`, Firebase configured | `ANDROID_TEST_KEYSTORE_B64`, `ANDROID_TEST_KEYSTORE_PASSWORD`, `ANDROID_TEST_KEY_ALIAS`, `ANDROID_TEST_KEY_PASSWORD`, `GOOGLE_SERVICES_JSON` |
-| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked, then the TestFlight groups in `testflight_groups` (default `Owner`) | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
+| `ios-signed.yml` | App Store archive and `.ipa` (app + share extension); TestFlight when `upload_testflight` is ticked, then the TestFlight groups in `testflight_groups` (default `Owner`), and the public link: Beta App Review into `external_group` (default `Public`) | `IOS_CSC_LINK`, `IOS_CSC_KEY_PASSWORD`, `ASC_API_KEY_ID`, `ASC_API_KEY_P8`, `ASC_API_ISSUER_ID` |
 | `desktop-signed.yml` | macOS dmg signed with Developer ID and notarised | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` |
 
 How each handles its secrets: they reach only the steps that need them, as environment
@@ -168,9 +168,8 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
    be added by hand. With the same key it finds the app by bundle id, waits until App Store
    Connect has processed the build (`processingState` `VALID`), and adds it to each group.
    - **Internal groups** (such as `Owner`) get the build straight away; no review.
-   - **External groups** get it too, but their testers see it only after **Beta App Review**
-     approves it. The workflow never submits for review; that stays the owner's step in App Store
-     Connect.
+   - **External groups** named here get it too, but their testers see it only after **Beta App
+     Review** approves it. This step does not submit for review; step 7 does, for the public group.
    - **Slow processing**: after 30 minutes the step stops waiting and leaves a warning, not a
      failure; the upload succeeded, and the build can be added by hand (TestFlight → the group →
      Builds → +).
@@ -181,6 +180,30 @@ export `COREHUB_ANDROID_KEYSTORE` (a path), `COREHUB_ANDROID_KEYSTORE_PASSWORD`,
      lists the app's groups.
 
    The script's tests run in CI (`pnpm scripts:test`) against a fake App Store Connect.
+7. **The public TestFlight link** (owner, 2026-09-27: send people a link instead of adding each
+   tester by hand). After the groups, `apps/ios/scripts/testflight-public.mjs` runs when
+   `external_group` is not empty (default `Public`; empty skips it):
+   - It makes sure the external group exists with its **public link** on, at most
+     `public_link_limit` testers (default 1000, Apple allows 1–10,000), and tester feedback on;
+     it creates the group the first time. The link is printed in the log and in the **job summary**
+     ("TestFlight public link (Public): https://testflight.apple.com/join/…"), and stays the same
+     from one release to the next. It is also in App Store Connect → TestFlight → Public → Public
+     Link. The repository and its Actions logs are public, so anyone can read the link; the limit
+     caps how many can join.
+   - It waits for processing like step 6 (at once when step 6 already waited), sets the build's
+     **What to Test** (en-US and ar-SA) to `Core Hub X.Y.Z — what's new:
+     https://github.com/twuijri/core-hub/releases/tag/vX.Y.Z`, submits the build for **Beta App
+     Review** (unless it already waits for, is in, or passed review) and adds it to the group.
+     Testers who joined through the link get it once Apple approves it (usually within a day; later
+     builds of the same version are often approved at once).
+   - It fills two non-personal Test Information fields when they are empty: the **Beta App
+     Description** (from `apps/ios/fastlane/metadata/<locale>/description.txt`) and the **Privacy
+     Policy URL** (from `privacy_url.txt`). Everything else is the owner's own and is never made up:
+     when it is missing the step fails, names each field, and neither submits nor adds the build.
+     The upload, the internal groups and the artifact are earlier steps and are already done.
+   - A group name that is an internal group, a bad limit, or a build Apple rejected fails the step;
+     slow processing is a warning.
+   - Tag pushes do not upload to TestFlight, so they do none of this (unchanged).
 
 On a developer's Mac, Xcode signs automatically with team `58QWJ228ZE`
 (`DEVELOPMENT_TEAM` in `apps/ios/project.yml`).
@@ -203,6 +226,18 @@ installers stay unsigned (`desktop.yml`).
 - **TestFlight**: an app record in App Store Connect for `com.twuijri.corehub`. The app icon
   App Store Connect requires is in the app (`apps/ios/CoreHub/Resources/Assets.xcassets`, made by
   `pnpm icons:build`).
+- **TestFlight public link, once**: App Store Connect → Apps → Core Hub → **TestFlight** →
+  **Test Information** (left column), then Save:
+  - **Feedback Email** (English (U.S.), the app's primary language): where testers' feedback goes.
+    The Beta App Description and Privacy Policy URL are filled by the workflow if empty.
+  - **Beta App Review Information → Contact Information**: First name, Last name, Phone number,
+    Email.
+  - **Sign-in required** ticked, with the demo account's **User name** and **Password** (only
+    there, never in the repository), and **Review Notes** with the demo hub's address (the notes
+    in [docs/store/apple/review-notes.md](store/apple/review-notes.md) fit).
+
+  Until these are filled, step 7 fails with the list of what is missing; after that each upload
+  is submitted by itself.
 - **Play**: nothing yet; the signed AAB is ready for an internal-testing track when the owner
   decides. The listing's 512 px icon is `apps/android/store/icon-512.png`.
 
@@ -236,7 +271,8 @@ For each version:
 1. **A build.** Actions → *iOS signed build* → Run workflow with **upload_testflight** ticked.
    The run waits until App Store Connect has processed the build and adds it to the `Owner`
    TestFlight group (or the groups in **testflight_groups**), so it reaches the owner's devices
-   without adding it by hand.
+   without adding it by hand, then submits it for Beta App Review into the `Public` group, whose
+   public link is in the run's summary.
 2. **Pick the build.** App Store Connect → the app → the version in "Prepare for Submission" →
    **Build** → choose the build from TestFlight.
 3. **App Review Information.** Tick **Sign-in required** and enter the demo account's username
