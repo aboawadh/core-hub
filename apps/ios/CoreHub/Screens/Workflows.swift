@@ -1,8 +1,9 @@
 // Workflows on the phone (B13): every workflow of every profile the person may enter (the
 // Schedules page's second half, as on the web), run with the limits the hub supports, and a
 // read-only view of a run whose steps follow it live — a waiting step is approved or denied right
-// there. The graph itself is drawn and edited on the web. Every call about a workflow or a run goes
-// to its own profile (ADR 0016).
+// there, and a finished run is run again from any step. A workflow is drawn, edited, copied and
+// deleted here too (WorkflowEditor.swift), and its saved limits changed. Every call about a
+// workflow or a run goes to its own profile (ADR 0016).
 import CoreHubClient
 import Observation
 import SwiftUI
@@ -190,6 +191,38 @@ final class WorkflowRunModel {
         await refresh()
     }
 
+    /// What a waiting approval asks, in its own words (`sessions.getApproval`), by approval id.
+    private(set) var questions: [String: String] = [:]
+
+    func loadQuestion(_ approvalID: String) async {
+        guard let app, questions[approvalID] == nil else { return }
+        let profile = self.profile
+        if let approval = try? await app.api.call({ try await SessionsAPI.sessionsGetApproval(xHubProfile: profile, approvalId: approvalID, apiConfiguration: $0) }) {
+            questions[approvalID] = [approval.title, approval.description].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
+        }
+    }
+
+    /// A new run that starts at this step, reusing what the earlier steps said in this one.
+    func rerun(from nodeID: String) async -> String? {
+        guard let app else { return nil }
+        acting = true
+        defer { acting = false }
+        let profile = self.profile, runID = self.runID
+        do {
+            let accepted = try await app.api.call {
+                try await SchedulesAPI.schedulesRerunWorkflowFromNode(
+                    xHubProfile: profile, workflowRunId: runID,
+                    schedulesRerunWorkflowFromNodeRequest: SchedulesRerunWorkflowFromNodeRequest(fromNodeId: nodeID), apiConfiguration: $0
+                )
+            }
+            error = nil
+            return accepted.workflowRunId
+        } catch {
+            self.error = HubFailure(error).describe(app.l10n)
+            return nil
+        }
+    }
+
     func cancel() async {
         guard let app else { return }
         acting = true
@@ -206,11 +239,13 @@ final class WorkflowRunModel {
 
 /// The Workflows half of Schedules: a row per workflow, its profile's badge when there are several.
 struct WorkflowsList: View {
+    /// Bumped by the page when a workflow was made or changed elsewhere (the New button).
+    var refresh = 0
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
 
     var body: some View {
-        AsyncContent(key: "workflows") {
+        AsyncContent(key: "workflows/\(refresh)") {
             let header = app.currentProfile
             return try await app.api.call {
                 try await SchedulesAPI.schedulesListWorkflows(xHubProfile: header, profiles: .all, limit: 200, apiConfiguration: $0)
@@ -224,7 +259,7 @@ struct WorkflowsList: View {
                 }
                 ForEach(workflows, id: \.id) { workflow in
                     NavigationLink {
-                        WorkflowDetail(workflow: workflow)
+                        WorkflowDetail(workflow: workflow, changed: reload)
                     } label: {
                         WorkflowRow(workflow: workflow, showProfile: Set(workflows.map(\.profile)).count > 1)
                     }
@@ -271,8 +306,15 @@ struct WorkflowRow: View {
 
 /// A workflow: run it (with an input and this run's limits), and its latest runs.
 struct WorkflowDetail: View {
-    let workflow: Workflow
+    @State var workflow: Workflow
+    /// The list reads again after a change here (saved, copied, deleted).
+    var changed: () -> Void = {}
     @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var editing = false
+    @State private var copying: WorkflowEditRules.Draft?
+    @State private var deleting = false
+    @State private var limitsOpen = false
     @Environment(\.l10n) private var l10n
     @State private var input = ""
     @State private var minutes = ""
@@ -345,7 +387,30 @@ struct WorkflowDetail: View {
                 }
             }
             Section {
-                Text(l10n("workflows.edit_on_web")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                Button {
+                    editing = true
+                } label: {
+                    LucideLabel(l10n("workflow_editor.edit"), icon: .pencil, size: 16)
+                }
+                .accessibilityIdentifier("workflow.edit")
+                Button {
+                    limitsOpen = true
+                } label: {
+                    LucideLabel(l10n("workflow_editor.limits.title"), icon: .gauge, size: 16)
+                }
+                .accessibilityIdentifier("workflow.limits")
+                Button {
+                    copying = WorkflowEditRules.copy(workflow, name: l10n("workflow_editor.copy_name", ["name": workflow.name]))
+                } label: {
+                    LucideLabel(l10n("workflow_editor.duplicate"), icon: .copy, size: 16)
+                }
+                .accessibilityIdentifier("workflow.duplicate")
+                Button(role: .destructive) {
+                    deleting = true
+                } label: {
+                    LucideLabel(l10n("kit.delete"), icon: .trash, size: 16)
+                }
+                .accessibilityIdentifier("workflow.delete")
             }
         }
         .navigationTitle(workflow.name)
@@ -353,6 +418,29 @@ struct WorkflowDetail: View {
         .navigationDestination(item: $opened) { runID in
             WorkflowRunView(workflow: workflow, model: WorkflowRunModel(app: app, profile: workflow.profile, runID: runID))
         }
+        .navigationDestination(isPresented: $editing) {
+            WorkflowEditorPage(original: workflow, profile: workflow.profile) { saved in
+                workflow = saved
+                changed()
+            }
+        }
+        .navigationDestination(item: $copying) { start in
+            WorkflowEditorPage(original: nil, profile: workflow.profile, start: start) { _ in changed() }
+        }
+        .sheet(isPresented: $limitsOpen) {
+            NavigationStack {
+                WorkflowLimitsSheet(workflow: workflow) { saved in
+                    workflow = saved
+                    changed()
+                }
+            }
+        }
+        .confirmDelete(Binding(get: { deleting ? workflow : nil }, set: { if $0 == nil { deleting = false } }), name: { $0.name }, delete: { target in
+            try await app.api.call { try await SchedulesAPI.schedulesDeleteWorkflow(xHubProfile: target.profile, workflowId: target.id, apiConfiguration: $0) }
+        }, deleted: { _ in
+            changed()
+            dismiss()
+        })
         .onChange(of: opened) { _, value in if value == nil { runsKey += 1 } }
         .task(id: runsKey) { await loadRuns() }
     }
@@ -405,6 +493,8 @@ struct WorkflowRunView: View {
     @Environment(\.l10n) private var l10n
     @State private var denying = false
     @State private var reason = ""
+    /// A new run started from one of this run's steps.
+    @State private var next: String?
 
     var body: some View {
         List {
@@ -432,6 +522,13 @@ struct WorkflowRunView: View {
                     Section {
                         let title = workflow.nodes.first { $0.id == step.nodeId }?.title ?? step.nodeId
                         NoticeView(text: l10n("workflows.waiting_step", ["step": title]), tone: .warning)
+                            .task(id: step.approvalId ?? "") {
+                                if let approvalID = step.approvalId { await model.loadQuestion(approvalID) }
+                            }
+                        if let approvalID = step.approvalId, let question = model.questions[approvalID], !question.isEmpty {
+                            Text(question).font(.system(size: FontSize.sizeSm)).contentDirection(of: question)
+                                .accessibilityIdentifier("workflow.run.question")
+                        }
                         HStack(spacing: Space.s3) {
                             Button {
                                 Task { await model.respond(approve: true, reason: nil) }
@@ -465,11 +562,28 @@ struct WorkflowRunView: View {
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("workflow.step.\(row.nodeID)")
+                        .contextMenu {
+                            if WorkflowLogic.finished(run) {
+                                Button {
+                                    Task { if let id = await model.rerun(from: row.nodeID) { next = id } }
+                                } label: {
+                                    Label { Text(l10n("workflow_editor.editor.rerun_from_here")) } icon: { Image(lucide: .rotateCcw) }
+                                }
+                            }
+                        }
+                        .swipeActions {
+                            if WorkflowLogic.finished(run) {
+                                Button(l10n("workflow_editor.editor.rerun_from_here")) {
+                                    Task { if let id = await model.rerun(from: row.nodeID) { next = id } }
+                                }
+                                .tint(Tone.accent)
+                            }
+                        }
                     }
                 }
                 Section {
                     if WorkflowLogic.finished(run) {
-                        Text(l10n("workflows.finished")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                        Text(l10n("workflows.finished") + " " + l10n("workflow_editor.editor.rerun_hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                     } else {
                         Button(role: .destructive) {
                             Task { await model.cancel() }
@@ -490,6 +604,9 @@ struct WorkflowRunView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+        .navigationDestination(item: $next) { runID in
+            WorkflowRunView(workflow: workflow, model: WorkflowRunModel(app: app, profile: model.profile, runID: runID))
+        }
         .alert(l10n("workflows.deny"), isPresented: $denying) {
             TextField(l10n("workflows.deny_reason"), text: $reason)
             Button(l10n("workflows.deny"), role: .destructive) {
@@ -511,5 +628,76 @@ struct WorkflowRunView: View {
             parts.append(text)
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// A workflow's saved limits (the web's WorkflowLimits form): the longest run, the most it may
+/// cost, the longest step. An empty field has no limit. A run may still set its own.
+struct WorkflowLimitsSheet: View {
+    let workflow: Workflow
+    let saved: (Workflow) -> Void
+    @Environment(AppModel.self) private var app
+    @Environment(\.l10n) private var l10n
+    @Environment(\.dismiss) private var dismiss
+    @State private var minutes = ""
+    @State private var cost = ""
+    @State private var stepMinutes = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        let (limits, problem) = WorkflowEditRules.limits(minutes: minutes, cost: cost, stepMinutes: stepMinutes)
+        Form {
+            Section {
+                field("workflows.limit_minutes", $minutes, bad: problem == .duration ? "workflows.limit_minutes_bad" : nil)
+                    .accessibilityIdentifier("workflow.limits.minutes")
+                field("workflows.limit_cost_label", $cost, bad: problem == .cost ? "workflows.limit_cost_bad" : nil, decimal: true)
+                    .accessibilityIdentifier("workflow.limits.cost")
+                field("workflows.limit_step_label", $stepMinutes, bad: problem == .step ? "workflows.limit_step_bad" : nil)
+                    .accessibilityIdentifier("workflow.limits.step")
+            } footer: {
+                Text(l10n("workflow_editor.limits.hint"))
+            }
+            if let error { Section { NoticeView(text: error, tone: .danger) } }
+        }
+        .navigationTitle(l10n("workflow_editor.limits.title"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button(l10n("common.cancel")) { dismiss() } }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(l10n("common.save")) { Task { await save(limits ?? WorkflowLimits()) } }
+                    .disabled(busy || problem != nil)
+                    .accessibilityIdentifier("workflow.limits.save")
+            }
+        }
+        .onAppear {
+            minutes = workflow.limits.maxDurationSeconds.map { String(WorkflowLogic.minutes($0)) } ?? ""
+            cost = workflow.limits.maxCost?.amount ?? ""
+            stepMinutes = workflow.limits.stepTimeoutSeconds.map { String(WorkflowLogic.minutes($0)) } ?? ""
+        }
+    }
+
+    private func field(_ label: String, _ text: Binding<String>, bad: String?, decimal: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(l10n(label)).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+            TextField(l10n("workflow_editor.limits.none"), text: text)
+                .keyboardType(decimal ? .decimalPad : .numberPad)
+            if let bad { Text(l10n(bad)).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.danger) }
+        }
+    }
+
+    private func save(_ limits: WorkflowLimits) async {
+        busy = true
+        defer { busy = false }
+        let profile = workflow.profile, id = workflow.id
+        do {
+            let result = try await app.api.call {
+                try await SchedulesAPI.schedulesUpdateWorkflow(xHubProfile: profile, workflowId: id, workflowWrite: WorkflowWrite(limits: limits), apiConfiguration: $0)
+            }
+            saved(result)
+            dismiss()
+        } catch {
+            self.error = HubFailure(error).describe(l10n)
+        }
     }
 }

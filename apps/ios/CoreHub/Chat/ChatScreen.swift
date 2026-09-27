@@ -408,6 +408,8 @@ struct MessageRow: View {
     var actions: MessageActions? = nil
     @Environment(\.l10n) private var l10n
     @Environment(\.layoutDirection) private var uiDirection
+    /// Settings → Display: reasoning and tool steps shown or not, compact, the text size.
+    @Environment(\.chatLook) private var look
 
     private var isPerson: Bool { mine ?? (message.role == .user || message.role == .command) }
 
@@ -416,7 +418,7 @@ struct MessageRow: View {
             if startsTurn { header }
             if isPerson { personBubble } else { agentCard }
         }
-        .padding(.top, startsTurn ? Layout.turnGap : Layout.groupGap)
+        .padding(.top, look.gap(startsTurn: startsTurn))
         // The side says who is speaking, and does not turn with the language.
         .environment(\.layoutDirection, .leftToRight)
     }
@@ -460,7 +462,7 @@ struct MessageRow: View {
     private var personText: some View {
         HStack {
             Text(message.text)
-                .font(.system(size: FontSize.sizeMd))
+                .font(.system(size: look.size(FontSize.sizeMd)))
                 .foregroundStyle(Tone.userBubbleText)
                 .textSelection(.enabled)
                 .contentDirection(of: message.text, fill: false)
@@ -473,10 +475,10 @@ struct MessageRow: View {
 
     private var agentCard: some View {
         VStack(alignment: .leading, spacing: Space.s2) {
-            if let reasoning = message.reasoning, !reasoning.text.isEmpty {
+            if look.showReasoning, let reasoning = message.reasoning, !reasoning.text.isEmpty {
                 ReasoningView(reasoning: reasoning, streaming: message.status == .streaming)
             }
-            if !message.toolCalls.isEmpty {
+            if look.showToolCalls, !message.toolCalls.isEmpty {
                 ToolActivityView(calls: message.toolCalls, live: message.status == .streaming)
             }
             if !message.text.isEmpty {
@@ -499,7 +501,7 @@ struct MessageRow: View {
                 EmptyView()
             }
         }
-        .padding(Space.s3)
+        .padding(look.padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Tone.agentBubble, in: BubbleShape(tightCorner: .topLeading))
         .overlay(BubbleShape(tightCorner: .topLeading).stroke(Tone.agentBubbleBorder, lineWidth: 1))

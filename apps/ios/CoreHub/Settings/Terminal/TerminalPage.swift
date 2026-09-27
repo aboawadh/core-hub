@@ -16,7 +16,7 @@ enum TerminalAvailability {
     }
 
     /// A `403` is an answer ("not for you", "not on"), not a failure to retry.
-    static func load(_ app: AppModel) async throws -> TerminalAvailability {
+    @MainActor static func load(_ app: AppModel) async throws -> TerminalAvailability {
         guard app.credentials?.role == Role.owner.rawValue else { return .off }
         do {
             let status = try await app.api.call { try await TerminalAPI.terminalGet(apiConfiguration: $0) }

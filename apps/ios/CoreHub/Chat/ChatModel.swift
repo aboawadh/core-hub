@@ -190,7 +190,8 @@ final class ChatModel {
         defer { sending = false }
         let profile = profile
         let sessionID = sessionID
-        let run = RunCreate(content: message.blocks, when: .queue, replyToMessageId: replyTo)
+        // Settings → Display, "Sending while the agent works": wait in line, go next, or stop it.
+        let run = RunCreate(content: message.blocks, when: ChatLook(app.preferences).busyInput, replyToMessageId: replyTo)
         let key = ULID.make()
         do {
             _ = try await app.api.call {

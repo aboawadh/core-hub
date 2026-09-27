@@ -208,7 +208,7 @@ final class SelfSufficientTests: XCTestCase {
 
     func testNoWayOutToTheWebIsLeft() {
         let l10n = L10n(.en, bundle: Bundle(for: AppModel.self))
-        for key in ["channels.open_web", "agents2.ch.qr_note", "settings.on_the_web", "models.edit_on_web"] {
+        for key in ["channels.open_web", "agents2.ch.qr_note", "settings.on_the_web", "workflows.edit_on_web", "models.edit_on_web"] {
             XCTAssertFalse(l10n.has(key), key)
         }
     }
@@ -227,5 +227,39 @@ final class SelfSufficientTests: XCTestCase {
         XCTAssertNil(FileLinks.appLink("notes.md", hub: hub))
         let route = AppModel.route(for: FileLinks.appLink("/tasks", hub: hub)!, selector: "default")
         XCTAssertEqual(route, .destination(.tasks))
+    }
+
+    // MARK: - Settings → Display is honoured
+
+    private func preferences(_ change: (inout Preferences) -> Void = { _ in }) -> Preferences {
+        var p = Preferences(
+            theme: .system, locale: .ar, textScale: 1, linkTarget: .inApp, busyInputMode: .queue, streaming: true, compact: false,
+            showReasoning: true, showToolCalls: true, showCost: false, inlineDiffs: true, soundOnComplete: false,
+            notifyOnComplete: true, notifyOnApproval: true,
+            voice: PreferencesVoice(inputMode: .device, dictationLanguage: "auto", outputMode: .device, autoSpeak: false)
+        )
+        change(&p)
+        return p
+    }
+
+    func testTheChatDrawsTheDisplayPreferences() {
+        XCTAssertEqual(ChatLook(nil), ChatLook(), "before they are read: the contract's defaults")
+        let look = ChatLook(preferences {
+            $0.showReasoning = false
+            $0.showToolCalls = false
+            $0.compact = true
+            $0.textScale = 1.2
+            $0.linkTarget = .browser
+            $0.busyInputMode = .interrupt
+        })
+        XCTAssertFalse(look.showReasoning)
+        XCTAssertFalse(look.showToolCalls)
+        XCTAssertTrue(look.compact)
+        XCTAssertEqual(look.size(10), 12)
+        XCTAssertFalse(look.linksInApp)
+        XCTAssertEqual(look.busyInput, .interrupt)
+        XCTAssertLessThan(look.gap(startsTurn: true), ChatLook().gap(startsTurn: true))
+        XCTAssertEqual(ChatLook(preferences { $0.textScale = 9 }).textScale, 1, "outside the contract's range")
+        XCTAssertEqual(ChatLook(preferences { $0.busyInputMode = .next }).busyInput, .next)
     }
 }

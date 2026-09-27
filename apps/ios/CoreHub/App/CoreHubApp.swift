@@ -21,6 +21,7 @@ struct CoreHubApp: App {
                 .environment(\.l10n, app.l10n)
                 .environment(\.layoutDirection, app.language.layoutDirection)
                 .environment(\.locale, app.language.locale)
+                .environment(\.chatLook, ChatLook(app.preferences))
                 .preferredColorScheme(app.theme.colorScheme)
                 .tint(Tone.accent)
                 .task { await app.launch() }

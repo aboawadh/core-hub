@@ -578,7 +578,7 @@
   },
   "workflows": {
     "empty": "No workflows yet",
-    "empty_body": "Workflows are drawn on the web; they run and are followed here.",
+    "empty_body": "No workflow yet. Make one with + above: add its steps and what follows each.",
     "state_idle": "Idle",
     "state_running": "Running",
     "state_waiting": "Waiting for you",
@@ -599,7 +599,6 @@
     "run": "Run",
     "runs": "Recent runs",
     "no_runs": "It has not run yet.",
-    "edit_on_web": "Steps and links are edited on the web.",
     "run_queued": "Queued",
     "run_running": "Running",
     "run_waiting": "Waiting for you",
