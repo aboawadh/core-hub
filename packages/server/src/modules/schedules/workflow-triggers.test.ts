@@ -1,5 +1,5 @@
 /**
- * Inbound workflow triggers (DECISIONS §122): each preset's signature over the raw bytes, the
+ * Inbound workflow triggers (DECISIONS §123): each preset's signature over the raw bytes, the
  * event read after it, a repeat recognised, the trigger's event filter, the fast answer and
  * the run with `{{trigger.*}}`, the delivery log from `run_started` to how the run ended, the
  * test event, a condition's several rules, and the runs of one task found by its id.
@@ -212,7 +212,7 @@ describe('workflow triggers: signatures over the raw bytes', () => {
   });
 });
 
-describe('condition rules (§122)', () => {
+describe('condition rules (§123)', () => {
   const ctx = {
     trigger: { event: 'taskStatusUpdated', body: { priority: 2, tags: ['bug'] } },
     steps: {},

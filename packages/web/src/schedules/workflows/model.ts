@@ -32,7 +32,22 @@ export interface WfNode {
   skills: string[];
   input: string | null;
   approval_required: boolean;
+  /** A condition's several rules (DECISIONS §123); `null` answers from `input`. */
+  rules: Rules | null;
   position: Position;
+}
+
+/** One rule of a condition: a path, an operator, a value (`null` for `exists`/`empty`). */
+export interface Rule {
+  path: string;
+  operator: Operator;
+  value: string | null;
+}
+
+/** A condition's rules: all must hold, or any one. */
+export interface Rules {
+  match: 'all' | 'any';
+  items: Rule[];
 }
 
 export interface WfEdge {
@@ -141,6 +156,7 @@ export function newNode(
     skills: [],
     input: defaultInput(kind),
     approval_required: false,
+    rules: null,
     position,
   };
 }
@@ -293,6 +309,7 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
       skills: Array.isArray(raw.skills) ? [...raw.skills] : [],
       input: raw.input ?? null,
       approval_required: raw.approval_required === true,
+      rules: raw.kind === 'condition' ? rulesOf(raw.rules) : null,
       position: {
         x: Number(raw.position?.x ?? 0) || 0,
         y: Number(raw.position?.y ?? 0) || 0,
@@ -335,6 +352,11 @@ export function toWrite(draft: Draft) {
       skills: [...node.skills],
       input: node.input,
       approval_required: node.kind === 'approval' ? false : node.approval_required,
+      // Only a condition has rules; with none it answers from `input` (§123).
+      rules:
+        node.kind === 'condition' && node.rules && node.rules.items.length > 0
+          ? { match: node.rules.match, items: node.rules.items.map((rule) => ({ ...rule })) }
+          : null,
       position: { x: node.position.x, y: node.position.y },
     })),
     edges: draft.edges.map((edge) => ({ ...edge })),
@@ -609,4 +631,36 @@ export function placeRefusedFields(
     });
   }
   return { name, issues, general };
+}
+
+/** The rules a saved condition carries, or `null` (§123). Unknown operators are kept as text. */
+export function rulesOf(value: unknown): Rules | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { match?: unknown; items?: unknown };
+  if (!Array.isArray(raw.items)) return null;
+  const items: Rule[] = raw.items.flatMap((item: unknown) => {
+    if (!item || typeof item !== 'object') return [];
+    const { path, operator, value: ruleValue } = item as Record<string, unknown>;
+    return [
+      {
+        path: typeof path === 'string' ? path : '',
+        operator: (typeof operator === 'string' ? operator : '==') as Operator,
+        value: typeof ruleValue === 'string' ? ruleValue : null,
+      },
+    ];
+  });
+  return { match: raw.match === 'any' ? 'any' : 'all', items };
+}
+
+/** A rule to start from: the single comparison when there is one, else the trigger's event. */
+export function firstRule(input: string | null): Rule {
+  const parts = splitCondition(input ?? '');
+  if (parts && parts.path.trim() !== '') {
+    return {
+      path: parts.path,
+      operator: parts.operator,
+      value: UNARY.has(parts.operator) ? null : parts.value,
+    };
+  }
+  return { path: 'trigger.event', operator: '==', value: '' };
 }

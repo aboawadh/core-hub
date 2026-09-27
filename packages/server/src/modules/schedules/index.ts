@@ -157,7 +157,7 @@ export function workflowEngineFor(app: FastifyInstance): WorkflowEngine {
     app.log,
     // A run a schedule started settles its history line when it ends — hours later, after
     // an approval, or after a restart: whenever that is. A run a trigger's delivery started
-    // settles its delivery line the same way (§122).
+    // settles its delivery line the same way (§123).
     (run, outcome) => {
       firerFor(app).settleWorkflow(run, outcome);
       if (run.workflowTriggerId) deskFor(app).settleRun(run.id);
@@ -176,7 +176,7 @@ function deskFor(app: FastifyInstance): TriggerDesk {
 
 /**
  * A delivery that got through starts the workflow's run as the trigger's owner, in the
- * trigger's profile, with the event as `{{trigger.*}}` (§122). The run goes on after the
+ * trigger's profile, with the event as `{{trigger.*}}` (§123). The run goes on after the
  * answer; this returns as soon as it is queued.
  */
 function startFromDelivery(app: FastifyInstance): StartRun {
@@ -641,7 +641,7 @@ function toWorkflowRun(
     limits: (row.definitionSnapshot as WorkflowDefinition).limits ?? { ...NO_LIMITS },
     cost: costOf(row.output),
     stopped_by: stoppedByOf(row.output),
-    // A run a trigger's delivery started (§122): which trigger, which delivery, which event.
+    // A run a trigger's delivery started (§123): which trigger, which delivery, which event.
     workflow_trigger_id: row.workflowTriggerId ?? null,
     delivery_id: row.workflowTriggerId ? (row.triggerRef ?? null) : null,
     event_id: row.eventId ?? null,
@@ -1305,7 +1305,7 @@ export const schedulesModule = defineModule({
 
     // ------------------------------------------------------------- imports
 
-    // ------------------------------------------------ inbound triggers (§122)
+    // ------------------------------------------------ inbound triggers (§123)
 
     defineRoute(app, deps, {
       operationId: 'schedules.listWorkflowTriggers',

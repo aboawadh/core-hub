@@ -104,7 +104,7 @@ export interface TurnCost {
 /** What the engine needs from the rest of the hub. Composed in `modules/index.ts`. */
 export interface WorkflowPorts {
   /**
-   * The hub's data key ring, lent to seal an inbound trigger's secret (§122). Absent, a
+   * The hub's data key ring, lent to seal an inbound trigger's secret (§123). Absent, a
    * trigger cannot store a secret and every delivery is refused.
    */
   sealer?: Sealer | null;
@@ -314,7 +314,7 @@ export class WorkflowEngine {
       steps?: Record<string, { output: unknown }>;
       /** This run's limits (`limits.ts` → `runLimits`); the workflow's when not given. */
       limits?: WorkflowLimits;
-      /** A run a trigger's delivery started: the trigger and the event's ids (§122). */
+      /** A run a trigger's delivery started: the trigger and the event's ids (§123). */
       event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
@@ -491,7 +491,7 @@ export class WorkflowEngine {
     let unhandled: string | null = null;
     let stoppedBy: StoppedBy | null = null;
     let steps = ran.size;
-    // A condition that said no with nothing to follow: the event was not one to act on (§122).
+    // A condition that said no with nothing to follow: the event was not one to act on (§123).
     let filtered = false;
 
     /** After a step: its output is readable, its edges fire; `false` ends the run. */
@@ -798,7 +798,7 @@ export class WorkflowEngine {
       case 'condition': {
         let answer: boolean;
         try {
-          // Several rules when the step has them (§122), else the one comparison.
+          // Several rules when the step has them (§123), else the one comparison.
           answer = hasRules(node.rules)
             ? evaluateRules(node.rules, ctx)
             : evaluate(parseCondition(rendered), ctx);

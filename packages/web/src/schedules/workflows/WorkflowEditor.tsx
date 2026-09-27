@@ -37,6 +37,7 @@ import { RunLimitsDialog, WorkflowLimitsForm, type Limits } from '../WorkflowLim
 import { ApprovalGate } from '../ScheduleRuns.js';
 import { WorkflowCanvas, type CanvasIssues } from './WorkflowCanvas.js';
 import { IssueList, StepPanel, StepRunPanel } from './StepPanel.js';
+import { WorkflowTriggers } from './WorkflowTriggers.js';
 import {
   NODE_KINDS,
   emptyDraft,
@@ -489,6 +490,11 @@ export default function WorkflowEditor({
                         ) : (
                           <p className="text-xs text-muted">{t('schedules.limits.save_first')}</p>
                         )}
+                        <WorkflowTriggers
+                          workflowId={workflowId}
+                          profile={profile}
+                          onShowRun={(id) => onShowRun(id)}
+                        />
                       </section>
                     }
                   />
@@ -602,6 +608,7 @@ function RunView({
   const wanted = runId === 'latest' ? (runs?.[0]?.id ?? null) : runId;
   const run = useWorkflowRun(profile, wanted);
   const [selected, setSelected] = useState<Selection>(null);
+  const [find, setFind] = useState('');
   const shown = run.data ?? null;
   const states = useMemo(() => (shown ? nodeStates(saved, shown) : new Map()), [saved, shown]);
   const taken = useMemo(
@@ -633,6 +640,13 @@ function RunView({
       : null;
   const step = node ? (steps.get(node.id) ?? null) : null;
   const going = shown && ['queued', 'running', 'waiting'].includes(shown.status);
+  // The runs about one task or one event (§123): matched on the ids a trigger gave them.
+  const needle = find.trim().toLowerCase();
+  const listed = needle
+    ? runs.filter((each) =>
+        [each.task_id, each.event_id].some((id) => id?.toLowerCase().includes(needle)),
+      )
+    : runs;
   const gateFor = (nodeId: string, compact: boolean) => {
     const waiting = steps.get(nodeId);
     if (!waiting || waiting.status !== 'waiting_approval' || !waiting.approval_id) return null;
@@ -656,12 +670,13 @@ function RunView({
               <Select
                 value={wanted}
                 onValueChange={(value) => onShowRun(value ?? 'latest')}
-                options={runs.map((each) => ({
+                options={listed.map((each) => ({
                   value: each.id,
-                  label: t('workflows.editor.run_of', {
-                    status: t(`schedules.run.status.${each.status}`),
-                    at: when(each.started_at ?? each.finished_at),
-                  }),
+                  label:
+                    t('workflows.editor.run_of', {
+                      status: t(`schedules.run.status.${each.status}`),
+                      at: when(each.started_at ?? each.finished_at),
+                    }) + (each.task_id ? ` · ${each.task_id}` : ''),
                 }))}
                 label={t('workflows.editor.run_pick')}
                 testId="workflow-run-pick"
@@ -669,9 +684,36 @@ function RunView({
             )}
           </Field>
         </div>
+        <div className="min-w-48">
+          <Field label={t('workflows.editor.run_find')}>
+            {(props) => (
+              <Input
+                {...props}
+                value={find}
+                onChange={(event) => setFind(event.target.value)}
+                placeholder={t('workflows.editor.run_find_hint')}
+                dir="ltr"
+                data-testid="workflow-runs-find"
+              />
+            )}
+          </Field>
+        </div>
         {shown && (
           <Badge tone={RUN_TONE[shown.status] ?? 'neutral'} dot testId="workflow-run-state">
             {t(`schedules.run.status.${shown.status}`)}
+          </Badge>
+        )}
+        {shown?.filtered && (
+          <Badge testId="workflow-run-filtered">{t('workflows.editor.run_filtered')}</Badge>
+        )}
+        {shown?.task_id && (
+          <Badge tone="info" testId="workflow-run-task">
+            <span dir="ltr">{t('workflows.editor.run_task', { id: shown.task_id })}</span>
+          </Badge>
+        )}
+        {shown?.event_id && (
+          <Badge testId="workflow-run-event">
+            <span dir="ltr">{t('workflows.editor.run_event', { id: shown.event_id })}</span>
           </Badge>
         )}
         {going && (

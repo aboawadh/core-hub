@@ -12328,7 +12328,7 @@ paths:
         an outside system — ClickUp, GitHub, or anything that can sign a POST — sends events to.
         A delivery that passes the trigger's signature check, is not a repeat, and names an
         event the trigger takes starts a run of the workflow with the event as `{{trigger.*}}`
-        (DECISIONS §122). The secret is never returned; `secret_stored` says whether one is set.
+        (DECISIONS §123). The secret is never returned; `secret_stored` says whether one is set.
       x-rt-events: []
       responses:
         '200':
@@ -24516,7 +24516,7 @@ components:
           description: 'Gate the node behind an approval (`kind: workflow_step`) before it runs.'
         rules:
           description: >-
-            A `condition` step's several rules (DECISIONS §122). When it has at least one rule
+            A `condition` step's several rules (DECISIONS §123). When it has at least one rule
             the step answers from them and `input` is not read; `null` or absent, the step
             answers from its single-line `input` as before. On `updateWorkflow`, a condition
             node sent without this field keeps the rules the saved node with the same id had
@@ -24792,7 +24792,7 @@ components:
                   enum: [max_duration, max_cost, step_timeout]
                 - type: 'null'
             workflow_trigger_id:
-              description: The trigger whose delivery started the run (DECISIONS §122); `null` otherwise.
+              description: The trigger whose delivery started the run (DECISIONS §123); `null` otherwise.
               oneOf:
                 - $ref: '#/components/schemas/Ulid'
                 - type: 'null'
@@ -24949,7 +24949,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/Scoped'
         - type: object
-          description: An inbound webhook trigger of a workflow (DECISIONS §122).
+          description: An inbound webhook trigger of a workflow (DECISIONS §123).
           required:
             [
               workflow_id,
@@ -25153,7 +25153,7 @@ components:
     WorkflowRules:
       type: object
       description: >-
-        A condition step's several rules (DECISIONS §122): with `match: all` the step says yes
+        A condition step's several rules (DECISIONS §123): with `match: all` the step says yes
         when every rule holds, with `any` when one does. Each rule compares a path —
         `trigger.event`, `trigger.body.priority`, `steps.<id>.output` — with a value, using
         the operators of the single-line condition.

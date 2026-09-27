@@ -1626,7 +1626,12 @@
       "step_error": "Error",
       "step_not_reached": "This run did not reach this step.",
       "run_readonly": "A run shows the drawing it ran; switch to Edit to change it.",
-      "issue_count": "{count} findings"
+      "issue_count": "{count} findings",
+      "run_find": "Find a run",
+      "run_find_hint": "Task or event id",
+      "run_filtered": "Filtered: not one to act on",
+      "run_task": "Task {id}",
+      "run_event": "Event {id}"
     },
     "form": {
       "title": "Title",
@@ -1672,7 +1677,14 @@
       "approval_question": "Question",
       "approval_who": "Anyone who can answer approvals in this profile approves or denies it — here, in the inbox, or from the pending bar.",
       "approval_timeout": "It waits until someone answers; there is no time limit.",
-      "approval_required": "Ask for approval before this step runs"
+      "approval_required": "Ask for approval before this step runs",
+      "rules_toggle": "Several rules",
+      "rules_match": "Say yes when",
+      "rules_all": "every rule holds",
+      "rules_any": "any one rule holds",
+      "rules_remove": "Remove this rule",
+      "rules_add": "Add a rule",
+      "rules_hint": "Each rule compares a path — trigger.event, trigger.task_id, trigger.body.…, steps.<id>.output — with a value. Yes follows the green connections, no the red ones; a no with nothing after it ends the run as “filtered”."
     },
     "issues": {
       "field_invalid": "The hub did not accept “{detail}” as written.",
@@ -1687,7 +1699,62 @@
       "workflow_empty": "The workflow has no steps yet.",
       "no_start": "Every step has a step before it, so the workflow has no starting point.",
       "many_starts": "{detail} steps have nothing before them; they all start together.",
-      "agent_missing": "This step names no agent."
+      "agent_missing": "This step names no agent.",
+      "rule_path_invalid": "A rule has no readable path (letters, digits, _ and dots).",
+      "rule_operator_invalid": "A rule uses an operator the hub does not know.",
+      "rule_value_missing": "A rule compares with nothing: give it a value.",
+      "rule_regex_invalid": "A rule’s pattern is not a valid regular expression."
+    },
+    "triggers": {
+      "title": "Triggers",
+      "hint": "An address on this hub that another service (ClickUp, GitHub…) sends events to. Each event that passes the signature check and the event filter starts a run with the event as {{trigger.…}}. The hub must be reachable from the internet.",
+      "save_first": "Save the workflow first, then add a trigger.",
+      "preset": "Sender",
+      "add": "Add trigger",
+      "presets": {
+        "clickup": "ClickUp",
+        "github": "GitHub",
+        "generic_hmac": "Signed webhook (HMAC)",
+        "token": "Webhook with a token"
+      },
+      "enabled": "On",
+      "url": "Address",
+      "url_hint": "Give this address to the sender. It stays the same.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "secret": "Secret",
+      "secret_hint": {
+        "clickup": "Register the webhook in ClickUp with the address above; paste the “secret” from ClickUp’s answer here.",
+        "github": "The secret you typed in the GitHub webhook’s settings.",
+        "generic_hmac": "The secret the sender signs the body with (HMAC-SHA256).",
+        "token": "The token the sender puts in the header."
+      },
+      "secret_stored": "A secret is stored. It is never shown; typing a new one replaces it.",
+      "secret_missing": "No secret yet: every delivery is refused until one is stored.",
+      "header": "Header",
+      "prefix": "Prefix before the signature",
+      "encoding": "Encoding",
+      "events": "Events it takes",
+      "events_hint": "None chosen takes every event.",
+      "test_event": "Test event",
+      "test": "Send test event",
+      "status": {
+        "received": "Received",
+        "duplicate": "Repeat, ignored",
+        "signature_rejected": "Signature refused",
+        "filtered_out": "Event not taken",
+        "run_started": "Run started",
+        "run_succeeded": "Run succeeded",
+        "run_failed": "Run failed"
+      },
+      "deliveries": "Deliveries (last 7 days)",
+      "no_deliveries": "Nothing has arrived yet.",
+      "filtered": "filtered",
+      "test_badge": "test",
+      "open_run": "Open the run",
+      "delete": "Delete trigger",
+      "delete_title": "Delete this trigger?",
+      "delete_body": "Its address stops answering and its delivery log is deleted. The sender keeps sending until you remove the webhook there too."
     }
   },
   "audit": {

@@ -984,7 +984,7 @@ export class SchedulesService {
       scheduleId?: string | null;
       /** The limits this run works under; the workflow's when not given. */
       limits?: WorkflowLimits;
-      /** A trigger's delivery started it (§122). */
+      /** A trigger's delivery started it (§123). */
       event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
@@ -1315,7 +1315,7 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
 
 /**
  * An app that does not know a condition's `rules` sends the node without the field; the rules
- * the saved node with the same id had are kept rather than erased (§122). `null` removes them.
+ * the saved node with the same id had are kept rather than erased (§123). `null` removes them.
  */
 export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): WorkflowNode[] {
   const before = new Map(saved.map((node) => [node.id, node]));
@@ -1402,7 +1402,7 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
     const name = node.title || node.id;
     const input = node.input ?? '';
     if (node.kind === 'condition' && hasRules(node.rules)) {
-      // Several rules (§122): each one is read now, and a `steps.` path must name a step.
+      // Several rules (§123): each one is read now, and a `steps.` path must name a step.
       node.rules.items.forEach((rule, index) => {
         const reason = ruleProblem(rule);
         const path = typeof rule.path === 'string' ? rule.path.trim() : '';

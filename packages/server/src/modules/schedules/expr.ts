@@ -218,7 +218,7 @@ export function evaluate(condition: Condition, ctx: Context): boolean {
   }
 }
 
-// ------------------------------------------------------------ several rules (§122)
+// ------------------------------------------------------------ several rules (§123)
 
 /** A condition step's rules, as stored (`WorkflowRules`). */
 export interface Rules {

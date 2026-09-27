@@ -205,7 +205,7 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
     expect((history.items as unknown[]).length).toBe(1);
   });
 
-  it('an inbound ClickUp trigger: created, secret stored, a signed delivery runs, the log and the run say so (§122)', async () => {
+  it('an inbound ClickUp trigger: created, secret stored, a signed delivery runs, the log and the run say so (§123)', async () => {
     const secret = 'contract-test-clickup-secret';
     const workflow = await call('schedules.createWorkflow', 201, {
       body: {

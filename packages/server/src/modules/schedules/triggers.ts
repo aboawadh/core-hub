@@ -1,5 +1,5 @@
 /**
- * Inbound workflow triggers (DECISIONS §122): how a delivery from outside proves who sent it,
+ * Inbound workflow triggers (DECISIONS §123): how a delivery from outside proves who sent it,
  * what event it carries, and how a repeat of it is recognised. Pure functions over the raw
  * bytes and the headers; the table work is `trigger-desk.ts`.
  *

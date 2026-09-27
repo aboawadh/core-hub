@@ -71,7 +71,7 @@ export const WORKFLOW_RUN_TERMINAL_STATUSES = [
   'cancelled',
   'timed_out',
 ] as const;
-/** How an inbound trigger's delivery proves where it came from (DECISIONS §122). */
+/** How an inbound trigger's delivery proves where it came from (DECISIONS §123). */
 export const WORKFLOW_TRIGGER_PRESETS = ['clickup', 'github', 'generic_hmac', 'token'] as const;
 export type WorkflowTriggerPreset = (typeof WORKFLOW_TRIGGER_PRESETS)[number];
 export const SIGNATURE_ENCODINGS = ['hex', 'base64'] as const;
@@ -144,7 +144,7 @@ export type WorkflowNode = {
   input?: string | null;
   approval_required?: boolean;
   /**
-   * `condition`: several rules (DECISIONS §122). With at least one rule the step answers
+   * `condition`: several rules (DECISIONS §123). With at least one rule the step answers
    * from them and `input` is not read; absent or `null`, `input` is the one comparison.
    */
   rules?: WorkflowRules | null;
@@ -318,7 +318,7 @@ export const workflowRuns = sqliteTable(
     startedAt: timestampMs('started_at'),
     finishedAt: timestampMs('finished_at'),
     /**
-     * A run a trigger's delivery started (DECISIONS §122): the trigger, and the event's own
+     * A run a trigger's delivery started (DECISIONS §123): the trigger, and the event's own
      * ids, so the runs about one task or one event can be found. `trigger_ref` holds the
      * delivery's id.
      */
@@ -337,7 +337,7 @@ export const workflowRuns = sqliteTable(
 );
 
 /**
- * An inbound webhook trigger of a workflow (DECISIONS §122): an address on the hub an outside
+ * An inbound webhook trigger of a workflow (DECISIONS §123): an address on the hub an outside
  * system posts events to. The secret is sealed with the hub's data key ring, like the hub's
  * other secrets, and never leaves the hub.
  */

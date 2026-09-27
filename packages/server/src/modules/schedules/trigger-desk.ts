@@ -1,5 +1,5 @@
 /**
- * The tables behind inbound workflow triggers (DECISIONS §122): the triggers, the keys of the
+ * The tables behind inbound workflow triggers (DECISIONS §123): the triggers, the keys of the
  * deliveries already taken (so a repeat starts nothing), and the delivery log — and the one
  * receiving path both a real delivery and "Send test event" go through.
  *
