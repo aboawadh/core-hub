@@ -507,9 +507,9 @@
         "kind": "settings-tool"
       },
       "roles": ["owner"],
-      "surfaces": ["web"],
+      "surfaces": ["web", "android"],
       "global": true,
-      "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
+      "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200. On Android since 2026-09-27 (a line at a time, with the keys a phone lacks)."
     },
     {
       "id": "agent_skills",
@@ -800,6 +800,7 @@
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
       "files": "/settings/files",
+      "terminal": "/settings/terminal",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",
       "agent_memory": "/agents/:agentId/memory",

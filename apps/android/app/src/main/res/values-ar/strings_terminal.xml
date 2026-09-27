@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإعدادات ← الطرفية (للمالك فقط، §70)، أصلية منذ 2026-09-27؛ نصوص الويب terminal.* -->
+<resources>
+    <string name="terminal_warning">هذه طرفية على الخادم بصلاحيات حساب المركز</string>
+    <string name="terminal_warning_detail">كل ما تكتبه يُنفَّذ على جهاز المركز بحساب المركز نفسه، في مجلد البروفايل. ويُسجَّل فتح كل طرفية وإغلاقها في السجلات.</string>
+    <string name="terminal_no_pty">هذا المركز بلا PTY: الأوامر تعمل وتطبع، لكن بلا تحرير للسطر، ولا تعمل برامج ملء الشاشة.</string>
+    <string name="terminal_idle">تُغلق الطرفية التي لا يكتب فيها أحد بعد %1$s دقيقة، ولا يُفتح أكثر من %2$s في الوقت نفسه.</string>
+    <string name="terminal_new">طرفية جديدة</string>
+    <string name="terminal_tab">طرفية %1$s</string>
+    <string name="terminal_close">إغلاق %1$s</string>
+    <string name="terminal_copy">نسخ</string>
+    <string name="terminal_paste">لصق</string>
+    <string name="terminal_limit">هناك %1$s طرفيات مفتوحة بالفعل. أغلق واحدة أولًا.</string>
+    <string name="terminal_empty">لا طرفية مفتوحة</string>
+    <string name="terminal_empty_body">تبدأ الطرفية الجديدة في مجلد البروفايل %1$s.</string>
+    <string name="terminal_disabled">الطرفية غير مفعّلة في هذا المركز.</string>
+    <string name="terminal_disabled_body">لا تعمل إلا إذا شُغّل المركز مع COREHUB_WEB_TERMINAL=1، وحتى حينها لا يراها إلا المالك.</string>
+    <string name="terminal_connecting">جارٍ الاتصال بالطرفية…</string>
+    <string name="terminal_ended">انتهت هذه الطرفية: %1$s</string>
+    <string name="terminal_reason_exited">خرجت الصدفة</string>
+    <string name="terminal_reason_closed">أُغلقت</string>
+    <string name="terminal_reason_idle">لم يكتب فيها أحد مدة طويلة</string>
+    <string name="terminal_reason_shutdown">توقّف المركز</string>
+    <string name="terminal_gone">هذه الطرفية لم تعد على المركز.</string>
+    <string name="terminal_send">إرسال</string>
+</resources>

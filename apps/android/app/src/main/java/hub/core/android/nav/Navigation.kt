@@ -50,7 +50,7 @@ object Screens {
     val settingsTabs = listOf("account", "users", "webhooks", "display", "notifications", "privacy", "this_device", "about")
     val settingsManagement = listOf("models", "device_connections", "knowledge", "linked_hubs")
     val settingsTools = listOf(
-        "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files",
+        "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files", "terminal",
     )
 
     /** An agent's pages, in order; each shows only when the adapter declares its capability. */
@@ -86,6 +86,9 @@ object Screens {
      */
     fun agentPages(capabilities: Collection<String>, configurable: Boolean): List<String> =
         agentLevel.filter { if (it == "agent_settings") configurable else capabilityOf.getValue(it) in capabilities }
+
+    /** Destinations only the owner sees (`roles: ["owner"]`), and only while the hub offers them. */
+    val ownerOnly = setOf("terminal")
 
     /** A drawer or Settings entry is visible to this person. */
     fun visible(destination: String, isAdmin: Boolean): Boolean = isAdmin || destination !in adminOnly

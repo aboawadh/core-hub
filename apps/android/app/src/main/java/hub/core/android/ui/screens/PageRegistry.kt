@@ -46,7 +46,7 @@ object PageRegistry {
     val settings: List<SettingsPageEntry> = listOf(
         accountPage, usersPage, webhooksPage, displayPage, notificationsPage, privacyPage, thisDevicePage, aboutPage,
         modelsPage, deviceConnectionsPage, knowledgePage, linkedHubsPage,
-        logsPage, usagePage, skillsUsagePage, performancePage, themePage, workspacesPage, updatesPage, hubPluginsPage, filesPage,
+        logsPage, usagePage, skillsUsagePage, performancePage, themePage, workspacesPage, updatesPage, hubPluginsPage, filesPage, terminalPage,
     )
 
     /** Every agent-level destination, in `agentLevel` order. */
