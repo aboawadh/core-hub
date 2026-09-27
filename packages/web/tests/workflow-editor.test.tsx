@@ -90,7 +90,14 @@ interface Seen {
   body: unknown;
 }
 
-function fakeHub() {
+function fakeHub(
+  options: {
+    /** Answers the check instead of the default (a notify step without words is a problem). */
+    validate?: (body: unknown) => { status: number; body: unknown } | null;
+    /** How long the saved workflow takes to arrive. */
+    workflowDelayMs?: number;
+  } = {},
+) {
   const seen: Seen[] = [];
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
@@ -117,6 +124,10 @@ function fakeHub() {
     if (path === '/agents') {
       return json({ items: [{ id: AGENT, slug: 'direct', name: 'Direct' }] });
     }
+    if (path === '/workflows/validate' && options.validate) {
+      const answer = options.validate(body);
+      if (answer) return json(answer.body, answer.status);
+    }
     if (path === '/workflows/validate') {
       const nodes = (body as { nodes: Array<{ id: string; kind: string; input: string }> }).nodes;
       const problems = nodes
@@ -140,7 +151,14 @@ function fakeHub() {
       return json({ ...saved, ...(body as object), id: OTHER, profile: profile ?? 'default' }, 201);
     }
     if (path === `/workflows/${FLOW}` && method === 'PATCH') return json({ ...saved, ...body });
-    if (path === `/workflows/${FLOW}`) return json(saved);
+    if (path === `/workflows/${FLOW}`) {
+      const delay = options.workflowDelayMs ?? 0;
+      return delay > 0
+        ? new Promise<Response>((resolve) =>
+            setTimeout(() => void json(saved).then(resolve), delay),
+          )
+        : json(saved);
+    }
     if (path === `/workflows/${FLOW}/run`)
       return json({ job_id: '01J8QK3ZR2W7M5N4P6T8V9X0JY', workflow_run_id: RUN }, 202);
     if (path === `/workflows/${FLOW}/runs`) {
@@ -309,6 +327,79 @@ describe('Schedules: the Workflows section', () => {
     });
     // The address follows the saved workflow.
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`workflow=${OTHER}`));
+  });
+
+  it('checks a new drawing before it has a name, with the name hint by the name field', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    expect(screen.getByText('Give the workflow a name before saving.')).toBeInTheDocument();
+    await user.click(screen.getByTestId('workflow-add-agent'));
+    await waitFor(() =>
+      expect(
+        seen.some(
+          (c) =>
+            c.path === '/workflows/validate' && (c.body as { nodes: unknown[] }).nodes.length === 1,
+        ),
+      ).toBe(true),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true'),
+    );
+    expect(screen.queryByTestId('workflow-check-error')).toBeNull();
+    expect(screen.getByTestId('workflow-save')).toBeDisabled();
+    await user.type(screen.getByTestId('workflow-name'), 'Digest');
+    expect(screen.queryByText('Give the workflow a name before saving.')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+  });
+
+  it('does not check the empty drawing while a saved workflow is loading', async () => {
+    const { seen, fetchImpl } = fakeHub({ workflowDelayMs: 700 });
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4), {
+      timeout: 3000,
+    });
+    await waitFor(() => expect(seen.some((c) => c.path === '/workflows/validate')).toBe(true));
+    const checks = seen.filter((c) => c.path === '/workflows/validate');
+    expect(checks.map((c) => (c.body as { nodes: unknown[] }).nodes.length)).toEqual([4]);
+    expect(screen.queryByTestId('workflow-check-error')).toBeNull();
+  });
+
+  it('puts each field a refused check names next to that field', async () => {
+    const user = userEvent.setup();
+    const { fetchImpl } = fakeHub({
+      validate: (body) =>
+        (body as { nodes: unknown[] }).nodes.length > 0
+          ? {
+              status: 400,
+              body: {
+                error: 'The request did not match the expected shape.',
+                code: 'validation_failed',
+                details: {
+                  fields: [
+                    { source: 'body', path: 'name', message: 'is too long' },
+                    { source: 'body', path: 'nodes.0.title', message: 'is too long' },
+                  ],
+                },
+              },
+            }
+          : null,
+    });
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.click(screen.getByTestId('workflow-add-agent'));
+    expect(await screen.findByText('The name is not accepted: is too long')).toBeInTheDocument();
+    expect(screen.getByTestId('workflow-check-error')).toHaveTextContent(
+      'The drawing could not be checked: fix the marked fields.',
+    );
+    const step = screen.getAllByTestId('workflow-node')[0]!;
+    expect(step).toHaveAttribute('data-issues', '1');
+    const issue = screen
+      .getAllByTestId('workflow-issue')
+      .find((item) => item.dataset.code === 'field_invalid')!;
+    expect(issue).toHaveTextContent('The hub did not accept “title” as written.');
+    expect(screen.getByTestId('workflow-save')).toBeDisabled();
   });
 
   it('keeps the workflow’s limits in the side panel while no step is selected (§102)', async () => {

@@ -562,3 +562,51 @@ export function issuesByTarget(validation: Validation | null): {
 export function isProblem(validation: Validation | null, issue: WorkflowIssue): boolean {
   return (validation?.problems ?? []).includes(issue);
 }
+
+/** A field a refused request names (`validation_failed`, `details.fields`). */
+export interface RefusedField {
+  path: string;
+  message: string;
+}
+
+/**
+ * Where each refused field is shown: the name's next to the name field, a step's or a
+ * connection's on it (as a problem with code `field_invalid` and the field in `detail`),
+ * and the rest in the general message. `nodes.2.title` is the third node of `draft` — the
+ * drawing that was sent.
+ */
+export function placeRefusedFields(
+  fields: readonly RefusedField[],
+  draft: Draft,
+): { name: string | null; issues: WorkflowIssue[]; general: RefusedField[] } {
+  let name: string | null = null;
+  const issues: WorkflowIssue[] = [];
+  const general: RefusedField[] = [];
+  for (const field of fields) {
+    const [head, index, ...rest] = field.path.split('.');
+    if (head === 'name' && index === undefined) {
+      name ??= field.message;
+      continue;
+    }
+    const at = Number(index);
+    const target =
+      index !== undefined && Number.isInteger(at)
+        ? head === 'nodes'
+          ? { node_id: draft.nodes[at]?.id ?? null, edge_id: null }
+          : head === 'edges'
+            ? { node_id: null, edge_id: draft.edges[at]?.id ?? null }
+            : null
+        : null;
+    if (!target || (!target.node_id && !target.edge_id)) {
+      general.push(field);
+      continue;
+    }
+    issues.push({
+      code: 'field_invalid',
+      ...target,
+      detail: rest.length > 0 ? rest.join('.') : field.path,
+      message: `${field.path}: ${field.message}`,
+    });
+  }
+  return { name, issues, general };
+}

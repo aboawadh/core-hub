@@ -130,3 +130,99 @@ test('32. a two-step workflow drawn on the canvas runs, and its run is read on t
     page.getByTestId('workflow-card').filter({ hasText: 'مراجعة ثم إشعار' }),
   ).toContainText('عدد مرات التشغيل: 1');
 });
+
+/** Selects a step on the drawing canvas and connects it to the step titled `to` on success. */
+async function connect(page: Page, from: string, to: string) {
+  // Focus selects a step even where the canvas has scrolled it out of view.
+  await page
+    .getByTestId('workflow-canvas')
+    .locator(`[data-testid="workflow-node"][data-node-id="${from}"]`)
+    .focus();
+  await expect(page.getByTestId('workflow-panel')).toHaveAttribute('data-node-id', from);
+  await page.getByTestId('workflow-connect-target').click();
+  await page.getByRole('option', { name: to, exact: true }).click();
+  await page.getByTestId('workflow-connect').click();
+}
+
+test('32b. a new workflow is checked before it has a name, then named, saved and run by hand', async ({
+  page,
+}) => {
+  await login(page);
+  await inDefault(page);
+  await page.getByRole('link', { name: 'الجدولة', exact: true }).click();
+  await page.getByRole('tab', { name: 'سير العمل' }).click();
+  await page.getByTestId('workflow-new').click();
+  const editor = page.getByTestId('workflow-editor');
+  await expect(editor).toHaveAttribute('data-workflow-id', 'new');
+  // The name is empty: a hint by the name field says so, not an error about the drawing.
+  await expect(page.getByTestId('workflow-name')).toHaveValue('');
+  await expect(editor.getByText('سمِّ سير العمل قبل الحفظ.')).toBeVisible();
+
+  // Five steps, one of each kind, each added after the one selected.
+  await page.getByTestId('workflow-add-agent').click();
+  await page.getByTestId('workflow-step-agent').click();
+  await page.getByRole('option', { name: /Direct|مباشر/ }).click();
+  await page.getByTestId('workflow-step-prompt').fill('راجع قائمة الإصدار وقل ما فيها');
+  await page.getByTestId('workflow-add-condition').click();
+  await page.getByTestId('workflow-add-delay').click();
+  await page.getByTestId('workflow-delay-unit').click();
+  await page.getByRole('option', { name: 'ثوانٍ', exact: true }).click();
+  await page.getByTestId('workflow-delay-amount').fill('1');
+  await page.getByTestId('workflow-add-approval').click();
+  await page.getByTestId('workflow-step-question').fill('هل ننشر الإصدار؟');
+  await page.getByTestId('workflow-add-notify').click();
+  await page.getByTestId('workflow-step-text').fill('نُشر: {{steps.agent_1.output}}');
+  await expect(page.getByTestId('workflow-node')).toHaveCount(5);
+
+  // The hub's check of the whole drawing, sent while the name is still empty.
+  const checked = page.waitForResponse((response) => {
+    if (!response.url().includes('/workflows/validate')) return false;
+    const sent = JSON.parse(response.request().postData() ?? '{}') as {
+      name?: string;
+      nodes?: unknown[];
+      edges?: unknown[];
+    };
+    return sent.nodes?.length === 5 && sent.edges?.length === 4 && !sent.name;
+  });
+  await connect(page, 'agent_1', 'شرط');
+  await connect(page, 'condition_1', 'انتظار');
+  await connect(page, 'delay_1', 'موافقة');
+  await connect(page, 'approval_1', 'إشعار');
+  await expect(page.getByTestId('workflow-edge')).toHaveCount(4);
+
+  // Still no name, and the hub checked the drawing without refusing it.
+  const check = await checked;
+  expect(check.status()).toBe(200);
+  expect(await check.json()).toEqual({ valid: true, problems: [], warnings: [] });
+  await expect(page.getByTestId('workflow-issue')).toHaveCount(0);
+  await expect(page.getByTestId('workflow-check')).toHaveAttribute('data-valid', 'true');
+  await expect(page.getByTestId('workflow-check-error')).toHaveCount(0);
+  await expect(editor.getByText('تعذّر فحص الرسم', { exact: false })).toHaveCount(0);
+  await expect(page.getByTestId('workflow-save')).toBeDisabled();
+  await shot(page, 'workflow-editor-unnamed-ar-light');
+
+  await page.getByTestId('workflow-name').fill('خمس خطوات قبل الاسم');
+  await expect(editor.getByText('سمِّ سير العمل قبل الحفظ.')).toHaveCount(0);
+  await page.getByTestId('workflow-save').click();
+  await expect(editor).not.toHaveAttribute('data-workflow-id', 'new');
+  await expect(page).toHaveURL(/workflow=[0-9A-Z]{26}/);
+  await expect(page.getByTestId('workflow-check-error')).toHaveCount(0);
+
+  // Run by hand, with words the condition finds; it waits at the approval, then finishes.
+  await page.getByTestId('workflow-run-input').fill('الإصدار 1.2');
+  await page.getByTestId('workflow-run').click();
+  const run = page.getByTestId('workflow-run-view');
+  await expect(run).toBeVisible();
+  await expect(run.getByTestId('workflow-node')).toHaveCount(5);
+  const step = (id: string) => run.locator(`[data-testid="workflow-node"][data-node-id="${id}"]`);
+  await expect(step('approval_1')).toHaveAttribute('data-state', 'waiting', { timeout: 30_000 });
+  for (const id of ['agent_1', 'condition_1', 'delay_1'])
+    await expect(step(id)).toHaveAttribute('data-state', 'done');
+  await run.getByTestId('workflow-approve').first().click();
+  await expect(step('notify_1')).toHaveAttribute('data-state', 'done', { timeout: 20_000 });
+  await expect(run.getByTestId('workflow-run-state')).toContainText('تم');
+  await step('notify_1').click();
+  await expect(run.getByTestId('workflow-step-output')).toContainText(
+    'نُشر: القائمة سليمة: ثلاثة بنود جاهزة.',
+  );
+});

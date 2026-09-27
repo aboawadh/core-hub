@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../auth/context.js';
-import { describeError } from '../../auth/client.js';
+import { describeError, fieldErrorsOf } from '../../auth/client.js';
 import { useI18n } from '../../i18n/context.js';
 import { ProfileBadge } from '../../shell/ProfileBadge.js';
 import { useManyProfiles } from '../../shell/profiles.js';
@@ -45,8 +45,10 @@ import {
   issuesByTarget,
   latestSteps,
   nodeStates,
+  placeRefusedFields,
   reducer,
   takenEdges,
+  type Draft,
   type Selection,
   type Validation,
   type WorkflowIssue,
@@ -64,6 +66,31 @@ import {
 import { intlLocale } from '../../i18n/index.js';
 
 const CHECK_DELAY_MS = 350;
+
+/** Why a check or a save was refused: the general sentence, and each field put in its place. */
+interface Refusal {
+  message: string;
+  placed: ReturnType<typeof placeRefusedFields>;
+}
+
+function refusalOf(error: unknown, draft: Draft, t: Parameters<typeof describeError>[1]): Refusal {
+  return {
+    message: describeError(error, t),
+    placed: placeRefusedFields(fieldErrorsOf(error), draft),
+  };
+}
+
+/** The general sentence, with the fields no form shows named after it. */
+function generalMessage(refusal: Refusal): string {
+  const rest = refusal.placed.general.map((field) => `${field.path || '/'}: ${field.message}`);
+  return rest.length > 0 ? `${refusal.message} (${rest.join('; ')})` : refusal.message;
+}
+
+/** Whether every field the refusal names is shown next to its field, so no banner is needed. */
+function allPlaced(refusal: Refusal): boolean {
+  const { name, issues, general } = refusal.placed;
+  return general.length === 0 && (name !== null || issues.length > 0);
+}
 
 const RUN_TONE: Record<string, BadgeTone> = {
   queued: 'neutral',
@@ -108,7 +135,7 @@ export default function WorkflowEditor({
   const [state, dispatch] = useReducer(reducer, undefined, () => initialState(emptyDraft()));
   const [validation, setValidation] = useState<Validation | null>(null);
   const [checking, setChecking] = useState(false);
-  const [checkError, setCheckError] = useState<string | null>(null);
+  const [checkError, setCheckError] = useState<Refusal | null>(null);
   const [input, setInput] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [runLimitsOpen, setRunLimitsOpen] = useState(false);
@@ -121,9 +148,11 @@ export default function WorkflowEditor({
     dispatch({ type: 'load', draft: fromWorkflow(workflow.data) });
   }, [workflowId, workflow.data]);
 
-  // The hub's check, a moment after each change.
+  // The hub's check, a moment after each change — for a saved workflow only once it has
+  // loaded, so the empty drawing the editor starts from is never checked in its place.
   const { draft } = state;
   useEffect(() => {
+    if (workflowId && loadedFor.current !== workflowId) return;
     let live = true;
     setChecking(true);
     const timer = setTimeout(() => {
@@ -134,7 +163,7 @@ export default function WorkflowEditor({
           setCheckError(null);
         })
         .catch((error: unknown) => {
-          if (live) setCheckError(describeError(error, t));
+          if (live) setCheckError(refusalOf(error, draft, t));
         })
         .finally(() => {
           if (live) setChecking(false);
@@ -145,10 +174,42 @@ export default function WorkflowEditor({
       clearTimeout(timer);
     };
     // `t` and `client` do not change what is checked.
-  }, [draft, profile]);
+  }, [draft, profile, workflowId]);
 
-  const found = useMemo(() => issuesByTarget(validation), [validation]);
-  const problems = validation?.problems ?? [];
+  // A refused save is about the drawing as it was; a change makes it stale.
+  const { create, update } = writes;
+  useEffect(() => {
+    if (create.error) create.reset();
+    if (update.error) update.reset();
+    // Only a change of the drawing clears it.
+  }, [draft]);
+
+  const saveError = writes.create.error ?? writes.update.error;
+  const saveRefusal = useMemo(
+    () => (saveError ? refusalOf(saveError, draft, t) : null),
+    // The drawing the save sent is the one on screen: any change clears the error.
+    [saveError],
+  );
+  // What the check or a save refused, field by field, is marked like the check's findings.
+  const refused = useMemo(
+    () => [...(checkError?.placed.issues ?? []), ...(saveRefusal?.placed.issues ?? [])],
+    [checkError, saveRefusal],
+  );
+  const shown: Validation | null = useMemo(
+    () =>
+      refused.length > 0
+        ? {
+            valid: false,
+            problems: [...(validation?.problems ?? []), ...refused],
+            warnings: validation?.warnings ?? [],
+          }
+        : validation,
+    [validation, refused],
+  );
+  const nameRefused = checkError?.placed.name ?? saveRefusal?.placed.name ?? null;
+
+  const found = useMemo(() => issuesByTarget(shown), [shown]);
+  const problems = shown?.problems ?? [];
   const canvasIssues: CanvasIssues = useMemo(
     () => ({
       nodes: found.nodes,
@@ -196,7 +257,7 @@ export default function WorkflowEditor({
     onShowRun(started.workflow_run_id, id);
   };
 
-  const runError = writes.run.error ?? writes.create.error ?? writes.update.error;
+  const runError = writes.run.error ?? saveError;
   const selectedNode =
     state.selected?.type === 'node'
       ? (draft.nodes.find((node) => node.id === state.selected!.id) ?? null)
@@ -256,7 +317,16 @@ export default function WorkflowEditor({
             </span>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <Field label={t('workflows.editor.name')} className="min-w-60 flex-1">
+            <Field
+              label={t('workflows.editor.name')}
+              hint={nameMissing ? t('workflows.editor.name_required') : undefined}
+              error={
+                nameRefused !== null
+                  ? t('workflows.editor.name_refused', { message: nameRefused })
+                  : undefined
+              }
+              className="min-w-60 flex-1"
+            >
               {(props) => (
                 <Input
                   {...props}
@@ -331,10 +401,15 @@ export default function WorkflowEditor({
               onRun={(limits) => void runFrom(null, limits).catch(() => undefined)}
             />
           )}
-          {nameMissing && state.dirty && (
-            <p className="text-xs text-muted">{t('workflows.editor.name_required')}</p>
-          )}
-          {runError && <Notice tone="danger">{describeError(runError, t)}</Notice>}
+          {writes.run.error ? (
+            <Notice tone="danger">{describeError(writes.run.error, t)}</Notice>
+          ) : saveRefusal ? (
+            <Notice tone="danger" testId="workflow-save-error">
+              {allPlaced(saveRefusal)
+                ? t('workflows.editor.fields_refused')
+                : generalMessage(saveRefusal)}
+            </Notice>
+          ) : null}
           {message && !runError && <Notice tone="success">{message}</Notice>}
         </div>
       </Card>
@@ -420,7 +495,7 @@ export default function WorkflowEditor({
                 </Card>
               </div>
               <IssueList
-                issues={[...(validation?.problems ?? []), ...(validation?.warnings ?? [])]}
+                issues={[...problems, ...(shown?.warnings ?? [])]}
                 problems={problems}
                 t={t}
                 onPick={pick}
@@ -469,11 +544,19 @@ function CheckStatus({
 }: {
   checking: boolean;
   validation: Validation | null;
-  error: string | null;
+  error: Refusal | null;
 }) {
   const { t } = useI18n();
   if (error)
-    return <Badge tone="danger">{t('workflows.editor.check_failed', { message: error })}</Badge>;
+    return (
+      <span data-testid="workflow-check-error">
+        <Badge tone="danger">
+          {allPlaced(error)
+            ? t('workflows.editor.check_fields')
+            : t('workflows.editor.check_failed', { message: generalMessage(error) })}
+        </Badge>
+      </span>
+    );
   if (!validation) return checking ? <Badge>{t('workflows.editor.checking')}</Badge> : null;
   const problems = validation.problems.length;
   const warnings = validation.warnings.length;

@@ -11848,7 +11848,10 @@ paths:
         not saved: `problems` are what saving would refuse (`409 workflow_invalid`), and
         `warnings` are worth saying but saved anyway. Each names the node or edge it is
         about, so an editor can mark it, and carries a stable `code` a client translates
-        (DECISIONS §52). Nothing is written and nothing is announced.
+        (DECISIONS §52). Nothing is written and nothing is announced. The body is a
+        `WorkflowCheck`: the drawing as saving takes it, with the name free — the check never
+        reads the name, so a drawing nobody has named yet (an empty or missing `name`) is
+        checked like any other (DECISIONS §121).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -11856,7 +11859,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/WorkflowWrite'
+              $ref: '#/components/schemas/WorkflowCheck'
             example:
               name: 'مراجعة ثم إشعار'
               nodes:
@@ -24266,6 +24269,33 @@ components:
             Replaces the workflow's limits as a whole; a new workflow without it has none. A
             cost limit in a currency other than USD, or not above zero, is `409` with
             `details.reason = limit_invalid` and `details.field`.
+    WorkflowCheck:
+      type: object
+      description: >-
+        What `validateWorkflow` checks: the fields of `WorkflowWrite`, with `name` free (it may
+        be empty or left out) because the check does not read it. Saving still needs a name.
+      properties:
+        name:
+          type: string
+          description: Ignored by the check; accepted empty so an unnamed drawing can be checked.
+        description:
+          type: [string, 'null']
+        working_dir:
+          type: [string, 'null']
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEdge'
+        limits:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowLimits'
+          description: >-
+            The limits saving would store; a cost limit in a currency other than USD, or not
+            above zero, is reported the way saving reports it.
     WorkflowStepStatus:
       type: string
       enum:

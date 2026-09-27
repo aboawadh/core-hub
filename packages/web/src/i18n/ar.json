@@ -1596,6 +1596,9 @@
       "save_blocked": "أصلح المشكلات قبل الحفظ.",
       "name_required": "سمِّ سير العمل قبل الحفظ.",
       "check_failed": "تعذّر فحص الرسم: {message}",
+      "check_fields": "تعذّر فحص الرسم: صحّح الحقول المعلَّمة.",
+      "name_refused": "الاسم غير مقبول: {message}",
+      "fields_refused": "لم يُحفظ: صحّح الحقول المعلَّمة.",
       "delete_step": "احذف الخطوة",
       "delete_edge": "احذف الوصلة",
       "connections": "الوصلات من هذه الخطوة",
@@ -1672,6 +1675,7 @@
       "approval_required": "اطلب موافقة قبل أن تعمل هذه الخطوة"
     },
     "issues": {
+      "field_invalid": "لم يقبل المركز «{detail}» بصيغته الحالية.",
       "node_id_missing": "خطوة بلا معرّف.",
       "node_id_duplicate": "خطوتان بالمعرّف نفسه.",
       "edge_from_unknown": "تبدأ هذه الوصلة من خطوة غير موجودة.",

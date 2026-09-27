@@ -136,6 +136,38 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
     await call('schedules.validateWorkflow', 400, { body: { nodes: [{ id: 'no kind' }] } });
   });
 
+  it('validateWorkflow checks a drawing nobody has named yet; saving still needs a name', async () => {
+    // A new workflow in an editor has no name until someone types one (DECISIONS §121).
+    const drawing = {
+      nodes: [node('ask', 'agent', 'افحص'), node('wait', 'delay', 'soon')],
+      edges: [{ id: 'e1', from: 'ask', to: 'wait', route: 'success' }],
+    };
+    for (const name of ['', '   ']) {
+      const unnamed = await call('schedules.validateWorkflow', 200, {
+        body: { name, ...drawing },
+      });
+      expect(unnamed.valid).toBe(false);
+      expect(unnamed.problems).toEqual([
+        expect.objectContaining({ code: 'delay_out_of_range', node_id: 'wait', edge_id: null }),
+      ]);
+    }
+    const sound = await call('schedules.validateWorkflow', 200, {
+      body: { name: '', nodes: [node('ask', 'agent', 'افحص')], edges: [] },
+    });
+    expect(sound).toEqual({ valid: true, problems: [], warnings: [] });
+
+    // Creating keeps its rule: an empty name is refused by the contract, a blank one by the hub.
+    const empty = await call('schedules.createWorkflow', 400, {
+      body: { name: '', nodes: [node('ask', 'agent', 'افحص')], edges: [] },
+    });
+    expect((empty.details as { fields: { path: string }[] }).fields).toEqual([
+      expect.objectContaining({ path: 'name' }),
+    ]);
+    await call('schedules.createWorkflow', 409, {
+      body: { name: '   ', nodes: [node('ask', 'agent', 'افحص')], edges: [] },
+    });
+  });
+
   it('listWorkflows with profiles=all, and a run whose steps carry output and route', async () => {
     const workflow = await call('schedules.createWorkflow', 201, {
       body: {
