@@ -364,10 +364,15 @@ describe('asc-prepare-submission', () => {
 
     const avail = sent('POST', '/v2/appAvailabilities')[0].body;
     assert.equal(avail.data.attributes.availableInNewTerritories, true);
+    // Every territory is sent (App Store Connect refuses a request missing one); the excluded
+    // ones as not available.
     const territories = avail.included.map((t) => t.relationships.territory.data.id);
-    assert.deepEqual(territories, ['USA', 'SAU', 'GBR']);
-    for (const id of EXCLUDED_TERRITORIES) assert.ok(!territories.includes(id));
-    assert.ok(avail.included.every((t) => t.attributes.available === true));
+    assert.deepEqual(territories, ['USA', 'SAU', 'CHN', 'GBR']);
+    const on = avail.included
+      .filter((t) => t.attributes.available)
+      .map((t) => t.relationships.territory.data.id);
+    assert.deepEqual(on, ['USA', 'SAU', 'GBR']);
+    for (const id of EXCLUDED_TERRITORIES) assert.ok(!on.includes(id));
     assert.match(text, /Price: free \(0\.00, base territory USA\)/);
   });
 

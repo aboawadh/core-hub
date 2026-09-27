@@ -216,13 +216,18 @@ export async function ensureFree(api, appId) {
   return 'set';
 }
 
-/** 'exists' | { set: n } — every territory but EXCLUDED_TERRITORIES, and new ones as they come. */
+/**
+ * 'exists' | { set: n } — every territory but EXCLUDED_TERRITORIES, and new ones as they come.
+ * App Store Connect wants every territory in the request (a missing one is a 409 naming it), so
+ * the excluded ones are sent too, as not available.
+ */
 export async function ensureAvailability(api, apiV2, appId) {
   const current = await getOrNull(api, `/apps/${q(appId)}/appAvailabilityV2`);
   if (current) return 'exists';
   const res = await api('GET', '/territories?limit=200');
-  const ids = (res.data ?? []).map((t) => t.id).filter((id) => !EXCLUDED_TERRITORIES.includes(id));
-  if (ids.length === 0) throw new Error('App Store Connect listed no territories.');
+  const all = (res.data ?? []).map((t) => t.id);
+  const available = (id) => !EXCLUDED_TERRITORIES.includes(id);
+  if (!all.some(available)) throw new Error('App Store Connect listed no territories.');
   const ref = (id) => `\${t-${id}}`;
   await apiV2('POST', '/appAvailabilities', {
     data: {
@@ -231,18 +236,18 @@ export async function ensureAvailability(api, apiV2, appId) {
       relationships: {
         app: { data: { type: 'apps', id: appId } },
         territoryAvailabilities: {
-          data: ids.map((id) => ({ type: 'territoryAvailabilities', id: ref(id) })),
+          data: all.map((id) => ({ type: 'territoryAvailabilities', id: ref(id) })),
         },
       },
     },
-    included: ids.map((id) => ({
+    included: all.map((id) => ({
       type: 'territoryAvailabilities',
       id: ref(id),
-      attributes: { available: true },
+      attributes: { available: available(id) },
       relationships: { territory: { data: { type: 'territories', id } } },
     })),
   });
-  return { set: ids.length };
+  return { set: all.filter(available).length };
 }
 
 /** What App Review Information still lacks. Never returns or prints the values themselves. */
