@@ -27,6 +27,12 @@ export interface RouteDefinition {
   /** Success status; `204` sends no body. Defaults to 200. */
   status?: number;
   /**
+   * Fastify's log level for this route alone. `warn` keeps the request's own `info` lines —
+   * which carry its URL — out of the log, for the one route whose query is a secret handed on
+   * (`agents.mcpOAuthCallback`, DECISIONS §122). Absent: the hub's level.
+   */
+  logLevel?: 'warn' | 'error';
+  /**
    * The reply is passed as well for the handful of operations whose response is not JSON
    * (`models.synthesize` answers audio bytes with a `Content-Type` the provider chose).
    * Such a handler sends on the reply itself and returns it; every other handler ignores
@@ -66,6 +72,7 @@ export function defineRoute(
     method: operation.method.toUpperCase() as 'GET',
     url,
     ...(preHandler.length > 0 ? { preHandler } : {}),
+    ...(definition.logLevel ? { logLevel: definition.logLevel } : {}),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const params = operation.validateParams(request.params) as Record<string, unknown>;
       const query = operation.validateQuery(request.query) as Record<string, unknown>;

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Signing a remote MCP server in by OAuth (DECISIONS §122); iOS mcp_oauth.*.json has the same words. -->
+<resources>
+    <string name="mcp_oauth_connected">متصل</string>
+    <string name="mcp_oauth_expired_status">منتهي</string>
+    <string name="mcp_oauth_not_connected">غير متصل</string>
+    <string name="mcp_oauth_error">تعذّرت قراءة الدخول</string>
+    <string name="mcp_oauth_connect">ربط عبر OAuth</string>
+    <string name="mcp_oauth_reconnect">إعادة الربط عبر OAuth</string>
+    <string name="mcp_oauth_per_profile">كل بروفايل يُربط وحده.</string>
+    <string name="mcp_oauth_waiting">أكمل تسجيل الدخول في المتصفح؛ هذه الصفحة تتحدّث وحدها.</string>
+    <string name="mcp_oauth_open_page">افتح صفحة تسجيل الدخول</string>
+    <string name="mcp_oauth_approved">تم الربط — عدد الأدوات التي يعرضها هرمز: %1$s.</string>
+    <string name="mcp_oauth_failed">لم يكتمل تسجيل الدخول:</string>
+    <string name="mcp_oauth_cancelled">أُلغي تسجيل الدخول.</string>
+    <string name="mcp_oauth_expired">انتهت مهلة تسجيل الدخول قبل أن يكتمل. ابدأه من جديد.</string>
+</resources>

@@ -179,6 +179,27 @@ export interface McpServer {
   error: string | null;
   config: Record<string, unknown>;
   updated_at: string;
+  /** A remote server's OAuth sign-in in this profile (DECISIONS §122); absent on older hubs. */
+  oauth?: McpOAuthState;
+}
+
+/** Whether a remote server is signed in by OAuth in the selected profile. Never a token. */
+export interface McpOAuthState {
+  required: boolean;
+  status: 'connected' | 'expired' | 'not_connected' | 'error';
+  expires_at?: string | null;
+}
+
+/** One OAuth sign-in to an MCP server, run by Hermes; the hub only relays it (§122). */
+export interface McpOAuthFlow {
+  id: string;
+  server_name: string;
+  status: 'pending' | 'approved' | 'failed' | 'cancelled' | 'expired';
+  authorization_url: string | null;
+  redirect_uri: string;
+  error: string | null;
+  tools: Array<{ name: string; description: string | null }>;
+  expires_at: string;
 }
 
 export const mcpKeys = {
@@ -261,6 +282,95 @@ export function useDeleteMcpServer(agentId: string | undefined) {
       ).data,
     onSuccess: invalidate,
   });
+}
+
+// ------------------------------------------------------------------- MCP OAuth
+//
+// Connecting a remote server by OAuth (DECISIONS §122): the hub asks Hermes to start, the
+// person signs in on the provider's page in a new tab, and the page polls until Hermes says
+// how it went. Each profile signs in on its own; the tokens stay with Hermes.
+
+/** How often a waiting sign-in is asked about. */
+export const MCP_OAUTH_POLL_MS = 1500;
+
+export function useStartMcpOAuth(agentId: string | undefined) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      (
+        await client.request('post', '/agents/{agent_id}/mcp-servers/{server_name}/oauth', {
+          params: { agent_id: agentId ?? '', server_name: name },
+          // The address this page reached the hub on — a tunnel's included — is where the
+          // provider sends the browser back.
+          body: { hub_url: window.location.origin } as never,
+        })
+      ).data as unknown as McpOAuthFlow,
+  });
+}
+
+/** Polls a sign-in while it is `pending`; once it is not, the server list is read again. */
+export function useMcpOAuthFlow(agentId: string | undefined, name: string, flowId: string | null) {
+  const { client, profile } = useAuth();
+  const invalidate = useMcpInvalidation(agentId);
+  return useQuery({
+    queryKey: ['agent-mcp-oauth', profile, agentId ?? '', name, flowId] as const,
+    enabled: !!agentId && flowId !== null,
+    queryFn: async () => {
+      const flow = (
+        await client.request(
+          'get',
+          '/agents/{agent_id}/mcp-servers/{server_name}/oauth/{flow_id}',
+          { params: { agent_id: agentId ?? '', server_name: name, flow_id: flowId ?? '' } },
+        )
+      ).data as unknown as McpOAuthFlow;
+      if (flow.status !== 'pending') invalidate();
+      return flow;
+    },
+    refetchInterval: (query) =>
+      !query.state.data || query.state.data.status === 'pending' ? MCP_OAUTH_POLL_MS : false,
+  });
+}
+
+export function useCancelMcpOAuth(agentId: string | undefined) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (input: { name: string; flowId: string }) =>
+      (
+        await client.request(
+          'delete',
+          '/agents/{agent_id}/mcp-servers/{server_name}/oauth/{flow_id}',
+          {
+            params: { agent_id: agentId ?? '', server_name: input.name, flow_id: input.flowId },
+          },
+        )
+      ).data as unknown as McpOAuthFlow,
+  });
+}
+
+export function useDisconnectMcpOAuth(agentId: string | undefined) {
+  const { client } = useAuth();
+  const invalidate = useMcpInvalidation(agentId);
+  return useMutation({
+    mutationFn: async (name: string) =>
+      (
+        await client.request('delete', '/agents/{agent_id}/mcp-servers/{server_name}/oauth', {
+          params: { agent_id: agentId ?? '', server_name: name },
+        })
+      ).data as unknown as McpServer,
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Whether a failed test is Hermes saying the server wants a sign-in: its own sentences for a
+ * missing token (`OAuth authentication required — no token found`, `OAuthNonInteractiveError`
+ * … `no cached tokens found`) or the server's `401`.
+ */
+export function needsOAuth(error: string | null | undefined): boolean {
+  if (!error) return false;
+  return /no token found|no cached tokens|OAuthNonInteractive|oauth authentication required|\b401\b|unauthori[sz]ed/i.test(
+    error,
+  );
 }
 
 // ------------------------------------------------------- the hub's own tools

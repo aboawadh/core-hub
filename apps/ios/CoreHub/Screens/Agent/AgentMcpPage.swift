@@ -65,7 +65,8 @@ struct AgentMcpPage: View {
                                         tests[server.name] = nil
                                     }
                                 }
-                            }
+                            },
+                            oauth: AnyView(McpOAuthRow(agent: agent, server: server, changed: reload))
                         )
                     }
                 } header: {
@@ -143,6 +144,8 @@ struct McpServerRow: View {
     let edit: () -> Void
     let runTest: () -> Void
     let delete: () -> Void
+    /// The server's OAuth sign-in in this profile (DECISIONS §122), `McpOAuthRow`.
+    var oauth: AnyView? = nil
     @Environment(\.l10n) private var l10n
 
     var body: some View {
@@ -165,6 +168,7 @@ struct McpServerRow: View {
             Text(l10n("mcp.tools", ["count": String(server.tools.count)])).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
             if let error = server.error { NoticeView(text: error, tone: .danger) }
             McpTestView(name: server.name, test: result)
+            if let oauth { oauth }
             HStack {
                 Button(action: runTest) {
                     if testing { ProgressView() } else { LucideLabel(l10n("mcp.test"), icon: .activity, size: 14) }

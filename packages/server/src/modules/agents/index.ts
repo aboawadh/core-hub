@@ -45,6 +45,8 @@ import { createRealtime } from '../../lib/realtime.js';
 import { defineRoute } from '../../lib/route.js';
 import { registerWebhookRoutes } from './webhook-routes.js';
 import { registerPresetRoutes } from './presets.js';
+import { registerMcpOAuthRoutes } from './mcp-oauth-routes.js';
+import { oauthStateOf } from './mcp-oauth.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
@@ -1625,8 +1627,12 @@ export const agentsModule = defineModule({
       throw error;
     };
 
-    /** The contract's `McpServer`. `connected` and `tools` are not measured — see above. */
-    const toMcpServer = (server: McpServer): Record<string, unknown> => ({
+    /**
+     * The contract's `McpServer`. `connected` and `tools` are not measured — see above. A
+     * remote server also says whether it is signed in by OAuth in this profile, read from the
+     * metadata of Hermes's token file, never its values (`mcp-oauth.ts`, DECISIONS §122).
+     */
+    const toMcpServer = (server: McpServer, home: string): Record<string, unknown> => ({
       name: server.name,
       transport: server.transport,
       enabled: server.enabled,
@@ -1635,6 +1641,9 @@ export const agentsModule = defineModule({
       error: null,
       config: server.config,
       updated_at: new Date().toISOString(),
+      ...(server.transport === 'stdio'
+        ? {}
+        : { oauth: oauthStateOf(home, server.name, server.oauth) }),
     });
 
     defineRoute(app, deps, {
@@ -1642,7 +1651,7 @@ export const agentsModule = defineModule({
       handler: (request, { params }) => {
         const home = skillHome(request, params.agent_id as string);
         try {
-          return { items: listMcpServers(home).map(toMcpServer) };
+          return { items: listMcpServers(home).map((server) => toMcpServer(server, home)) };
         } catch (error) {
           return mcpFault(error);
         }
@@ -1671,6 +1680,7 @@ export const agentsModule = defineModule({
               config: input.config,
               enabled: input.enabled ?? true,
             }),
+            home,
           );
         } catch (error) {
           return mcpFault(error);
@@ -1692,6 +1702,7 @@ export const agentsModule = defineModule({
               ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
               ...(patch.config === undefined ? {} : { config: patch.config }),
             }),
+            home,
           );
         } catch (error) {
           return mcpFault(error);
@@ -1733,6 +1744,16 @@ export const agentsModule = defineModule({
           language: request.language,
         });
       },
+    });
+
+    registerMcpOAuthRoutes(app, deps, {
+      toolHome,
+      hermesApi: hermesApiOf,
+      callbackApi: (server) => contextOf(server).hermesApi(),
+      toMcpServer,
+      refuseManaged,
+      mcpFault,
+      apiBase: serverBasePath(document),
     });
 
     defineRoute(app, deps, {

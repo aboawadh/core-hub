@@ -13,6 +13,7 @@ import {
   getMcpServer,
   listMcpServers,
   putMcpServer,
+  setOAuthRedirect,
 } from './mcp.js';
 
 const homes: string[] = [];
@@ -151,5 +152,62 @@ describe('removing one', () => {
 
   it('says so when there is nothing to remove', () => {
     expect(() => deleteMcpServer(home(CONFIG), 'ghost')).toThrow(/not_found/);
+  });
+});
+
+describe('a remote server that signs in (DECISIONS §122)', () => {
+  const REMOTE = `mcp_servers:
+  clickup:
+    url: https://mcp.clickup.example/mcp
+    auth: oauth
+    headers:
+      Authorization: Bearer abc-secret
+      X-Team: sales
+    oauth:
+      client_id: my-client
+      client_secret: cs-secret
+`;
+
+  it('masks a header and an OAuth secret one level down, and says `auth: oauth` as it is', () => {
+    const server = getMcpServer(home(REMOTE), 'clickup');
+    expect(server?.oauth).toBe(true);
+    expect(server?.config.auth).toBe('oauth');
+    expect(server?.config.headers).toEqual({ Authorization: STORED, 'X-Team': 'sales' });
+    expect(server?.config.oauth).toEqual({ client_id: 'my-client', client_secret: STORED });
+    expect(JSON.stringify(server)).not.toContain('secret-');
+    expect(JSON.stringify(server)).not.toMatch(/abc-secret|cs-secret/);
+  });
+
+  it('writes the masked values back as they were', () => {
+    const dir = home(REMOTE);
+    const server = getMcpServer(dir, 'clickup');
+    putMcpServer(dir, 'clickup', { config: server?.config });
+    expect(read(dir)).toContain('Authorization: Bearer abc-secret');
+    expect(read(dir)).toContain('client_secret: cs-secret');
+    expect(read(dir)).not.toContain(STORED);
+  });
+
+  it("sets the hub's callback, moves its own, and keeps one the person wrote", () => {
+    const dir = home(REMOTE);
+    const ours = (uri: string) => uri.includes('/api/v1/mcp-oauth/callback/');
+    expect(
+      setOAuthRedirect(dir, 'clickup', 'https://a.example/api/v1/mcp-oauth/callback/clickup', ours),
+    ).toBe('https://a.example/api/v1/mcp-oauth/callback/clickup');
+    expect(read(dir)).toContain('client_secret: cs-secret');
+    expect(read(dir)).toContain(
+      'redirect_uri: https://a.example/api/v1/mcp-oauth/callback/clickup',
+    );
+    setOAuthRedirect(dir, 'clickup', 'https://b.example/api/v1/mcp-oauth/callback/clickup', ours);
+    expect(read(dir)).toContain(
+      'redirect_uri: https://b.example/api/v1/mcp-oauth/callback/clickup',
+    );
+
+    const own = home(
+      'mcp_servers:\n  x:\n    url: https://x.example\n    oauth:\n      redirect_uri: https://proxy.example/cb\n',
+    );
+    expect(setOAuthRedirect(own, 'x', 'https://b.example/api/v1/mcp-oauth/callback/x', ours)).toBe(
+      'https://proxy.example/cb',
+    );
+    expect(() => setOAuthRedirect(own, 'ghost', 'https://b.example/', ours)).toThrow(/not_found/);
   });
 });

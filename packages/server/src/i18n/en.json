@@ -212,6 +212,17 @@
     "range_not_satisfiable": "The requested byte range starts past the end of the file."
   },
   "agents": {
+    "mcp_oauth": {
+      "title": "Sign-in received",
+      "received": "The sign-in to {server} reached Hermes. You can close this tab and return to Core Hub; the MCP page shows the result.",
+      "declined_title": "Sign-in not completed",
+      "declined": "The provider did not grant access to {server}. Return to Core Hub and try again.",
+      "expired_title": "This sign-in has ended",
+      "expired": "Core Hub is no longer waiting for this sign-in (it ran out, was cancelled or was already used). Start it again from the MCP page.",
+      "unavailable_title": "Hermes is not available",
+      "unavailable": "Core Hub could not hand this sign-in to Hermes. Return to Core Hub and try again.",
+      "close": "Close this tab"
+    },
     "mcp_test": {
       "no_answer": "The server did not answer within {seconds} s (its connect_timeout).",
       "hermes_silent": "Hermes did not report back within {seconds} s."

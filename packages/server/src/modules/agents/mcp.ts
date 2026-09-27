@@ -38,7 +38,21 @@ export interface McpServer {
   enabled: boolean;
   /** The block as stored, with credentials masked. */
   config: Record<string, unknown>;
+  /** The block says `auth: oauth`: Hermes signs in to it by OAuth (DECISIONS §122). */
+  oauth: boolean;
 }
+
+/**
+ * The blocks one level down whose values are masked by their key's name, like the block's own
+ * keys: a process's `env`, a socket's `headers` (`Authorization: Bearer …`) and the `oauth`
+ * settings (`client_secret`). Before DECISIONS §122 only `env` was, and a header's key came
+ * back to the client as it was written.
+ */
+const NESTED = new Set(['env', 'headers', 'oauth']);
+
+/** `auth: oauth` names how the server signs in, not a credential; any other `auth` is one. */
+const isSecret = (key: string, value: unknown): boolean =>
+  SECRET_KEY.test(key) && raw(value) && !(key === 'auth' && value === 'oauth');
 
 export class McpError extends Error {
   constructor(readonly reason: string) {
@@ -74,18 +88,29 @@ function transportOf(config: Record<string, unknown>): Transport {
   return 'stdio';
 }
 
+const isBlock = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
 function mask(config: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(config)) {
-    if (key === 'env' && value && typeof value === 'object') {
+    if (key === 'env' && isBlock(value)) {
       const env: Record<string, unknown> = {};
-      for (const [name, raw] of Object.entries(value as Record<string, unknown>)) {
+      for (const [name, raw] of Object.entries(value)) {
         env[name] = SECRET_KEY.test(name) && raw !== '' && raw !== undefined ? STORED : raw;
       }
       out[key] = env;
       continue;
     }
-    out[key] = SECRET_KEY.test(key) && raw(value) ? STORED : value;
+    if (NESTED.has(key) && isBlock(value)) {
+      const inner: Record<string, unknown> = {};
+      for (const [name, raw] of Object.entries(value)) {
+        inner[name] = isSecret(name, raw) ? STORED : raw;
+      }
+      out[key] = inner;
+      continue;
+    }
+    out[key] = isSecret(key, value) ? STORED : value;
   }
   return out;
 }
@@ -107,13 +132,13 @@ function unmask(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(next)) {
-    if (key === 'env' && value && typeof value === 'object') {
-      const before = (previous.env ?? {}) as Record<string, unknown>;
-      const env: Record<string, unknown> = {};
-      for (const [name, raw] of Object.entries(value as Record<string, unknown>)) {
-        env[name] = raw === STORED ? before[name] : raw;
+    if (NESTED.has(key) && isBlock(value)) {
+      const before = isBlock(previous[key]) ? previous[key] : {};
+      const inner: Record<string, unknown> = {};
+      for (const [name, raw] of Object.entries(value)) {
+        inner[name] = raw === STORED ? before[name] : raw;
       }
-      out[key] = env;
+      out[key] = inner;
       continue;
     }
     out[key] = value === STORED ? previous[key] : value;
@@ -133,6 +158,7 @@ export function listMcpServers(home: string): McpServer[] {
       // A server with no `enabled` is on: that is what an absent flag means in this file.
       enabled: config.enabled !== false,
       config: mask(config),
+      oauth: config.auth === 'oauth',
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -170,4 +196,30 @@ export function deleteMcpServer(home: string, name: string): void {
   if (!block || !(name in block)) throw new McpError('mcp_not_found');
   doc.deleteIn([BLOCK, name]);
   save(home, doc);
+}
+
+/**
+ * Point the server's OAuth callback at `uri` (`oauth.redirect_uri`, the key Hermes reads first
+ * for a browser sign-in; DECISIONS §122), leaving every other key and byte alone. A
+ * `redirect_uri` the person wrote themselves — anything `ours` does not recognise as the hub's
+ * own callback — is kept. Answers the URI that is in the file afterwards.
+ */
+export function setOAuthRedirect(
+  home: string,
+  name: string,
+  uri: string,
+  ours: (current: string) => boolean,
+): string {
+  if (!NAME.test(name)) throw new McpError('mcp_name_invalid');
+  const doc = load(home);
+  const block = doc.toJS()?.[BLOCK]?.[name] as Record<string, unknown> | undefined;
+  if (!block || typeof block !== 'object') throw new McpError('mcp_not_found');
+  const oauth = isBlock(block.oauth) ? block.oauth : null;
+  const current = typeof oauth?.redirect_uri === 'string' ? oauth.redirect_uri.trim() : '';
+  if (current && !ours(current)) return current;
+  if (current === uri) return uri;
+  if (block.oauth !== undefined && !oauth) throw new McpError('mcp_oauth_block_invalid');
+  doc.setIn([BLOCK, name, 'oauth', 'redirect_uri'], uri);
+  save(home, doc);
+  return uri;
 }
