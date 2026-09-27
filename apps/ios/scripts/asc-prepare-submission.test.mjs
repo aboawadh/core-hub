@@ -61,6 +61,7 @@ function reset() {
       { attributes: { locale: 'ar-SA', privacyPolicyUrl: 'https://example.com/p.ar' } },
     ],
     manualPrices: null, // null = no price schedule
+    scheduleWithoutPrices: false, // the schedule answers, its manualPrices are a 404
     availability: null,
     territories: ['USA', 'SAU', 'CHN', 'GBR'],
     review: { type: 'appStoreReviewDetails', id: 'rd-1', attributes: {} },
@@ -183,10 +184,11 @@ before(async () => {
         case 'GET /v1/appInfos/info-1/appInfoLocalizations':
           return send(200, { data: fake.locs });
         case 'GET /v1/apps/app-1/appPriceSchedule':
-          return fake.manualPrices
+          return fake.manualPrices || fake.scheduleWithoutPrices
             ? send(200, { data: { type: 'appPriceSchedules', id: 'app-1' } })
             : notFound();
         case 'GET /v1/appPriceSchedules/app-1/manualPrices':
+          if (!fake.manualPrices) return notFound();
           return send(200, {
             data: fake.manualPrices.map((_, i) => ({ type: 'appPrices', id: `ap-${i}` })),
             included: fake.manualPrices.map((price, i) => ({
@@ -342,6 +344,14 @@ describe('asc-prepare-submission', () => {
     assert.equal(fake.age.attributes.medicalOrTreatmentInformation, 'INFREQUENT_OR_MILD');
     assert.equal(fake.age.attributes.socialMedia, undefined);
     assert.ok(missing.some((m) => m.startsWith('Age rating') && m.includes('socialMedia')));
+  });
+
+  it('sets the free price when the schedule answers but has no prices yet', async () => {
+    fake.scheduleWithoutPrices = true;
+    const { code } = await run();
+    assert.equal(code, 0);
+    const price = sent('POST', '/v1/appPriceSchedules')[0].body;
+    assert.equal(price.included[0].relationships.appPricePoint.data.id, 'pp-free');
   });
 
   it('makes the app free and available everywhere but the excluded territories when unset', async () => {
