@@ -92,4 +92,6 @@
     <string name="wfe_rules_all">نعم عندما تتحقق كل القواعد</string>
     <string name="wfe_rules_any">نعم عندما تتحقق أي قاعدة</string>
     <string name="wfe_rules_read_only">تبقى هذه القواعد كما هي عند الحفظ هنا؛ عدّلها من الويب.</string>
+    <string name="wfe_send_targets">ترسل إلى</string>
+    <string name="wfe_send_read_only">خطوة «أرسل رسالة»: تبقى وجهاتها كما هي عند الحفظ هنا؛ غيّرها من الويب.</string>
 </resources>

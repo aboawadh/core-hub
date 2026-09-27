@@ -101,6 +101,18 @@ final class WorkflowEditorTests: XCTestCase {
         )
     }
 
+    func testASendMessageStepIsShownAndKeptWhenSaved() throws {
+        // A notify node with targets (§124) comes from the web; the phone shows and keeps them.
+        let json = #"{"targets":[{"platform":"telegram","chat_id":"-1001"},{"platform":"core_hub","session_id":"01J8QK3ZR2W7M5N4P6T8V9X0SS","title":"Reports","agent_id":null}]}"#
+        let send = try JSONDecoder().decode(WorkflowSend.self, from: Data(json.utf8))
+        XCTAssertEqual(WorkflowEditRules.sendLines(send), ["telegram -1001", #"conversation "Reports""#])
+        var draft = empty()
+        draft.name = "Report"
+        WorkflowEditRules.add(.notify, title: "Send", to: &draft)
+        draft.nodes[0].send = send
+        XCTAssertEqual(WorkflowEditRules.write(draft, clearing: false).nodes?[0].send, send)
+    }
+
     func testTheLiveCheckSendsTheDrawingWithoutTheName() {
         // A new drawing has no name yet; the check never reads it and an older hub refused "".
         var draft = empty()

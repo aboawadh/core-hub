@@ -59,6 +59,7 @@ import hub.core.client.model.WorkflowIssue
 import hub.core.client.model.WorkflowNode
 import hub.core.client.model.WorkflowNodePosition
 import hub.core.client.model.WorkflowRules
+import hub.core.client.model.WorkflowSend
 import hub.core.client.model.WorkflowTrigger
 import hub.core.client.model.WorkflowValidation
 import hub.core.client.model.WorkflowWrite
@@ -205,6 +206,15 @@ object WorkflowDraftRules {
             if (value == null) "$path $op" else "$path $op \"$value\""
         }
         return (if (match == "any") "any" else "all") to items
+    }
+
+    /** A "Send message" step's targets as lines to read (§124); kept untouched on save. */
+    fun sendLines(send: WorkflowSend): List<String> = send.targets.map { target ->
+        when (target.platform) {
+            "telegram" -> "telegram ${target.chatId.orEmpty()}"
+            "core_hub" -> "conversation \"${target.title ?: target.sessionId.orEmpty()}\""
+            else -> target.platform
+        }
     }
 
     /** A trigger's address on the hub the phone is signed in to. */
@@ -572,7 +582,17 @@ private fun StepEditor(
                     singleLine = false, minLines = 2, maxLines = 6, size = ControlSize.Md, fieldTag = "workflow.editor.step.${node.id}.input",
                 )
                 InsertChips(tokens) { token -> change { it.copy(input = input + token) } }
-                Text(stringResource(R.string.wfe_notify_to), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                val send = node.send
+                if (send != null) {
+                    // A "Send message" step (§124): its targets shown and kept as they are.
+                    Text(stringResource(R.string.wfe_send_targets), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
+                    WorkflowDraftRules.sendLines(send).forEach { line ->
+                        Text(line, Modifier.testTag("workflow.editor.step.${node.id}.send"), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    Text(stringResource(R.string.wfe_send_read_only), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                } else {
+                    Text(stringResource(R.string.wfe_notify_to), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                }
             }
             WorkflowNode.Kind.APPROVAL -> {
                 HubTextField(

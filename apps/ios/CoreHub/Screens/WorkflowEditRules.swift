@@ -197,6 +197,18 @@ enum WorkflowEditRules {
         return (object["match"] as? String == "any" ? "any" : "all", lines)
     }
 
+    /// A "Send message" step's targets as lines to read (§124): `telegram -100…`,
+    /// `conversation "Reports"`. The phone keeps them untouched when it saves.
+    static func sendLines(_ send: WorkflowSend) -> [String] {
+        send.targets.map { target in
+            switch target.platform {
+            case "telegram": return "telegram \(target.chatId ?? "")"
+            case "core_hub": return "conversation \"\(target.title ?? target.sessionId ?? "")\""
+            default: return target.platform
+            }
+        }
+    }
+
     /// A trigger's address on the hub the phone is signed in to.
     static func triggerURL(hub: String, path: String) -> String {
         (hub.hasSuffix("/") ? String(hub.dropLast()) : hub) + path
