@@ -123,7 +123,7 @@ fun SearchScreen(shell: ShellViewModel, onOpen: (Route) -> Unit) {
  * with the profile's first agent (DECISIONS §46). No menu entry reaches it; search does.
  */
 @Composable
-fun GlobalAgentScreen(profile: String, profileName: String) {
+fun GlobalAgentScreen(profile: String, profileName: String, header: @Composable (sessionId: String?) -> Unit = {}) {
     val context = LocalContext.current
     val opened = rememberLoad(profile) {
         val s = context.graph.store.current!!
@@ -132,6 +132,8 @@ fun GlobalAgentScreen(profile: String, profileName: String) {
             ?: throw HubError(409, "agent_unavailable", null)
         apis.sessions.sessionsOpenGlobalAgent(profile, GlobalAgentOpen(agent.id))
     }
+    // The top bar carries the conversation's own ⋯ (compress, export, trajectory…) once it is open.
+    header((opened.state as? hub.core.android.ui.components.Load.Ready)?.value?.id)
     LoadView(opened) { session ->
         ChatScreen(session.id, session.profile, profileName, onCreated = { _, _ -> })
     }

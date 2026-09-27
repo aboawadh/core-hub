@@ -310,8 +310,18 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             }
             is Route.GlobalAgent -> {
                 val profile = route.profile ?: s.profile
-                TopBar(term("global_agent"), onMenu = openDrawer, subtitle = shell.profileName(profile))
-                GlobalAgentScreen(profile, shell.profileName(profile))
+                GlobalAgentScreen(profile, shell.profileName(profile)) { sessionId ->
+                    TopBar(term("global_agent"), onMenu = openDrawer, subtitle = shell.profileName(profile)) {
+                        if (sessionId != null) {
+                            hub.core.android.ui.components.ChatInsightBar(sessionId, profile)
+                            hub.core.android.ui.screens.ChatMenuButton(
+                                shell, sessionId, profile, term("global_agent"),
+                                onOpenChat = { id, p -> nav.go(Route.Chat(id, p)) },
+                                onGone = { nav.go(Route.NewChat) },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
