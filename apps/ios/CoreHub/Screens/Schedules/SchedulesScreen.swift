@@ -66,6 +66,11 @@ struct SchedulesScreen: View {
             WorkflowEditorPage(original: nil, profile: app.currentProfile) { _ in workflowsRefresh += 1 }
         }
         .onAppear { if list == nil { list = makeList() } }
+        // Schedules and workflows changed by an agent or another device (`/rt/schedules`).
+        .liveReload("/rt/schedules", events: ["schedule.", "schedule_run.", "workflow."]) {
+            await list?.refresh()
+            workflowsRefresh += 1
+        }
         .sheet(item: $opened) { item in
             ScheduleDetailView(schedule: item.schedule, changed: { _ in reload() }, deleted: { gone in list?.remove(gone.id) })
         }

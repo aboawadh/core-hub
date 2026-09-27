@@ -87,4 +87,14 @@ final class SectionParityTests: XCTestCase {
         XCTAssertEqual(Starters.suggestions(.ar).count, 3)
         XCTAssertNotEqual(Starters.suggestions(.ar), Starters.suggestions(.en))
     }
+
+    func testTheBoardAndSchedulesReadAgainOnlyForTheirOwnEvents() {
+        let board = ["task.", "project.", "subtask.", "comment.", "worktree."]
+        XCTAssertTrue(LiveReloadRules.matters("task.updated", prefixes: board))
+        XCTAssertTrue(LiveReloadRules.matters("worktree.updated", prefixes: board))
+        XCTAssertFalse(LiveReloadRules.matters("session.updated", prefixes: board))
+        let schedules = ["schedule.", "schedule_run.", "workflow."]
+        XCTAssertTrue(LiveReloadRules.matters("workflow.updated", prefixes: schedules))
+        XCTAssertFalse(LiveReloadRules.matters("workflow_run.started", prefixes: schedules), "a run's steps are followed on its own page")
+    }
 }
