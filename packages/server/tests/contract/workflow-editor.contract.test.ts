@@ -287,4 +287,30 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
       params: { workflow_trigger_id: trigger.id as string },
     });
   });
+
+  it('testWorkflowSend: a conversation target is made and posted in; a profile without a bot is a reason (§124)', async () => {
+    const result = await call('schedules.testWorkflowSend', 200, {
+      body: {
+        text: 'رسالة تجريبية',
+        send: {
+          targets: [
+            { platform: 'core_hub', session_id: null, title: 'تقارير', agent_id: AGENT },
+            { platform: 'telegram', chat_id: '-1001' },
+          ],
+        },
+      },
+    });
+    expect(result.status).toBe('partial');
+    const delivered = result.delivered_to as string[];
+    expect(delivered).toHaveLength(1);
+    const sessionId = delivered[0]!.replace('core_hub:', '');
+    expect((result.failures as Array<{ reason: string }>)[0]!.reason).toContain(
+      'TELEGRAM_BOT_TOKEN',
+    );
+    const history = await call('sessions.listMessages', 200, { params: { session_id: sessionId } });
+    expect(JSON.stringify(history.items)).toContain('رسالة تجريبية');
+    await call('schedules.testWorkflowSend', 400, {
+      body: { text: 'x', send: { targets: [{ platform: 'fax' }] } },
+    });
+  });
 });

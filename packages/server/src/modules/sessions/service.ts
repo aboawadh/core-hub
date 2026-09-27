@@ -1476,6 +1476,57 @@ export class SessionsService {
    * `respondApproval` answers it — that belongs to a workflow run instead of a session run.
    * Announced profile-wide and put in the inbox of whoever the run belongs to.
    */
+  /**
+   * A workflow's "Send message" step posts into a conversation (DECISIONS §124): the words
+   * appear as the conversation agent's message, in the history and live in every open app.
+   * A conversation that no longer exists is made again under the same title with the same
+   * agent, and the words go there.
+   */
+  async postWorkflowMessage(
+    scope: EngineScope,
+    input: { sessionId: string | null; title: string | null; agentId: string | null; text: string },
+  ): Promise<{ sessionId: string; messageId: string; recreated: boolean; title: string | null }> {
+    let session = input.sessionId
+      ? this.store.getSession(scope.workspace, input.sessionId)
+      : undefined;
+    let recreated = false;
+    if (!session) {
+      if (!input.agentId) {
+        throw new Error(
+          'the conversation no longer exists, and its agent is not known to make it again',
+        );
+      }
+      const made = await this.create(scope, {
+        agent_id: input.agentId,
+        title: input.title ?? null,
+      } as SessionCreateInput);
+      session = this.store.getSession(scope.workspace, String(made.id));
+      if (!session) throw new Error('the conversation could not be made again');
+      recreated = input.sessionId !== null;
+    }
+    const message = this.store.appendMessage({
+      workspace: scope.workspace,
+      ownerId: scope.userId,
+      sessionId: session.id,
+      runId: null,
+      role: 'assistant',
+      authorKind: 'agent',
+      authorId: session.agentId,
+      content: input.text,
+      parts: [],
+      attachmentIds: [],
+    });
+    this.realtime.emitToSession(scope.profile, session.id, 'message.created', {
+      message: this.messageOf(scope, message),
+    });
+    return {
+      sessionId: session.id,
+      messageId: message.id,
+      recreated,
+      title: session.title ?? input.title,
+    };
+  }
+
   raiseWorkflowApproval(
     scope: { workspace: string; profile: string; userId: string },
     input: {

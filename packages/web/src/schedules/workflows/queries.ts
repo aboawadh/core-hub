@@ -10,7 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../auth/context.js';
 import type { Limits } from '../WorkflowLimits.js';
 import type { Agent, Model } from '../../types.js';
-import { toWrite, type Draft, type RunStep, type Validation } from './model.js';
+import { toWrite, type Draft, type RunStep, type Send, type Validation } from './model.js';
 
 export interface WorkflowRow {
   id: string;
@@ -398,4 +398,52 @@ export function useWorkflowWrites() {
       onSuccess: refresh,
     }),
   };
+}
+
+/** What a send did (`WorkflowSendResult`, §124). */
+export interface SendResult {
+  status: 'sent' | 'partial' | 'failed';
+  message_id: string | null;
+  message_ids: string[];
+  delivered_to: string[];
+  failures: Array<{ target: string; reason: string }>;
+}
+
+/** A conversation of the profile a "Send message" step can post in. */
+export interface ConversationRow {
+  id: string;
+  title: string | null;
+  agent_id: string;
+}
+
+export function useProfileConversations(profile: string, enabled: boolean) {
+  const { client, session } = useAuth();
+  return useQuery({
+    queryKey: ['sessions', profile, 'workflow-send'],
+    queryFn: async () =>
+      (
+        (
+          await client.request('get', '/sessions', {
+            query: { limit: 200 } as never,
+            ...inProfile(profile),
+          })
+        ).data as unknown as { items: ConversationRow[] }
+      ).items,
+    enabled: !!session && enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** "Send test message": the step's words to its targets now (not remembered as sent). */
+export function useSendTest(profile: string) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async ({ send, text }: { send: Send; text: string }) =>
+      (
+        await client.request('post', '/workflows/send-test', {
+          body: { send, text } as never,
+          ...inProfile(profile),
+        })
+      ).data as unknown as SendResult,
+  });
 }

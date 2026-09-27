@@ -131,6 +131,11 @@
       "all": "Yes when every rule holds",
       "any": "Yes when any rule holds",
       "read_only": "These rules are kept as they are when you save here; edit them on the web."
+    },
+    "send": {
+      "message": "Message",
+      "targets": "Sends to",
+      "read_only": "A “Send message” step: its targets are kept as they are when you save here; change them on the web."
     }
   }
 }

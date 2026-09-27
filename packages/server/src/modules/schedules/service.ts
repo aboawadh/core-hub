@@ -18,11 +18,13 @@ import { ConditionError, hasRules, parseCondition, pathsIn, ruleProblem } from '
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
 import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
+import { hasSend, sendProblems } from './send.js';
 import {
   nodeRuns,
   scheduleRuns,
   schedules,
   workflowRuns,
+  workflowSentParts,
   workflows,
   SCHEDULE_OVERLAPS,
   type ScheduleOverlap,
@@ -1017,6 +1019,94 @@ export class SchedulesService {
     return this.workflowRun(scope, id);
   }
 
+  /** The run a rerun repeats, followed back to the first: what a sent part is kept under (§124). */
+  rootRunOf(run: WorkflowRunRow): string {
+    let current = run;
+    for (let hop = 0; hop < 20; hop += 1) {
+      if (current.triggerKind !== 'manual' || !current.triggerRef) break;
+      const before = this.workflowRunById(current.triggerRef);
+      if (!before || before.workflowId !== current.workflowId) break;
+      current = before;
+    }
+    return current.id;
+  }
+
+  sentPart(runKey: string, nodeKey: string, target: string, part: number): string | null {
+    return (
+      this.db
+        .select({ messageId: workflowSentParts.messageId })
+        .from(workflowSentParts)
+        .where(
+          and(
+            eq(workflowSentParts.runKey, runKey),
+            eq(workflowSentParts.nodeKey, nodeKey),
+            eq(workflowSentParts.target, target),
+            eq(workflowSentParts.part, part),
+          ),
+        )
+        .get()?.messageId ?? null
+    );
+  }
+
+  recordSent(
+    run: WorkflowRunRow,
+    key: { runKey: string; nodeKey: string; target: string; part: number },
+    messageId: string,
+  ): void {
+    const now = new Date();
+    this.db
+      .insert(workflowSentParts)
+      .values({
+        id: newUlid(),
+        ownerId: run.ownerId,
+        workspace: run.workspace,
+        ...key,
+        messageId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  /**
+   * A conversation target was made again (its conversation was deleted): the workflow's node
+   * now names the new one, so the next run posts there. The drawing is otherwise unchanged,
+   * so its version is not bumped.
+   */
+  repointConversation(
+    workflowId: string,
+    nodeId: string,
+    from: string | null,
+    to: { sessionId: string; title: string | null },
+  ): boolean {
+    const row = this.workflowById(workflowId);
+    if (!row) return false;
+    const definition = row.definition as WorkflowDefinition;
+    let changed = false;
+    const nodes = definition.nodes.map((node) => {
+      if (node.id !== nodeId || !hasSend(node.send)) return node;
+      return {
+        ...node,
+        send: {
+          targets: node.send.targets.map((target) => {
+            if (target.platform !== 'core_hub' || (target.session_id ?? null) !== from)
+              return target;
+            changed = true;
+            return { ...target, session_id: to.sessionId, title: to.title ?? target.title ?? null };
+          }),
+        },
+      };
+    });
+    if (!changed) return false;
+    this.db
+      .update(workflows)
+      .set({ definition: { ...definition, nodes }, updatedAt: new Date() })
+      .where(eq(workflows.id, workflowId))
+      .run();
+    return true;
+  }
+
   updateWorkflowRun(id: string, patch: Partial<typeof workflowRuns.$inferInsert>): void {
     this.db
       .update(workflowRuns)
@@ -1314,17 +1404,24 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
 }
 
 /**
- * An app that does not know a condition's `rules` sends the node without the field; the rules
- * the saved node with the same id had are kept rather than erased (§123). `null` removes them.
+ * An app that does not know a condition's `rules` (§123) or a notice's `send` (§124) sends the
+ * node without the field; what the saved node with the same id had is kept rather than erased.
+ * `null` removes it.
  */
 export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): WorkflowNode[] {
   const before = new Map(saved.map((node) => [node.id, node]));
+  const has = (node: WorkflowNode, field: string) =>
+    Object.prototype.hasOwnProperty.call(node, field);
   return nodes.map((node) => {
-    if (node.kind !== 'condition' || Object.prototype.hasOwnProperty.call(node, 'rules')) {
-      return node;
+    const old = before.get(node.id);
+    if (!old) return node;
+    if (node.kind === 'condition' && !has(node, 'rules') && old.rules) {
+      return { ...node, rules: old.rules };
     }
-    const rules = before.get(node.id)?.rules;
-    return rules ? { ...node, rules } : node;
+    if (node.kind === 'notify' && !has(node, 'send') && old.send) {
+      return { ...node, send: old.send };
+    }
+    return node;
   });
 }
 
@@ -1401,6 +1498,20 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
   for (const node of definition.nodes) {
     const name = node.title || node.id;
     const input = node.input ?? '';
+    if (node.kind === 'notify' && hasSend(node.send)) {
+      // A "Send message" step (§124): each target must name where it goes.
+      for (const found of sendProblems(node.send)) {
+        problems.push(
+          issue(
+            found.code,
+            found.index === null
+              ? `"${name}" sends nowhere: add Telegram or a conversation`
+              : `target ${found.index + 1} of "${name}" cannot be sent to (${found.code})`,
+            { node: node.id, detail: found.index === null ? null : String(found.index + 1) },
+          ),
+        );
+      }
+    }
     if (node.kind === 'condition' && hasRules(node.rules)) {
       // Several rules (§123): each one is read now, and a `steps.` path must name a step.
       node.rules.items.forEach((rule, index) => {

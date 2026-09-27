@@ -136,6 +136,7 @@ describe('workflow editor: the drawing', () => {
           input: 'Sum up {{input}}',
           approval_required: false,
           rules: null,
+          send: null,
           position: state.draft.nodes[0]!.position,
         },
         {
@@ -150,6 +151,7 @@ describe('workflow editor: the drawing', () => {
           input: 'Said: {{steps.agent_1.output}}',
           approval_required: false,
           rules: null,
+          send: null,
           position: state.draft.nodes[1]!.position,
         },
       ],

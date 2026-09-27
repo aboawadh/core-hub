@@ -575,6 +575,18 @@ class SelfSufficientTest {
         assertEquals("https://hub.example/hooks/T1", WorkflowDraftRules.triggerUrl("https://hub.example/", "/hooks/T1"))
     }
 
+    @Test fun `workflows - a Send message step's targets are shown and kept when the phone saves`() {
+        val json = hub.core.client.infrastructure.Serializer.kotlinxSerializationJson
+        val send = json.decodeFromString(
+            hub.core.client.model.WorkflowSend.serializer(),
+            """{"targets":[{"platform":"telegram","chat_id":"-1001"},{"platform":"core_hub","session_id":"01J8QK3ZR2W7M5N4P6T8V9X0SS","title":"Reports"}]}""",
+        )
+        assertEquals(listOf("telegram -1001", "conversation \"Reports\""), WorkflowDraftRules.sendLines(send))
+        var d = WorkflowDraftRules.add(WorkflowDraft(name = "Report"), WorkflowNode.Kind.NOTIFY, "Send")
+        d = WorkflowDraftRules.update(d, "notify_1") { it.copy(send = send) }
+        assertEquals(send, WorkflowDraftRules.toWrite(d).nodes!![0].send)
+    }
+
     @Test fun `workflows - the drawing is checked by the hub, and a run starts again from a step`() = runTest {
         val ops = WorkflowEditOps { HubApis(base, OkHttpClient()) }
         val d = WorkflowDraftRules.add(WorkflowDraft(name = "W"), WorkflowNode.Kind.AGENT, "Research")
