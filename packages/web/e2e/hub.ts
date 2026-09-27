@@ -1569,9 +1569,6 @@ const app = await buildServer({
   config: loadConfig({
     DATA_DIR: dataDir,
     PORT: String(port),
-    // The journeys never reach the real push relay built into the hub (DEFAULT_RELAY_URL,
-    // 2026-09-28): FCM and APNs stay "not configured" here, as the push journey expects.
-    COREHUB_PUSH_RELAY: 'off',
     ...(setupMode ? {} : { HUB_ADMIN_PASSWORD: E2E_PASSWORD }),
     // The journeys never reach the real push relay the hub uses by default (DEFAULT_RELAY_URL):
     // a phone sender stays "not configured" here, as it was before the relay was built in.
