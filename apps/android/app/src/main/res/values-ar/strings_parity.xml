@@ -17,7 +17,7 @@
     <string name="workflow_limit_step">%1$d د للخطوة</string>
     <string name="workflow_counts">%1$d خطوات · %2$d تشغيلات</string>
     <string name="workflows_empty">لا سير عمل بعد</string>
-    <string name="workflows_empty_body">يُرسم سير العمل على الويب، ويُشغَّل ويُتابَع من هنا.</string>
+    <string name="workflows_empty_body">أنشئ واحدًا بزر «سير عمل جديد»: أضف خطواته واربط بينها. ويعمل ويُتابَع هنا.</string>
     <string name="workflows_input">المدخل</string>
     <string name="workflows_input_hint">اختياري: ما يعمل عليه هذا التشغيل</string>
     <string name="workflows_run_limits">حدود هذا التشغيل</string>
@@ -29,7 +29,6 @@
     <string name="workflows_limit_step_bad">بين دقيقة ويوم.</string>
     <string name="workflows_run">شغّل</string>
     <string name="workflows_runs">آخر التشغيلات</string>
-    <string name="workflows_edit_on_web">الخطوات والروابط تُعدَّل على الويب.</string>
     <string name="workflows_waiting_step">«%1$s» تنتظر موافقتك.</string>
     <string name="workflows_approve">وافق</string>
     <string name="workflows_deny">ارفض</string>
