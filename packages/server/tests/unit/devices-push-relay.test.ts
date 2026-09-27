@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { requireSqlite } from '../../src/lib/db.js';
 import { overrideDevices, pushFor } from '../../src/modules/devices/index.js';
+import { DEFAULT_RELAY_URL } from '../../src/modules/devices/relay.js';
 import { devices, pushRelay } from '../../src/modules/devices/schema.js';
 import { fakeFcm } from '../../src/modules/devices/testing/fake-push.js';
 import { fakeRelay, type FakeRelay } from '../../src/modules/devices/testing/fake-relay.js';
@@ -395,7 +396,7 @@ describe('push relay: states', () => {
     expect((await relayOf()).relay).toMatchObject({ state: 'ready', last_error: null });
   });
 
-  it('is off by the admin switch, by COREHUB_PUSH_RELAY=off, and without an address', async () => {
+  it('is off by the admin switch and by COREHUB_PUSH_RELAY=off, and uses the built-in address by default', async () => {
     const { hub, relay } = await relayHub();
     const off = await authed(hub, hub.token, {
       method: 'PUT',
@@ -421,11 +422,11 @@ describe('push relay: states', () => {
       relay: { state: 'off', forced_off: true, enabled: true },
     });
 
-    const none = await signedInHub();
-    cleanups.push(() => none.close());
-    expect((await senders(none as Hub)).find((s) => s.provider === 'apns')).toMatchObject({
-      source: 'none',
-      relay: { state: 'no_url', url: null },
+    // No address given: the one built into the hub, not yet registered, and nothing called.
+    const builtIn = await signedInHub({ COREHUB_PUSH_RELAY: 'on' });
+    cleanups.push(() => builtIn.close());
+    expect((await senders(builtIn as Hub)).find((s) => s.provider === 'apns')).toMatchObject({
+      relay: { state: 'not_registered', url: DEFAULT_RELAY_URL },
     });
     expect(relay.calls).toEqual([]);
     expect(forced.relay.calls).toEqual([]);

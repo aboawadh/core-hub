@@ -114,7 +114,8 @@ describe.skipIf(!doc)('contract: devices operations answer their success path', 
 
     await call('devices.listPushSenders', 200);
     const relay = await call('devices.setPushRelay', 200, { body: { private_push: true } });
-    expect(relay).toMatchObject({ state: 'no_url', private_push: true, url: null });
+    // The suite keeps the real relay off (tests/unit/helpers.ts), so the state is "forced off".
+    expect(relay).toMatchObject({ state: 'off', forced_off: true, private_push: true });
     await call('devices.setPushRelay', 400, { body: { enabled: 'yes' } });
     await call('devices.setPushSender', 200, {
       params: { provider: 'webpush' },
