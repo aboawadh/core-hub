@@ -81,7 +81,20 @@ $ node scripts/migrations-guard.mjs --base v0.1.0-alpha.16
   break     migration drops-table 0022_device_requests.sql device_commands
   break     migration drops-table 0024_drop_performance_snapshots.sql performance_snapshots
 ```
-الاختبارات والفحوص المحلية: تُلصق نواتجها أدناه.
+الاختبارات والفحوص المحلية (عبر `mj-run`):
+```
+pnpm lint                                  exit=0  (All matched files use Prettier code style!)
+pnpm typecheck                             exit=0
+pnpm contracts:lint                        contracts:lint  validating 96 event schema file(s) … OK
+pnpm change-record:check                   change-record  OK — 1 record(s) valid
+pnpm --filter @corehub/contracts exec vitest run tests/compat.test.ts
+                                           Test Files  1 passed (1)   Tests  60 passed (60)
+pnpm --filter @corehub/contracts test      Test Files  10 passed (10)   Tests  118 passed (118)
+node --test scripts/migrations-guard.test.mjs
+                                           ℹ tests 28  ℹ pass 28  ℹ fail 0
+pnpm scripts:test                          ℹ tests 67  ℹ pass 67  ℹ fail 0
+```
+CI: تُضاف نتيجته بعد التشغيل.
 
 ## المخاطر والرجوع
 - إيجابيات كاذبة: الحارس محافظ (مثلًا أي `pattern` جديد في طلب، أو طلب صار يرفض الحقول غير المعلنة).
