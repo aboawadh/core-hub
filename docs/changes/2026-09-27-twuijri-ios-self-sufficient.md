@@ -123,8 +123,19 @@ $ node apps/ios/scripts/generate-swift.mjs --check
 generate-swift  OK — every generated file matches its source
 $ node scripts/check-change-record.mjs --files docs/changes/2026-09-27-twuijri-ios-self-sufficient.md
 change-record  OK — 1 record(s) valid
+$ pnpm lint
+$ eslint . && prettier --check .
+All matched files use Prettier code style!
 ```
-CI (iOS workflow على محاكي macOS): يُستكمل بالنتيجة الفعلية أدناه.
+CI على الطلب #199 (قبل آخر دفعة: تنسيق `lucide-mobile.json` فقط):
+```
+Build and test on the iOS simulator                       pass  6m15s   # بناء التطبيق + XCTest على المحاكي
+Generate the Swift client (CoreHubClient)                 pass
+Android build, unit tests, lint                           pass
+Server unit tests (3 shards), Web smoke journeys, Docker, Desktop, Installers, db:migrate   pass
+Lint, typecheck, contracts, client tests, build           fail   # prettier على scripts/icons/lucide-mobile.json — أُصلح
+```
+ما لم يتحقق منه CI: الواجهة على هاتف حقيقي أو أمام مركز حقيقي (لقطات المتجر لا تعمل على الطلبات).
 
 ## المخاطر والرجوع
 - لم يُجرَّب شيء على هاتف المالك ولا على مركز حقيقي: التحقق اختبارات XCTest على محاكي CI وقراءة الكود. أعلى المخاطر:

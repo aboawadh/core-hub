@@ -134,8 +134,5 @@
     "shield",
     "wand-sparkles"
   ],
-  "ios": [
-    "network",
-    "square-terminal"
-  ]
+  "ios": ["network", "square-terminal"]
 }
