@@ -140,6 +140,8 @@ function hub(
     /** The hub does not run Hermes: no gateway to speak for. */
     unmanaged?: boolean;
     replyTitle?: string | null;
+    /** The Hermes row as the card receives it, changed. */
+    agent?: Agent;
   } = {},
 ) {
   const sent: Sent[] = [];
@@ -217,8 +219,8 @@ function hub(
           headers: { 'content-type': 'application/json' },
         }),
       );
-    if (path.endsWith('/agents')) return json({ items: [AGENT] });
-    if (path.endsWith(`/agents/${HERMES}`)) return json(AGENT);
+    if (path.endsWith('/agents')) return json({ items: [options.agent ?? AGENT] });
+    if (path.endsWith(`/agents/${HERMES}`)) return json(options.agent ?? AGENT);
     if (path.endsWith('/profiles'))
       return json({
         items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0P1', slug: 'manger', name: 'Manger' }],
@@ -635,5 +637,37 @@ describe("Hermes's card", () => {
     // A profile's gateway also fires its scheduled jobs; the card says how many.
     expect(within(gateways).getByTestId('agent-gateway-jobs-manger').textContent).toMatch(/2/);
     expect(within(gateways).queryByTestId('agent-gateway-jobs-default')).toBeNull();
+  });
+});
+
+describe("Hermes's card: long errors (the desktop report of 2026-09-27)", () => {
+  it('wraps a path or command with no spaces instead of running past the edge', async () => {
+    const command = `Command failed: /Users/${'someone'.repeat(6)}/.local/bin/hermes --version`;
+    const stalled =
+      'the Hermes gateway has not answered http://127.0.0.1:8642/health after 120 s — its last line: hermes: completing source-update dependencies...';
+    const agent = {
+      ...AGENT,
+      runtime: {
+        ...AGENT.runtime,
+        error: stalled,
+        gateways: AGENT.runtime.gateways?.map((gateway) =>
+          gateway.profile === 'default'
+            ? { ...gateway, state: 'starting', error: stalled }
+            : gateway,
+        ),
+      },
+      install: { ...AGENT.install, error: command },
+    } as unknown as Agent;
+    const { fetchImpl } = hub({ agent });
+    mount('/agents', fetchImpl);
+    const install = await screen.findByTestId('agent-install-error');
+    expect(install.textContent).toBe(command);
+    expect(install.className).toContain('wrap-anywhere');
+    const runtime = screen.getByTestId('agent-runtime-error');
+    expect(runtime.textContent).toBe(stalled);
+    expect(runtime.className).toContain('wrap-anywhere');
+    const gateway = screen.getByTestId('agent-gateway-default');
+    expect(gateway.getAttribute('data-state')).toBe('starting');
+    expect(within(gateway).getByText(stalled).className).toContain('wrap-anywhere');
   });
 });

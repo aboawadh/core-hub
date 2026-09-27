@@ -47,6 +47,18 @@ What was found while building it:
 6. A hub that stops on its own is not restarted in a loop: the app returns to the first-run
    screen and says so. Quitting the app stops the hub (SIGTERM, then SIGKILL after 10 s).
 
+### Amendment (2026-09-27, proposed — owner to confirm): the runtime is shared, the home is not
+Hermes's package manager (since v0.21.5, 2026-09-24) keeps an install's Python packages and tools
+per **data root** (`<root>/installs/<key>/`, `<root>/tools/`), and takes any `HERMES_HOME` outside
+`~/.hermes` for a root of its own. Decision 3's own home under `local-hub` therefore made Hermes
+build a second runtime there on the first start (~2 GB, minutes online, a crash loop offline) and
+point the person's `hermes` launcher at it. The hub's home keeps its own configuration, keys,
+memory and sessions as decided, and links `installs/` to the person's root and runs Hermes with
+`HERMES_RUNTIME_DIR=<root>/tools` (Hermes's documented override for its tool store), the way
+Hermes's own profiles share one install (`packages/server/src/modules/agents/hermes-shared-install.ts`).
+An older Hermes (packages in its venv) needs nothing and gets nothing; a runtime a previous version
+let Hermes finish in the hub's home is left alone.
+
 ## Alternatives rejected
 - **Rebuilding native modules for Electron** (`@electron/rebuild`): unnecessary with N-API
   prebuilds, and it would need a compiler on every build machine.

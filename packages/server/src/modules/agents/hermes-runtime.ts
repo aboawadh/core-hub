@@ -46,6 +46,7 @@ import {
   type GatewayStatus,
 } from './hermes-gateways.js';
 import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
+import { shareHermesInstall, type SharedInstall } from './hermes-shared-install.js';
 import { IMAGE_WHATSAPP_BRIDGE, prepareWhatsAppBridge } from './whatsapp-bridge.js';
 import { HubError } from '../../lib/errors.js';
 
@@ -99,6 +100,9 @@ export interface HermesRuntimeOptions {
   ) => Spawned;
   healthIntervalMs?: number;
   probeTimeoutMs?: number;
+  /** The quick polls after a managed start, before the gateway is called stalled (tests). */
+  warmUpIntervalMs?: number;
+  warmUpAttempts?: number;
   /**
    * How often a TUI gateway started with keys that have since changed is checked for a
    * moment with no turn in flight, when it is closed.
@@ -135,6 +139,9 @@ const RESTART_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 const STOP_GRACE_MS = 10_000;
 const WARM_UP_INTERVAL_MS = 2_000;
 const WARM_UP_ATTEMPTS = 60;
+/** How many of the managed gateway's last lines are kept for the reason it stopped. */
+const LAST_LINES_KEPT = 20;
+const LAST_LINE_MAX = 300;
 const TUI_RETIRE_INTERVAL_MS = 5_000;
 /** How long a channel change waits for another before its gateway follows (`channelsChanged`). */
 const CHANNEL_SETTLE_MS = 1_000;
@@ -198,6 +205,13 @@ export class HermesRuntime {
   private readonly makingProfiles = new Map<string, Promise<void>>();
   private retireTimer: NodeJS.Timeout | null = null;
   private healthyAt: number | null = null;
+  /**
+   * The person's Hermes install state this home runs on (`hermes-shared-install.ts`), decided
+   * once at `start()` — before any Hermes process of this hub starts.
+   */
+  private shared: SharedInstall | null = null;
+  /** The last lines the managed gateway wrote, for the reason shown when it stops or stalls. */
+  private readonly lastLines: string[] = [];
   private stopping = false;
   private restartRequested = false;
   private restartTimer: NodeJS.Timeout | null = null;
@@ -646,8 +660,43 @@ export class HermesRuntime {
       ...(this.options.host.inherited ?? {}),
       ...(this.options.host.pathValue ? { PATH: this.options.host.pathValue } : {}),
       ...this.providerEnv,
+      ...this.sharedInstallEnv(),
       HERMES_HOME: this.status().home ?? this.home,
     };
+  }
+
+  /**
+   * `HERMES_RUNTIME_DIR` when this home runs on the person's Hermes install (`start()`), so
+   * Hermes takes its Python and tools from where that install keeps them. A value somebody set
+   * for the hub already is theirs and stays.
+   */
+  private sharedInstallEnv(): NodeJS.ProcessEnv {
+    const runtimeDir = this.shared?.runtimeDir;
+    if (!runtimeDir || this.options.host.inherited?.HERMES_RUNTIME_DIR) return {};
+    return { HERMES_RUNTIME_DIR: runtimeDir };
+  }
+
+  /**
+   * Puts the person's Hermes install state under this home before anything of Hermes runs
+   * here (`hermes-shared-install.ts`). Once; logged, never thrown.
+   */
+  private shareInstall(): void {
+    if (this.shared) return;
+    this.shared = shareHermesInstall({ home: this.home, env: this.options.host.inherited ?? {} });
+    const { outcome, root, movedAside, error } = this.shared;
+    if (error) {
+      this.log.warn(
+        { home: this.home, err: error },
+        "hermes: could not use the installed Hermes's runtime; Hermes will prepare its own",
+      );
+    } else if (outcome === 'linked' || outcome === 'already') {
+      this.log.info(
+        { home: this.home, root, movedAside, outcome },
+        "hermes: this home runs on the installed Hermes's runtime",
+      );
+    } else if (outcome === 'own') {
+      this.log.info({ home: this.home }, 'hermes: this home keeps the runtime it already has');
+    }
   }
 
   /**
@@ -664,6 +713,9 @@ export class HermesRuntime {
   /** Decide the mode and, when managed, start the child. Never throws. */
   async start(): Promise<HermesRuntimeMode> {
     if (this.mode !== 'undecided') return this.mode;
+    // Every Hermes command of this hub runs in its home, an external gateway or not (kanban,
+    // profiles, plugins): the install state goes in first.
+    if (whichSync('hermes', this.options.host)) this.shareInstall();
     if (await this.healthy()) {
       this.mode = 'external';
       this.setState('running', null);
@@ -767,6 +819,7 @@ export class HermesRuntime {
       // The shared provider keys first: the hub's own variables below are not
       // negotiable, and a provider named `API_SERVER_KEY` would be a very bad joke.
       ...this.providerEnv,
+      ...this.sharedInstallEnv(),
       HERMES_HOME: this.home,
       API_SERVER_ENABLED: 'true',
       API_SERVER_KEY: this.apiKey() ?? '',
@@ -787,14 +840,20 @@ export class HermesRuntime {
     }
     this.child = child;
     this.startedAt = Date.now();
-    this.setState('starting', null);
+    this.lastLines.length = 0;
+    // After a crash the card keeps saying why until the new process answers.
+    this.setState('starting', this.state === 'error' ? this.lastError : null);
     this.log.info({ pid: child.pid, home: this.home }, 'hermes: gateway started (managed)');
     this.pipe(child.stdout, 'info');
     this.pipe(child.stderr, 'warn');
     child.on('exit', (code, signal) => {
       if (this.child !== child) return;
       this.child = null;
-      const reason = `hermes gateway exited (${signal ?? `code ${code ?? '?'}`})`;
+      // Hermes says why on its last line (a traceback ends with the exception): shown with it.
+      const said = this.lastLine();
+      const reason = `hermes gateway exited (${signal ?? `code ${code ?? '?'}`})${
+        said ? `: ${said}` : ''
+      }`;
       if (this.stopping) {
         this.log.info({ code, signal }, 'hermes: gateway stopped');
         return;
@@ -825,8 +884,22 @@ export class HermesRuntime {
     const lines = createInterface({ input: stream });
     lines.on('line', (line) => {
       const text = line.trimEnd();
-      if (text) this.log[level]({ hermes: true }, text);
+      if (!text) return;
+      this.log[level]({ hermes: true }, text);
+      this.lastLines.push(text);
+      if (this.lastLines.length > LAST_LINES_KEPT) this.lastLines.shift();
     });
+  }
+
+  /** The managed gateway's last line of text (banner frames skipped), shortened. */
+  private lastLine(): string | null {
+    for (let i = this.lastLines.length - 1; i >= 0; i -= 1) {
+      const text = this.lastLines[i]!.trim();
+      // The start banner's box-drawing lines say nothing about why.
+      if (!/[A-Za-z0-9]/.test(text) || /^[│┌└├─╭╰]/.test(text)) continue;
+      return text.length > LAST_LINE_MAX ? `${text.slice(0, LAST_LINE_MAX - 1)}…` : text;
+    }
+    return null;
   }
 
   private scheduleRestart(binary: string): void {
@@ -848,15 +921,40 @@ export class HermesRuntime {
     this.healthTimer.unref?.();
     // Warm-up: a gateway takes a few seconds to bind; poll quickly until the first answer
     // so the registry says `running` when it is, not one interval later.
-    if (this.mode === 'managed') this.warmUp(WARM_UP_ATTEMPTS);
+    if (this.mode === 'managed') this.warmUp(this.options.warmUpAttempts ?? WARM_UP_ATTEMPTS);
   }
 
   private warmUp(attempts: number): void {
-    if (attempts <= 0 || this.stopping || this.state === 'running') return;
+    if (this.stopping || this.state === 'running') return;
+    if (attempts <= 0) {
+      this.stalled();
+      return;
+    }
     const timer = setTimeout(() => {
       void this.checkHealth().then(() => this.warmUp(attempts - 1));
-    }, WARM_UP_INTERVAL_MS);
+    }, this.options.warmUpIntervalMs ?? WARM_UP_INTERVAL_MS);
     timer.unref?.();
+  }
+
+  /**
+   * The warm-up ended and the gateway is alive but has not answered: still `starting`, now with
+   * a reason a person can act on — how long, and the last thing Hermes said (downloading its
+   * runtime, waiting on a lock, …). The next healthy answer clears it.
+   */
+  private stalled(): void {
+    if (!this.child || this.state !== 'starting' || this.lastError) return;
+    const waited = Math.round(
+      ((this.options.warmUpAttempts ?? WARM_UP_ATTEMPTS) *
+        (this.options.warmUpIntervalMs ?? WARM_UP_INTERVAL_MS)) /
+        1000,
+    );
+    const said = this.lastLine();
+    this.setState(
+      'starting',
+      `the Hermes gateway has not answered ${this.endpoint}/health after ${waited} s${
+        said ? ` — its last line: ${said}` : ''
+      }`,
+    );
   }
 
   private async checkHealth(): Promise<void> {
@@ -912,6 +1010,21 @@ export class HermesRuntime {
       if (!child.kill('SIGTERM')) finish();
     });
   }
+}
+
+/**
+ * What a turn that could not reach the gateway is told about the one this hub runs (the
+ * adapter adds it to "did not answer"): still starting, and why it is taking long, or why it
+ * stopped. Null when the hub does not run it, or it is running (then the failure is the call's).
+ */
+export function gatewayNote(status: HermesRuntimeStatus): string | null {
+  if (status.mode !== 'managed') return null;
+  const why = status.lastError ? `: ${status.lastError}` : '';
+  if (status.state === 'starting') return `Hermes is still starting${why}; try again in a moment`;
+  if (status.state === 'error' || status.state === 'stopped') {
+    return `the Hermes gateway Core Hub runs is not running${why}`;
+  }
+  return null;
 }
 
 const defaultSpawner: Spawner = (command, args, options) => {

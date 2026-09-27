@@ -15,7 +15,8 @@
     "local": {
       "title": "Run on this computer",
       "body": "The app runs its own hub here and uses Hermes Agent installed on this computer. Nothing leaves this machine unless you connect it.",
-      "choose": "Run on this computer"
+      "choose": "Run on this computer",
+      "own_hermes": "If Hermes is already on this computer, its settings, keys and conversations stay as they are: Core Hub runs its program with a Hermes home of its own in the app's data folder. The account you create next only signs you in to this hub."
     }
   },
   "remote": {

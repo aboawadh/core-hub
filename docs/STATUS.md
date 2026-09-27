@@ -284,6 +284,17 @@ its approval.
   Hermes's installers put it on Linux, macOS and Windows) or a running gateway, and without
   one offers **Install Hermes** — Hermes's own installer, shown before it runs, output streamed
   — or to continue without; This device then shows the data folder and the Hermes in use. Since
+  2026-09-27 **local mode works with a Hermes installed by Hermes's current installer**
+  (`docs/changes/2026-09-27-twuijri-desktop-local-existing-hermes.md`): its package manager keeps
+  the Python packages and tools per data root, so the hub's own Hermes home (`local-hub/hermes`)
+  now links `installs/` to the person's `~/.hermes/installs` and runs Hermes with
+  `HERMES_RUNTIME_DIR=~/.hermes/tools` — the gateway answers in seconds, offline too, instead of
+  Hermes downloading a second ~2 GB runtime into Core Hub's folder (and repointing the person's
+  own `hermes` launcher at it); nothing of the person's configuration, keys or conversations is
+  touched (`COREHUB_HERMES_SHARED_INSTALL=off` turns it off). The Hermes card reads the version
+  from `hermes --version`'s first line instead of waiting out its update check (it showed
+  "Command failed"), says why the gateway stopped or is still starting in Hermes's own last line,
+  a chat turn that cannot reach it says the same, and long errors wrap on the card. Since
   2026-09-25 also the **local helper** (ADR 0022, proposed): an MCP server in the app on
   127.0.0.1, off by default, token-protected, refusing browser requests; its permission screen in
   This device lists the live tools (list/read in shared folders; write only in folders shared as
