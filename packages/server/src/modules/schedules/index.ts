@@ -42,11 +42,13 @@ import {
   type Scope,
   type WorkflowRunRow,
 } from './service.js';
-import type { WorkflowDefinition } from './schema.js';
+import type { WorkflowDefinition, WorkflowSend } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
+import { sendProblems } from './send.js';
 import {
   WorkflowEngine,
   costOf,
+  deliverSend,
   stepOf,
   stoppedByOf,
   type RunScope,
@@ -1304,6 +1306,30 @@ export const schedulesModule = defineModule({
     });
 
     // ------------------------------------------------------------- imports
+
+    // ------------------------------------------------ "Send message" (§124)
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.testWorkflowSend',
+      handler: async (request, { body }) => {
+        const scope = runScopeOf(request);
+        const ask = body as { send: WorkflowSend; text: string };
+        const problems = sendProblems(ask.send);
+        if (problems.length > 0) {
+          throw new HubError('bad_request', { details: { reason: 'send_invalid', problems } });
+        }
+        // Sent now, and not remembered: pressing it twice sends twice.
+        const { result } = await deliverSend(
+          portsFor(request.server).messages,
+          scope,
+          ask.send,
+          ask.text,
+          null,
+          () => undefined,
+        );
+        return result;
+      },
+    });
 
     // ------------------------------------------------ inbound triggers (§123)
 

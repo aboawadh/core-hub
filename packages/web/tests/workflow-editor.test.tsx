@@ -165,6 +165,21 @@ function fakeHub(
           )
         : json(saved);
     }
+    if (path === '/workflows/send-test') {
+      return json({
+        status: 'partial',
+        message_id: '801',
+        message_ids: ['801'],
+        delivered_to: ['core_hub:01J8QK3ZR2W7M5N4P6T8V9X0SS'],
+        failures: [{ target: 'telegram:-100404', reason: 'Bad Request: chat not found' }],
+      });
+    }
+    if (path === '/sessions' && url.search.includes('limit=200')) {
+      return json({
+        items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0SS', title: 'Reports', agent_id: AGENT }],
+        next_cursor: null,
+      });
+    }
     if (path === `/workflows/${FLOW}/triggers` && method === 'GET') {
       return json({ items: triggers });
     }
@@ -520,6 +535,50 @@ describe('Workflows: its own page', () => {
     expect(line).toHaveTextContent('task core-hub-test-task');
     await user.click(within(line).getByTestId('workflow-delivery-run'));
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`run=${RUN}`));
+  });
+
+  it('a Send message step: Telegram and a conversation, a test send, saved as a notice with targets (§124)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Report');
+    await user.click(screen.getByTestId('workflow-add-send'));
+    await user.type(await screen.findByTestId('workflow-step-text'), 'Done');
+    await user.click(screen.getByTestId('workflow-send-telegram'));
+    await user.type(screen.getByTestId('workflow-send-chat'), '-100404');
+    await user.click(screen.getByTestId('workflow-send-conversation'));
+    await pick(user, 'workflow-send-session', 'Reports');
+    await user.click(screen.getByTestId('workflow-send-test'));
+    const result = await screen.findByTestId('workflow-send-test-result');
+    expect(result).toHaveTextContent('Sent to some targets only');
+    expect(result).toHaveTextContent('Bad Request: chat not found');
+    expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
+      text: 'Done',
+      send: {
+        targets: [
+          { platform: 'telegram', chat_id: '-100404' },
+          {
+            platform: 'core_hub',
+            session_id: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
+            title: 'Reports',
+            agent_id: AGENT,
+          },
+        ],
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    const node = (
+      seen.find((c) => c.path === '/workflows' && c.method === 'POST')!.body as {
+        nodes: Array<Record<string, unknown>>;
+      }
+    ).nodes[0]!;
+    expect(node).toMatchObject({ kind: 'notify', input: 'Done' });
+    expect((node.send as { targets: unknown[] }).targets).toHaveLength(2);
   });
 
   it('a condition holds several rules, saved as the contract’s rules (§123)', async () => {

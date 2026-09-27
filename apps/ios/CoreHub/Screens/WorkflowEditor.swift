@@ -369,7 +369,22 @@ struct WorkflowStepPage: View {
         case .delay:
             delaySection(index)
         case .notify:
-            templateSection(index, label: "workflow_editor.form.notify_text", footer: "workflow_editor.form.notify_to")
+            if let send = draft.nodes[index].send {
+                // A "Send message" step (§124): its words here, its targets shown and kept.
+                templateSection(index, label: "workflow_editor.send.message", footer: "workflow_editor.send.read_only")
+                Section {
+                    ForEach(Array(WorkflowEditRules.sendLines(send).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                            .environment(\.layoutDirection, .leftToRight)
+                            .accessibilityIdentifier("workflow.step.send_target")
+                    }
+                } header: {
+                    Text(l10n("workflow_editor.send.targets"))
+                }
+            } else {
+                templateSection(index, label: "workflow_editor.form.notify_text", footer: "workflow_editor.form.notify_to")
+            }
         case .approval:
             templateSection(index, label: "workflow_editor.form.approval_question", footer: "workflow_editor.form.approval_who")
         }

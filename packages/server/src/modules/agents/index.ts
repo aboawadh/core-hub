@@ -204,6 +204,8 @@ import {
 } from './skill-library.js';
 
 export { AgentsService } from './service.js';
+/** The Hermes profile's Telegram bot token, for a workflow's "Send message" step (§124). */
+export { telegramToken } from './channels.js';
 export type { AgentPatchInput, AgentsServiceOptions, ReconcileReport } from './service.js';
 export { createAdapterSet } from './adapters/index.js';
 export type { AdapterSet, AdapterSetOptions } from './adapters/index.js';

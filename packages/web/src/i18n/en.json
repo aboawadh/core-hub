@@ -1704,7 +1704,11 @@
       "rule_path_invalid": "A rule has no readable path (letters, digits, _ and dots).",
       "rule_operator_invalid": "A rule uses an operator the hub does not know.",
       "rule_value_missing": "A rule compares with nothing: give it a value.",
-      "rule_regex_invalid": "A rule’s pattern is not a valid regular expression."
+      "rule_regex_invalid": "A rule’s pattern is not a valid regular expression.",
+      "send_no_target": "This step sends nowhere: choose Telegram or a conversation.",
+      "send_platform_unknown": "Target {detail} names a platform this hub cannot send to.",
+      "send_chat_missing": "Target {detail} has no Telegram chat id.",
+      "send_conversation_missing": "Target {detail} names no conversation."
     },
     "triggers": {
       "title": "Triggers",
@@ -1756,6 +1760,25 @@
       "delete": "Delete trigger",
       "delete_title": "Delete this trigger?",
       "delete_body": "Its address stops answering and its delivery log is deleted. The sender keeps sending until you remove the webhook there too."
+    },
+    "send": {
+      "title": "Send message",
+      "hint": "Sends the step’s words to Telegram and/or a Core Hub conversation.",
+      "message": "Message",
+      "targets": "Send to",
+      "telegram": "Telegram",
+      "chat_id": "Telegram chat id",
+      "telegram_hint": "A chat, user or group id (a group is like -1001234567890). Sent by this profile’s own Telegram bot; long text is split into several messages.",
+      "conversation": "A Core Hub conversation",
+      "conversation_hint": "Posted in the conversation, so it shows in every app. If the conversation is deleted, a new one with the same title is made and the step points to it.",
+      "pick": "Choose a conversation",
+      "untitled": "Untitled conversation",
+      "test": "Send test message",
+      "status": {
+        "sent": "Sent",
+        "partial": "Sent to some targets only",
+        "failed": "Not sent"
+      }
     }
   },
   "audit": {

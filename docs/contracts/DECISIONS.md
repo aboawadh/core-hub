@@ -3988,6 +3988,54 @@ signed); putting the secret in the address (it would be in every proxy log); new
 `RunTrigger.kind` (an older app would meet an enum value it does not know — the run says
 `api` and carries the new optional fields).
 
+## 124. A "Send message" step: Telegram through the profile's bot and a Core Hub conversation
+
+Owner's decision (2026-09-28): a workflow step sends a message to Telegram and/or a Core Hub
+conversation (the person picks either or both), Telegram directly through the Bot API with the
+profile's `TELEGRAM_BOT_TOKEN` from its Hermes `.env`. The details below are proposed — owner to
+confirm.
+
+**Shape.** The step is a `notify` node with a new optional field, `send: { targets: [...] }`,
+not a new `kind`: the generated Kotlin and Swift clients decode `WorkflowNode.kind` as a closed
+enum with no fallback, so a new value would make an older phone fail to load every workflow
+list that holds one. An older app sees a notice with the same words, and `updateWorkflow` keeps
+the saved node's `send` when such an app saves the node without the field (`null` removes it),
+as it does for §123's `rules`. A target's `platform` is a plain string (`telegram`,
+`core_hub`), so WhatsApp can be added later without an older app meeting an enum value it
+cannot read; an unknown platform is refused when the workflow is saved
+(`send_platform_unknown`), as are a Telegram target without a chat id and a conversation
+target that names none (`send_chat_missing`, `send_conversation_missing`, `send_no_target`).
+
+**Telegram.** `sendMessage` with the chat id (a group is `-100…`), the step's words rendered
+like any template. A text over 4096 UTF-16 units is split on paragraph, then line, then word
+boundaries (a single run longer than that is cut where it must, never inside a surrogate
+pair), sent in order. The token never reaches a log or a reason. A refusal is Telegram's own
+`description`; a profile without a bot is said as such.
+
+**Core Hub conversation.** The words are posted in the chosen conversation as its agent's
+message, announced live (`message.created`), so they show in every app. If the conversation was
+deleted, a new one with the same title and agent is made, the words go there, the node is
+pointed at it (the drawing's version is not bumped), and the run owner's inbox says so.
+
+**Never twice, never a false success.** Each part sent is written down (`workflow_sent_parts`,
+migration 0034) by the run it belongs to — a rerun from a step counts as the run it repeats —
+the node, the target and the part; a step tried again sends only what did not go. The step's
+output is `WorkflowSendResult`: `status` `sent` (every target took it), `partial` or `failed`,
+`message_ids`, `message_id`, `delivered_to` and each failure's reason; `sent` is never said
+without the platform's id. Every target failing fails the step; any failure (and a remade
+conversation) is also said in the run owner's inbox.
+
+**Test.** `schedules.testWorkflowSend` (`POST /workflows/send-test`) sends the given words to
+the given targets now; nothing is remembered, so pressing it twice sends twice. The web
+editor's palette has "Send message", whose form picks Telegram (chat id) and/or a conversation
+and has "Send test message". The phones show a send step's targets and keep them on save;
+editing them there is a follow-up. A test hub may point the Bot API elsewhere with the
+optional `COREHUB_TELEGRAM_API_BASE` (default `https://api.telegram.org`).
+
+Rejected: a new node kind (older phones would stop loading workflows); sending through Hermes's
+gateway (it would need Hermes up and a channel's own delivery rules, and the owner chose the Bot
+API); remembering by run id only (a rerun is a new run and would send again).
+
 ## 125. Settings → Secrets: the owner sees the names of every secret and one value at a time, with the password asked again each time
 
 Owner's request (2026-09-28): a Secrets section in Settings, on web and desktop only, visible to the
