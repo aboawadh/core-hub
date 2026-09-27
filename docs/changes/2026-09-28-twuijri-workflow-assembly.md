@@ -37,7 +37,25 @@ DECISIONS §127 (مقترح — بانتظار تأكيد المالك):
 - المستندات: DECISIONS §127، STATUS (العدد 369)، الدليل.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-انظر قسم الفحوص بعد الدمج أدناه؛ قبل الدمج:
+بعد دمج `origin/night/2026-09-28`:
+```
+pnpm typecheck                     typecheck 0
+pnpm lint                          All matched files use Prettier code style!
+pnpm contracts:lint / compat       contracts:lint  OK / contracts:compat  OK — no breaking change against v1.1.4
+pnpm contracts:check-clients       check-clients  OK — 1070 client file(s) scanned, 267 contract path(s) known.
+pnpm i18n:check / nav:check        i18n:check  OK / nav:check  OK — 41 destinations, ...
+pnpm change-record:check           change-record  OK — 6 record(s) valid
+node scripts/migrations-guard.mjs  migrations:guard  OK — no breaking change against v1.1.4
+vitest --project unit src/modules/schedules/ tests/unit/status.test.ts tests/unit/config.test.ts
+      Tests  140 passed | 3 skipped (143)
+vitest --project contract tests/contract/
+      Tests  428 passed (428)
+vitest (web) workflow-editor.test.tsx workflow-editor-model.test.ts auth-client.test.ts
+      Tests  36 passed (36)
+PLAYWRIGHT_CHANNEL=chrome playwright test (workflow-editor, workflow-triggers, workflow-send) --workers=1
+  4 passed (30.6s)
+```
+قبل الدمج:
 ```
 vitest --project unit src/modules/schedules/          Tests  128 passed | 3 skipped (131)
 vitest --project contract tests/contract/             Tests  428 passed (428)
