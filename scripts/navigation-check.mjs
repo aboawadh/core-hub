@@ -68,6 +68,9 @@ for (const destination of destinations) {
 
 const lists = {
   rail: 'rail',
+  // Rail entries only some surfaces have yet (web and desktop: `workflows`), kept out of `rail`
+  // so a client that predates them still matches `rail` exactly (DECISIONS §126).
+  railExtra: 'rail',
   segments: 'segment',
   footer: 'footer',
   settingsTabs: 'settings-tab',
@@ -106,6 +109,40 @@ for (const [a, b] of Object.entries(manifest.secondaryEntries ?? {})) {
   if (!byId.has(a)) fail(`secondaryEntries: "${a}" is not a destination`);
   for (const target of b)
     if (!byId.has(target)) fail(`secondaryEntries: "${a}" -> "${target}" is not a destination`);
+}
+
+// brandRow and sidebarGroups (owner, 2026-09-28, DECISIONS §126): how web and desktop draw
+// some rail entries — an icon beside the fold toggle, or rows under one expandable heading.
+// Presentation only, so every item must already be a rail entry, and nothing is in two places.
+const railEntries = new Set([...(manifest.rail ?? []), ...(manifest.railExtra ?? [])]);
+const checkSurfaces = (where, surfaces) => {
+  for (const surface of surfaces ?? [])
+    if (!SURFACES.has(surface)) fail(`${where}: unknown surface "${surface}"`);
+};
+const placed = new Map();
+const place = (id, where) => {
+  if (!railEntries.has(id)) fail(`${where}: "${id}" is not a rail entry`);
+  if (placed.has(id)) fail(`${where}: "${id}" is already in ${placed.get(id)}`);
+  placed.set(id, where);
+};
+if (manifest.brandRow) {
+  checkSurfaces('brandRow', manifest.brandRow.surfaces);
+  for (const id of manifest.brandRow.items ?? []) place(id, 'brandRow');
+}
+for (const [name, group] of Object.entries(manifest.sidebarGroups ?? {})) {
+  if (name.startsWith('$')) continue;
+  const where = `sidebarGroups.${name}`;
+  if (!terms[group?.title]) fail(`${where}: title term "${group?.title}" is not in terms`);
+  if (byId.has(name)) fail(`${where}: a group is not a destination, but "${name}" is one`);
+  checkSurfaces(where, group?.surfaces);
+  if (!group?.items?.length) fail(`${where}: a group needs items`);
+  for (const id of group?.items ?? []) {
+    place(id, where);
+    const surfaces = byId.get(id)?.surfaces;
+    for (const surface of group?.surfaces ?? [])
+      if (surfaces && !surfaces.includes(surface))
+        fail(`${where}: "${id}" does not exist on ${surface}`);
+  }
 }
 
 // A surface that draws another surface's client (the desktop app draws the web client) says

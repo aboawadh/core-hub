@@ -64,7 +64,12 @@ its approval.
   sidebar folds into a rail of icons** on a wide screen (its toggle, or `Ctrl+Shift+S` / `⌘⇧S`;
   remembered per browser; the rows name themselves in tooltips; the lists become two icons that
   open the sidebar on their list; the footer becomes the person's menu; on the right in Arabic;
-  the phone drawer is unchanged), and **the Models page's Runtime card** is one line when every
+  the phone drawer is unchanged) — since 2026-09-28 (DECISIONS §126, the owner's design) **Search is
+  an icon beside the fold toggle** (the row below New chat when folded) and **«الأدوات» / Tools** is
+  one expandable entry holding Agents (owners and admins), Tasks, **Workflows — now its own page
+  `/workflows`** (the old `/schedules?section=workflows…` address redirects) — and Schedules; closed
+  or open is remembered per device, and closed on one of its pages it is marked as the place (web and
+  desktop; the phones keep their drawer until they adopt it) — and **the Models page's Runtime card** is one line when every
   check passes («وقت التشغيل جاهز · الفحوص 4/4») that opens the list, and opens by itself with
   the failing checks first when one fails; a long conversation pages back through older messages
   as the reader scrolls up (built 2026-09-24, e2e `zzz-chat-history` journey 24) — since 2026-09-27 (DECISIONS §102, proposed — owner to confirm) an

@@ -1161,6 +1161,36 @@
   margin-inline-start: auto;
 }
 
+/* A group of rail rows under one heading (`sidebarGroups`, DECISIONS §126): the heading's
+   chevron points down while open and toward the reading direction's end while closed; the
+   rows sit one step in from the heading. */
+.ch-sidebar-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ch-sidebar-subrows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-inline-start: var(--ch-space-3);
+}
+.ch-sidebar-subrows[hidden] {
+  display: none;
+}
+.ch-sidebar-chevron {
+  transition: transform var(--ch-motion-fast) var(--ch-motion-ease);
+}
+.ch-sidebar-subgroup[data-open='false'] .ch-sidebar-chevron {
+  transform: rotate(-90deg);
+}
+:root[dir='rtl'] .ch-sidebar-subgroup[data-open='false'] .ch-sidebar-chevron {
+  transform: rotate(90deg);
+}
+.ch-sidebar[data-folded='true'] .ch-sidebar-subrows {
+  padding-inline-start: 0;
+}
+
 /* ---- folded: a rail of icons (shell/sidebarFold.ts). Labels stay the rows' accessible
    names, visually hidden; each row is a square, and a count rides on its corner. */
 .ch-sidebar[data-folded='true'] {
