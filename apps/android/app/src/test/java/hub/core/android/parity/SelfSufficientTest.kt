@@ -572,7 +572,7 @@ class SelfSufficientTest {
         d = WorkflowDraftRules.update(d, "condition_1") { it.copy(rules = rules) }
         assertEquals(rules, WorkflowDraftRules.toWrite(d).nodes!![0].rules)
         assertEquals(rules, WorkflowDraftRules.toCheck(d).nodes!![0].rules)
-        assertEquals("https://hub.example/api/v1/workflow-hooks/T1", WorkflowDraftRules.triggerUrl("https://hub.example/", "/api/v1/workflow-hooks/T1"))
+        assertEquals("https://hub.example/hooks/T1", WorkflowDraftRules.triggerUrl("https://hub.example/", "/hooks/T1"))
     }
 
     @Test fun `workflows - the drawing is checked by the hub, and a run starts again from a step`() = runTest {

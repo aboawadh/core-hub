@@ -96,8 +96,8 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertEqual(WorkflowEditRules.write(draft, clearing: false).nodes?[0].rules, rules)
         XCTAssertEqual(WorkflowEditRules.check(draft).nodes?[0].rules, rules)
         XCTAssertEqual(
-            WorkflowEditRules.triggerURL(hub: "https://hub.example/", path: "/api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG"),
-            "https://hub.example/api/v1/workflow-hooks/01J8QK3ZR2W7M5N4P6T8V9X0TG"
+            WorkflowEditRules.triggerURL(hub: "https://hub.example/", path: "/hooks/T1"),
+            "https://hub.example/hooks/T1"
         )
     }
 
