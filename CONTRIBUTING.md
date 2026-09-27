@@ -12,17 +12,23 @@ The short version:
    an entry in `THIRD-PARTY-NOTICES.md`.
 2. **Contract first.** Add or change the operation or event in `packages/contracts` before the
    server, and the server before the clients (`docs/adr/0003-contract-first.md`).
-3. **One task, one branch, one record.** Branch from `main` as `<type>/<topic>`, add
+3. **No breaking changes** (`docs/adr/0027-compatibility-no-breaking-changes.md`). People run
+   released hubs and apps: nothing they use may stop working after an update. Add beside, never
+   remove, rename, newly require or narrow; migrations never drop, rename or edit what a release
+   shipped; upgrades are replacing the image only. CI compares the contract and the migrations
+   with the latest release tag (`pnpm contracts:compat`, `pnpm migrations:guard`). Only the owner
+   approves an unavoidable break.
+4. **One task, one branch, one record.** Branch from `main` as `<type>/<topic>`, add
    `docs/changes/YYYY-MM-DD-<owner>-<topic>.md` with the sections from `docs/changes/README.md`,
    and paste the real output of the checks you ran. CI enforces the record.
-4. **Checks.** `docs/harness/validation.md` lists what to run for each kind of change;
+5. **Checks.** `docs/harness/validation.md` lists what to run for each kind of change;
    `docs/harness/README.md` explains what each check catches. `pnpm install`, then
    `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm contract:test`, `pnpm build`.
-5. **Arabic and English.** Every user-facing string exists in both; every screen's entry label
+6. **Arabic and English.** Every user-facing string exists in both; every screen's entry label
    equals its title (`docs/clients/NAVIGATION.md`).
-6. **Issues** start from a form (bug, feature, wording/translation): version, where it happens and
+7. **Issues** start from a form (bug, feature, wording/translation): version, where it happens and
    your own idea for the solution. Blank issues are off.
-7. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
+8. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
    Put `Closes #<issue>` in the description so the issue closes itself when the owner merges;
    do not close it by hand before the merge.
    Only the owner merges into `main`; nobody enables auto-merge. Merging into `main`, publishing
