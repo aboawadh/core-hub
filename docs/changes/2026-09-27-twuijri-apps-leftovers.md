@@ -104,6 +104,9 @@ Test Case '-[CoreHubTests.LeftoversTests testTimeIsCountedInLatinDigitsAndAQueue
 Executed 301 tests, with 0 failures (0 unexpected)
 ```
 
+بعد الدفع إلى `night/2026-09-27-apps` (الالتزام ec9fb0f5، #181): كل الفحوص success — Android، iOS simulator، Lint/typecheck/contracts،
+خوادم الوحدات (3 أجزاء)، Web smoke، Desktop smoke، Docker، المثبّتات الثلاثة، db:generate، سجل التغيير (رفع قائمة المتجر: skipping).
+
 ## المخاطر والرجوع
 - لم يُجرَّب على هاتفي المالك. صفحات iOS بلا صور (اختبارات القواعد فقط في CI).
 - الافتراضي المحلي للعملية في الأندرويد صار لغة التطبيق: كل ما يقرأ `Locale.getDefault()` يتبع التطبيق الآن؛ ما يحتاج لغة الهاتف
