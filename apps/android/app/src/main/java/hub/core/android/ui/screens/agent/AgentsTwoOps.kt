@@ -13,6 +13,7 @@ import hub.core.client.model.HermesWebhookCreate
 import hub.core.client.model.HubToolGroupId
 import hub.core.client.model.HubToolsPatch
 import hub.core.client.model.HubToolsPatchGroupsInner
+import hub.core.client.model.McpOAuthStart
 import hub.core.client.model.McpServerPatch
 import hub.core.client.model.McpServerWrite
 import hub.core.client.model.PendingWrite
@@ -41,6 +42,10 @@ class AgentsTwoOps(private val apis: () -> HubApis?, val profile: String, val ag
     suspend fun switchServer(name: String, on: Boolean) = call { it.agents.agentsUpdateMcpServer(profile, agentId, name, McpServerPatch(enabled = on)) }
     suspend fun deleteServer(name: String) = call { it.agents.agentsDeleteMcpServer(profile, agentId, name) }
     suspend fun testServer(name: String) = call { it.agents.agentsTestMcpServer(profile, agentId, name) }
+
+    /** Hermes's browser sign-in for a remote server (DECISIONS §121); no `hub_url`: the hub takes the address this app reached it on. */
+    suspend fun startMcpOAuth(name: String) = call { it.agents.agentsStartMcpOAuth(profile, agentId, name, McpOAuthStart()) }
+    suspend fun mcpOAuthFlow(name: String, flowId: String) = call { it.agents.agentsGetMcpOAuthFlow(profile, agentId, name, flowId) }
 
     // ---------------------------------------------------------------- the hub's own tools (decision §67)
     suspend fun hubTools() = call { it.agents.agentsGetHubTools(profile, agentId) }

@@ -112,6 +112,7 @@ private fun McpPage(agent: Agent, profile: String) {
                                 }
                             },
                             onDelete = { deleting.ask(server) },
+                            oauth = { McpOAuthRow(ops, server, onChanged = { load.reload() }) },
                         )
                     }
                 }
@@ -137,6 +138,8 @@ internal fun McpServerRow(
     onEdit: () -> Unit,
     onTest: () -> Unit,
     onDelete: () -> Unit,
+    /** The server's OAuth sign-in in this profile (DECISIONS §121), [McpOAuthRow]. */
+    oauth: (@Composable () -> Unit)? = null,
 ) {
     val t = LocalTokens.current
     HubCard(Modifier.testTag("mcp.${server.name}"), padding = 14.dp, onClick = onEdit) {
@@ -156,6 +159,7 @@ internal fun McpServerRow(
         Text(stringResource(R.string.agent_tools, server.tools.size), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
         server.error?.let { NoticeBox(it, BadgeTone.Danger) }
         McpTestView(server.name, test)
+        oauth?.invoke()
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HubButton(
                 stringResource(if (testing) R.string.agents2_mcp_testing else R.string.mcp_test), onTest,

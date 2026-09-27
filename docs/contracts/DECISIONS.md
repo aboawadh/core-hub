@@ -3848,3 +3848,52 @@ Rejected: a Google-generated app signing key (two signatures: a phone could not 
 GitHub APK and Play without losing its sign-in); keeping the self-updater in the Play build;
 r0adkll/upload-google-play (uploads the bundle but not the listing and images); "No data
 collected" on Play (the Firebase library alone sends a token and an installation id to Google).
+
+## 121. An MCP server is signed in by OAuth from the hub's pages, through Hermes, with the hub as the browser's way back
+
+Owner's goal (2026-09-27): connect ClickUp's MCP server — or any MCP server that signs in by OAuth —
+from the web alone, then Test shows its tools. The details below are proposed — owner to confirm.
+
+**Hermes does the sign-in; the hub only relays it.** Hermes's own dashboard already runs the whole
+flow (MIT source `hermes_cli/web_routers/mcp.py`, `tools/mcp_dashboard_oauth.py`, v2026.9.14): it
+discovers the provider, registers a client, answers the provider's authorization URL, accepts the
+browser's return only with the flow's `state`, exchanges the code and keeps the tokens in the
+profile's own `mcp-tokens/`. `agents.startMcpOAuth` starts it for the profile in `X-Hub-Profile`
+and answers the hub's own flow id (a ULID; Hermes's id never leaves the hub),
+`agents.getMcpOAuthFlow` polls it (`pending` → `approved` with the tools Hermes then listed,
+`failed`, `cancelled`, `expired`), `agents.cancelMcpOAuthFlow` stops it. **No token passes through
+the hub** and none is returned or logged.
+
+**The redirect URI is the hub's callback**, because Hermes would otherwise name its own address
+(`127.0.0.1:<port>` inside the container), which the person's browser cannot reach. Hermes has no
+per-flow parameter for it but reads the server's `oauth.redirect_uri` first, so before starting the
+hub writes there `<base>/api/v1/mcp-oauth/callback/<server>`, where `<base>` is the `hub_url` the
+client sends — the address the person reaches the hub on, so a tunnel's or a proxy's address is the
+right one — or else the request's own `protocol://host` (which honours `X-Forwarded-*` from the
+proxies `COREHUB_TRUST_PROXY` trusts). An `oauth.redirect_uri` that is not a hub callback (a person's
+own proxy) is left alone and used. Each dashboard sign-in makes Hermes register a fresh client, so
+moving the hub to another address only needs a new sign-in. `agents.mcpOAuthCallback` is public
+(`security: []`): it hands the query to Hermes's callback unchanged and answers a short page in the
+browser's language; the outcome is read by polling. Its request is not logged (`logLevel: warn` on
+that route: Fastify's request lines carry the URL, and the URL carries the authorization code).
+
+**The status is read from metadata only.** `McpServer.oauth` (optional, on `http`/`sse` servers)
+says `connected` (an access token that has not run out, or one Hermes can renew with a refresh
+token), `expired`, `not_connected` (no file) or `error` (a file that is not a sign-in), from the
+existence of `mcp-tokens/<name>.json`, its `expires_at` (or its time plus `expires_in`) and whether a
+refresh token is there — never a value. `required` is the block's `auth: oauth`.
+`agents.disconnectMcpOAuth` deletes that server's four files in the profile (Hermes has no API for
+it); a Hermes already holding the connection keeps it until its gateway restarts. Each profile signs
+in on its own: `mcp-tokens` is not shared between profiles.
+
+**Masking, one level down.** A secret one level into the block — a `headers` value such as
+`Authorization`, an `oauth.client_secret` — now reads `[stored]` like an `env` value (only `env` was
+masked before, and a header came back as written), and saving `[stored]` keeps the stored value.
+`auth: oauth` reads as it is: it names how the server signs in, not a credential.
+
+Rejected: the hub doing the OAuth exchange itself (a second implementation of what Hermes does, and
+the tokens would pass through the hub); Hermes's own `dashboard.public_url` (it changes the whole
+dashboard's address and would send the browser to a path under `/api` the hub does not serve);
+asking the person to type the redirect URI; returning the token's expiry from `expires_in` without
+the file time (wrong after a restart); a `hub_url` taken without checking (anything but `http(s)`
+without credentials is `400`).

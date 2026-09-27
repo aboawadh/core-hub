@@ -122,7 +122,7 @@ function hub(options: { status?: OAuthStatus; testError?: string | null } = {}) 
     server_name: 'clickup',
     status: state,
     authorization_url: AUTHORIZE,
-    redirect_uri: 'http://localhost:3000/api/v1/mcp-oauth/callback/clickup',
+    redirect_uri: 'https://hub.example/cb',
     error: null,
     tools,
     expires_at: '2026-09-27T09:00:00Z',
