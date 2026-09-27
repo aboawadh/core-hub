@@ -8,11 +8,17 @@
 //   node apps/ios/scripts/asc-review-detail.mjs <bundle id> <marketing version>
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { EDITABLE } from './asc-prepare-submission.mjs';
 import { createClient, findApp } from './testflight-distribute.mjs';
 
 const q = encodeURIComponent;
 
-/** The iOS App Store version `version` of `appId`, created in "Prepare for Submission" if missing. */
+/**
+ * The iOS App Store version `version` of `appId`. When it is missing and the app already has a
+ * version that was never released and can still be edited (say 1.1.3, left in "Prepare for
+ * Submission"), that version is renamed to `version`: App Store Connect allows only one such
+ * version at a time and refuses to create another. Otherwise a new one is created.
+ */
 export async function ensureVersion(api, appId, version) {
   const res = await api(
     'GET',
@@ -20,6 +26,19 @@ export async function ensureVersion(api, appId, version) {
   );
   const found = (res.data ?? [])[0];
   if (found) return found;
+  const all = await api('GET', `/apps/${appId}/appStoreVersions?filter[platform]=IOS&limit=20`);
+  const open = (all.data ?? []).find((v) =>
+    EDITABLE.has(v.attributes?.appVersionState ?? v.attributes?.appStoreState),
+  );
+  if (open) {
+    const renamed = await api('PATCH', `/appStoreVersions/${open.id}`, {
+      data: { type: 'appStoreVersions', id: open.id, attributes: { versionString: version } },
+    });
+    console.log(
+      `App Store version ${open.attributes?.versionString} was never released; renamed it to ${version}.`,
+    );
+    return renamed.data ?? open;
+  }
   const made = await api('POST', '/appStoreVersions', {
     data: {
       type: 'appStoreVersions',
