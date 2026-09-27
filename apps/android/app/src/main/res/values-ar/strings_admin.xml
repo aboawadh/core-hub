@@ -89,6 +89,14 @@
     <string name="admin_profiles_import_too_large">الأرشيف أكبر مما يقبله المركز في الرفع (50 ميغابايت).</string>
     <string name="admin_profiles_import_unreadable">تعذّرت قراءة هذا الملف على الجوال.</string>
     <string name="admin_profiles_import_done">استُورد %1$s.</string>
+    <string name="admin_profiles_import_replace_default">استبدل البروفايل الافتراضي بهذا</string>
+    <string name="admin_profiles_import_replace_default_hint">للانتقال من برنامج آخر: يصير الأرشيف البروفايل الافتراضي، ويُحفظ الافتراضي الحالي نسخةً احتياطية يمكنك الرجوع إليها.</string>
+    <string name="admin_profiles_import_replace_name_hint">يأخذ البروفايل الافتراضي هذا الاسم.</string>
+    <string name="admin_profiles_import_replace_confirm_title">استبدال البروفايل الافتراضي؟</string>
+    <string name="admin_profiles_import_replace_confirm_body">سيُستبدل بروفايلك الافتراضي الحالي بهذا الأرشيف، ويصير الأرشيف هو الافتراضي. ويُحفظ الحالي كاملًا بروفايلًا جديدًا باسم ⁦default-backup⁩ (أو الاسم الحر التالي): تنتقل معه ذاكرته ومهاراته ومحادثات هرمز ومهامه المجدولة وقنواته، وتبقى قنواته تجيب من هناك. المحادثة الجارية الآن تتوقف. والمزوّدون المشتركون ومفاتيحهم يبقون مع الافتراضي. وإن فشل شيء فلا يتغير شيء.</string>
+    <string name="admin_profiles_import_replace_confirm">استبدل الافتراضي</string>
+    <string name="admin_profiles_import_replace_done">بروفايلك الافتراضي السابق محفوظ باسم «⁦%1$s⁩»، ويمكنك حذفه متى شئت.</string>
+    <string name="admin_profiles_import_replace_unsupported">هذا المركز أقدم من هذا الخيار: استُورد الأرشيف بروفايلًا جديدًا باسم ⁦%1$s⁩، والافتراضي لم يتغير.</string>
     <string name="admin_push_title">مرسِلات الإشعارات</string>
     <string name="admin_push_intro">Web Push (المتصفحات وتطبيق سطح المكتب) يعمل دون أي إعداد. أما أندرويد (FCM) وآيفون (APNs) فيحتاجان إلى بيانات اعتماد المالك.</string>
     <string name="admin_push_provider_webpush">Web Push</string>

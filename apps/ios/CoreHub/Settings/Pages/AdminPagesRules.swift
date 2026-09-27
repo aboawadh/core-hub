@@ -135,9 +135,22 @@ enum ProfileRules {
         return (slug, !named.isEmpty && named != base ? named : slug)
     }
 
-    static func importBody(attachmentID: String, slug: String, name: String) -> ProfileImport {
+    static func importBody(attachmentID: String, slug: String, name: String, replaceDefault: Bool = false) -> ProfileImport {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ProfileImport(attachmentId: attachmentID, slug: slug, name: trimmed.isEmpty ? nil : trimmed)
+        guard replaceDefault else {
+            return ProfileImport(attachmentId: attachmentID, slug: slug, name: trimmed.isEmpty ? nil : trimmed)
+        }
+        // Replacing the default makes no new profile: the hub does not use the slug, which is still sent (decision §116).
+        let sent = slugProblem(slug, taken: []) == nil ? slug : "imported"
+        return ProfileImport(attachmentId: attachmentID, slug: sent, name: trimmed.isEmpty ? nil : trimmed, replaceDefault: true)
+    }
+
+    /// The profile an import into the default kept the old default as (`default-backup`, `-2`, …; decision §116).
+    /// Nil for any other import — and for a hub older than the option, which made a new profile instead.
+    static func replacedBackup(_ job: Job?) -> String? {
+        guard let job, job.status == .succeeded, let result = job.result,
+              case .bool(true)? = result["replaced_default"], case .dictionary(let backup)? = result["backup"] else { return nil }
+        return text(backup["slug"])
     }
 
     static func finished(_ job: Job?) -> Bool {

@@ -36,6 +36,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import okhttp3.OkHttpClient
@@ -168,8 +169,29 @@ object ProfileRules {
         return slug to (if (named.isNotEmpty() && named != base) named else slug)
     }
 
-    fun import(attachmentId: String, slug: String, name: String): ProfileImport =
-        ProfileImport(attachmentId = attachmentId, slug = slug, name = name.trim().ifEmpty { null })
+    fun import(attachmentId: String, slug: String, name: String, replaceDefault: Boolean = false): ProfileImport =
+        if (!replaceDefault) {
+            ProfileImport(attachmentId = attachmentId, slug = slug, name = name.trim().ifEmpty { null })
+        } else {
+            // Replacing the default makes no new profile: the hub does not use the slug, which is still sent (decision §116).
+            ProfileImport(
+                attachmentId = attachmentId,
+                slug = if (slugProblem(slug, emptyList()) == null) slug else "imported",
+                name = name.trim().ifEmpty { null },
+                replaceDefault = true,
+            )
+        }
+
+    /**
+     * The profile an import into the default kept the old default as (`default-backup`, `-2`, …; decision §116).
+     * Null for any other import — and for a hub older than the option, which made a new profile instead.
+     */
+    fun replacedBackup(job: Job?): String? {
+        if (job?.status != JobStatus.SUCCEEDED) return null
+        val result = job.result ?: return null
+        if ((result["replaced_default"] as? JsonPrimitive)?.booleanOrNull != true) return null
+        return (result["backup"] as? JsonObject)?.text("slug")
+    }
 
     fun finished(job: Job?): Boolean = job != null && job.status in setOf(JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED)
 

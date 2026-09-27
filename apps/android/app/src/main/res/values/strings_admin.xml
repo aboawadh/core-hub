@@ -89,6 +89,14 @@
     <string name="admin_profiles_import_too_large">The archive is larger than the hub accepts for an upload (50 MB).</string>
     <string name="admin_profiles_import_unreadable">That file could not be read on this phone.</string>
     <string name="admin_profiles_import_done">%1$s was imported.</string>
+    <string name="admin_profiles_import_replace_default">Replace the default profile with this one</string>
+    <string name="admin_profiles_import_replace_default_hint">For moving here from another program: the archive becomes the default profile, and the current default is kept as a backup you can switch back to.</string>
+    <string name="admin_profiles_import_replace_name_hint">The default profile takes this name.</string>
+    <string name="admin_profiles_import_replace_confirm_title">Replace the default profile?</string>
+    <string name="admin_profiles_import_replace_confirm_body">Your current default profile will be replaced by this archive, and the archive becomes the default. The current one is kept whole as a new profile named default-backup (or the next free name): its memory, skills, Hermes conversations, schedules and channels go with it, and its channels keep answering from there. A conversation running right now stops. Shared providers and their keys stay with the default. If anything fails, nothing changes.</string>
+    <string name="admin_profiles_import_replace_confirm">Replace the default</string>
+    <string name="admin_profiles_import_replace_done">Your previous default is kept as “%1$s”; you can delete it any time.</string>
+    <string name="admin_profiles_import_replace_unsupported">This hub is older than this option: the archive was imported as a new profile, %1$s, and the default is unchanged.</string>
     <string name="admin_push_title">Push senders</string>
     <string name="admin_push_intro">Web Push (browsers and the desktop app) works with nothing to set up. Android (FCM) and iPhone (APNs) need the owner\'s credentials.</string>
     <string name="admin_push_provider_webpush">Web Push</string>
