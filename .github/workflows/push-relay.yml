@@ -89,13 +89,19 @@ jobs:
         if: env.DOMAIN != ''
         run: |
           [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo '::error::the domain is not a hostname'; exit 1; }
-          # The custom domain only: no second, workers.dev address to guard.
-          sed -i 's/^workers_dev = true$/workers_dev = false/' wrangler.toml
+          # The custom domain AND the free workers.dev address (owner, 2026-09-28): hubs are built
+          # with the workers.dev one, which keeps working if the domain ever changes.
           printf '\n[[routes]]\npattern = "%s"\ncustom_domain = true\n' "$DOMAIN" >> wrangler.toml
       - name: Apply the relay's migrations
         run: $WRANGLER d1 migrations apply corehub-push-relay --remote
       - name: Deploy
-        run: $WRANGLER deploy
+        run: |
+          $WRANGLER deploy | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -n 1 || true)
+          if [ -n "$url" ]; then
+            echo "WORKERS_DEV_URL=$url" >> "$GITHUB_ENV"
+            echo "::notice::workers.dev address: $url"
+          fi
       # The keys go from the repository's secrets straight into the Worker's secrets (stdin, never
       # the command line or the log). HUB_SECRET_KEY is made once and never replaced: changing it
       # would cut off every registered hub. ADMIN_TOKEN is left to the owner (unset = no admin).
@@ -127,3 +133,8 @@ jobs:
         run: |
           sleep 10
           curl -fsS "https://$DOMAIN/v1/health" || echo '::warning::the custom domain did not answer yet (DNS and its certificate can take a few minutes)'
+      - name: Health on workers.dev
+        if: env.WORKERS_DEV_URL != ''
+        run: |
+          sleep 10
+          curl -fsS "$WORKERS_DEV_URL/v1/health" || echo '::warning::the workers.dev address did not answer yet (it can take a minute after it is first switched on)'
