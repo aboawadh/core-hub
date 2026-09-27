@@ -237,6 +237,89 @@ export async function deliverSend(
   return { result: resultOf(delivered, failures), notes };
 }
 
+/** What trying one step on its own did (`WorkflowStepTestResult`, §127). */
+export interface StepTestResult {
+  rendered: string | null;
+  answer: boolean | null;
+  output: string | null;
+  error: string | null;
+  executed: boolean;
+}
+
+/**
+ * One step tried with a sample (§127): nothing is saved and no run is made. A condition
+ * answers; a template is rendered; an agent step runs a real turn only when asked to; a
+ * "Send message" step is only rendered — its own "Send test message" is what sends.
+ */
+export async function testStep(
+  ports: WorkflowPorts,
+  scope: RunScope,
+  node: WorkflowNode,
+  ctx: Context,
+  execute: boolean,
+): Promise<StepTestResult> {
+  const base: StepTestResult = {
+    rendered: null,
+    answer: null,
+    output: null,
+    error: null,
+    executed: false,
+  };
+  let rendered: string | null = null;
+  try {
+    if (node.kind === 'condition') {
+      rendered = hasRules(node.rules) ? rulesText(node.rules) : (node.input ?? '');
+      const answer = hasRules(node.rules)
+        ? evaluateRules(node.rules, ctx)
+        : evaluate(parseCondition(rendered), ctx);
+      return { ...base, rendered, answer, output: String(answer), executed: true };
+    }
+    rendered = render(node.input ?? '', ctx);
+    if (node.kind === 'delay') {
+      const seconds = Number(rendered.trim());
+      if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_DELAY_SECONDS) {
+        return {
+          ...base,
+          rendered,
+          error: `"${rendered}" is not 0 to ${MAX_DELAY_SECONDS} seconds`,
+        };
+      }
+      return { ...base, rendered, output: String(seconds) };
+    }
+    if (node.kind !== 'agent' || !execute) return { ...base, rendered };
+    if (!node.agent_id) return { ...base, rendered, error: 'this step names no agent' };
+    if (!rendered.trim())
+      return { ...base, rendered, error: 'this step has no prompt for the agent' };
+    if (!ports.agentTurn) return { ...base, rendered, error: 'this hub cannot run an agent' };
+    const turn = await ports.agentTurn(scope, {
+      agentId: node.agent_id,
+      prompt: rendered,
+      title: `${node.title || node.id} (test)`,
+      model: node.model ?? null,
+      provider: node.provider ?? null,
+    });
+    return {
+      ...base,
+      rendered,
+      output: turn.output,
+      error:
+        turn.status === 'succeeded' ? null : (turn.error ?? `the agent's run ended ${turn.status}`),
+      executed: true,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      rendered,
+      error:
+        error instanceof ConditionError
+          ? error.reason
+          : error instanceof Error
+            ? error.message
+            : String(error),
+    };
+  }
+}
+
 /** What the engine needs from the rest of the hub. Composed in `modules/index.ts`. */
 export interface WorkflowPorts {
   /** Where a "Send message" step's words go (§124); absent, such a step fails saying so. */
@@ -734,6 +817,45 @@ export class WorkflowEngine {
       stopped_by: stoppedBy as StoppedBy | null,
     });
     this.announceFinished(run, { status: failed ? 'failed' : 'succeeded', error: failed });
+    if (failed) await this.alertFailure(service, scope, run, failed);
+  }
+
+  /**
+   * A run failed: whoever its workflow says is told (§127) — the run owner's inbox, and the
+   * targets of its alert (Telegram, a conversation), sent once for the run.
+   */
+  private async alertFailure(
+    service: SchedulesService,
+    scope: RunScope,
+    run: WorkflowRunRow,
+    error: string,
+  ): Promise<void> {
+    const alert = (run.definitionSnapshot as WorkflowDefinition).onFailure;
+    if (!alert) return;
+    const name = service.workflowById(run.workflowId)?.name ?? 'Workflow';
+    const text = `${name}: the run failed.\n${error}`;
+    try {
+      if (alert.inbox && this.ports.notice) {
+        this.ports.notice(scope, { title: `${name}: run failed`, body: error });
+      }
+      if (alert.send && hasSend(alert.send)) {
+        const runKey = service.rootRunOf(run);
+        await deliverSend(
+          this.ports.messages,
+          scope,
+          alert.send,
+          text,
+          {
+            seen: (target, part) => service.sentPart(runKey, '__on_failure', target, part),
+            keep: (target, part, id) =>
+              service.recordSent(run, { runKey, nodeKey: '__on_failure', target, part }, id),
+          },
+          () => undefined,
+        );
+      }
+    } catch (failure) {
+      this.log.warn({ err: failure, workflowRunId: run.id }, 'workflow: failure alert failed');
+    }
   }
 
   private async step(

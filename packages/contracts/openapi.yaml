@@ -12907,6 +12907,55 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /workflows/test-step:
+    post:
+      operationId: schedules.testWorkflowStep
+      tags: [schedules]
+      summary: Try one step on its own with a sample input (nothing is saved, no run is made)
+      parameters:
+        - $ref: '#/components/parameters/Profile'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowStepTest'
+            example:
+              node:
+                id: only_new
+                kind: condition
+                title: 'جديدة فقط'
+                agent_id: null
+                model: null
+                provider: null
+                reasoning_effort: null
+                skills: []
+                input: 'trigger.event == taskCreated'
+                approval_required: false
+                position: { x: 0, y: 0 }
+              trigger:
+                event: taskCreated
+                task_id: 86a1b2c3d
+      x-rt-events: []
+      responses:
+        '200':
+          description: What the step did with the sample.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowStepTestResult'
+              example:
+                rendered: 'trigger.event == taskCreated'
+                answer: true
+                output: 'true'
+                error: null
+                executed: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /workflow-imports:
     post:
       operationId: schedules.previewWorkflowImport
@@ -25258,6 +25307,13 @@ components:
               description: Enabled schedules targeting this workflow.
             limits:
               $ref: '#/components/schemas/WorkflowLimits'
+            on_failure:
+              description: >-
+                Who is told when a run of this workflow fails (DECISIONS §127); `null` (or absent,
+                from an older hub) tells nobody beyond the run's own record.
+              oneOf:
+                - $ref: '#/components/schemas/WorkflowFailureAlert'
+                - type: 'null'
     WorkflowWrite:
       type: object
       properties:
@@ -25284,6 +25340,13 @@ components:
             Replaces the workflow's limits as a whole; a new workflow without it has none. A
             cost limit in a currency other than USD, or not above zero, is `409` with
             `details.reason = limit_invalid` and `details.field`.
+        on_failure:
+          description: >-
+            Replaces who is told when a run fails; `null` tells nobody. Left out, it stays as
+            it is (DECISIONS §127).
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowFailureAlert'
+            - type: 'null'
     WorkflowCheck:
       type: object
       description: >-
@@ -25311,6 +25374,13 @@ components:
           description: >-
             The limits saving would store; a cost limit in a currency other than USD, or not
             above zero, is reported the way saving reports it.
+        on_failure:
+          description: >-
+            Replaces who is told when a run fails; `null` tells nobody. Left out, it stays as
+            it is (DECISIONS §127).
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowFailureAlert'
+            - type: 'null'
     WorkflowStepStatus:
       type: string
       enum:
@@ -25478,6 +25548,15 @@ components:
               description: >-
                 The run ended because a condition step said no and nothing followed it: the
                 event was not one to act on. The run is `succeeded`; nobody is alerted.
+            phase:
+              type: string
+              description: >-
+                Where the run is, in words a person follows (DECISIONS §127), worked out from its
+                steps: `received` (nothing has started yet), `analyzing` (an agent step works
+                before any approval), `needs_input` (waiting for a person), `approved` (an
+                approval said yes and the next step has not started), `executing` (working after
+                an approval, or a step that is not an agent's), `completed`, `failed`. A plain
+                string: a client shows a value it does not know as it is.
     WorkflowLimits:
       type: object
       description: >-
@@ -25816,6 +25895,63 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Ulid'
             - type: 'null'
+    WorkflowFailureAlert:
+      type: object
+      description: >-
+        Who is told when a run fails (DECISIONS §127): the run owner's inbox, and optionally the
+        targets of a "Send message" step (Telegram, a conversation), with the workflow's name
+        and the run's error.
+      required: [inbox]
+      properties:
+        inbox:
+          type: boolean
+        send:
+          oneOf:
+            - $ref: '#/components/schemas/WorkflowSend'
+            - type: 'null'
+    WorkflowStepTest:
+      type: object
+      description: >-
+        One step tried on its own with a sample (DECISIONS §127). Nothing is saved and no run is
+        made. A condition answers yes or no; a template (an agent's prompt, a message, a
+        question) is rendered; an agent step runs a real turn only with `execute: true`; a
+        "Send message" step is only rendered (its "Send test message" sends).
+      required: [node]
+      properties:
+        node:
+          $ref: '#/components/schemas/WorkflowNode'
+        input:
+          type: [string, 'null']
+          maxLength: 20000
+          description: The sample `{{input}}`.
+        trigger:
+          description: The sample `{{trigger.*}}` — for a trigger's run, `{ event, task_id, body, … }`.
+        steps:
+          type: object
+          additionalProperties:
+            type: [string, 'null']
+          description: Sample outputs of earlier steps, by step id (`{{steps.<id>.output}}`).
+        execute:
+          type: boolean
+          description: An agent step runs a real turn with the rendered prompt.
+    WorkflowStepTestResult:
+      type: object
+      required: [rendered, answer, output, error, executed]
+      properties:
+        rendered:
+          type: [string, 'null']
+          description: The step's words with the sample filled in (a condition's rules in words).
+        answer:
+          type: [boolean, 'null']
+          description: A condition's yes (`true`) or no (`false`); `null` for another step.
+        output:
+          type: [string, 'null']
+          description: What the step produced, when it was run (an agent's answer).
+        error:
+          type: [string, 'null']
+          description: Why the step could not be tried or failed, in words.
+        executed:
+          type: boolean
     WorkflowSend:
       type: object
       description: >-

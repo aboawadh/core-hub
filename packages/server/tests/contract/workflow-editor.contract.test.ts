@@ -313,4 +313,32 @@ describe.skipIf(!doc)('contract: the workflow editor', () => {
       body: { text: 'x', send: { targets: [{ platform: 'fax' }] } },
     });
   });
+
+  it('testWorkflowStep and a failure alert, as the contract says (§127)', async () => {
+    const answer = await call('schedules.testWorkflowStep', 200, {
+      body: {
+        node: node('gate', 'condition', 'trigger.event == taskCreated'),
+        trigger: { event: 'taskCreated' },
+      },
+    });
+    expect(answer).toMatchObject({ answer: true, executed: true, error: null });
+    const workflow = await call('schedules.createWorkflow', 201, {
+      body: {
+        name: 'مع تنبيه',
+        nodes: [node('tell', 'notify', 'x')],
+        edges: [],
+        on_failure: { inbox: true, send: null },
+      },
+    });
+    expect(workflow.on_failure).toEqual({ inbox: true, send: null });
+    const run = await call('schedules.runWorkflow', 202, {
+      params: { workflow_id: workflow.id as string },
+      body: { input: null },
+    });
+    await workflowEngineFor(hub.app).settled();
+    const done = await call('schedules.getWorkflowRun', 200, {
+      params: { workflow_run_id: run.workflow_run_id as string },
+    });
+    expect(done.phase).toBe('completed');
+  });
 });

@@ -216,7 +216,12 @@ export type WorkflowDefinition = {
   workingDir?: string | null;
   /** Absent in a definition saved before limits existed: none. */
   limits?: WorkflowLimits;
+  /** Who is told when a run fails (DECISIONS §127); absent or `null`: nobody. */
+  onFailure?: WorkflowFailureAlert | null;
 };
+
+/** The contract's `WorkflowFailureAlert`. */
+export type WorkflowFailureAlert = { inbox: boolean; send: WorkflowSend | null };
 
 export const schedules = sqliteTable(
   'schedules',

@@ -42,13 +42,14 @@ import {
   type Scope,
   type WorkflowRunRow,
 } from './service.js';
-import type { WorkflowDefinition, WorkflowSend } from './schema.js';
+import type { WorkflowDefinition, WorkflowNode, WorkflowSend } from './schema.js';
 import { HermesCron, refusedByHermesCron, type HermesCronPort } from './hermes-cron.js';
 import { sendProblems } from './send.js';
 import {
   WorkflowEngine,
   costOf,
   deliverSend,
+  testStep,
   stepOf,
   stoppedByOf,
   type RunScope,
@@ -604,6 +605,7 @@ function toWorkflow(
     run_count: counts.runs,
     schedule_count: counts.schedules,
     limits: definition.limits ?? { ...NO_LIMITS },
+    on_failure: definition.onFailure ?? null,
   };
 }
 
@@ -649,7 +651,33 @@ function toWorkflowRun(
     event_id: row.eventId ?? null,
     task_id: row.taskId ?? null,
     filtered: (row.output as { filtered?: unknown } | null)?.filtered === true,
+    phase: phaseOf(row, steps),
   };
+}
+
+/**
+ * Where a run is, in a person's words (§127), from its status and its steps: nothing started
+ * yet, an agent reading before any approval, waiting for a person, just approved, working
+ * after an approval (or a step that is not an agent's), done, or failed.
+ */
+export function phaseOf(
+  row: Pick<WorkflowRunRow, 'status'>,
+  steps: ReadonlyArray<{ nodeType: string; status: string; id: string }>,
+): string {
+  if (row.status === 'waiting_approval' || row.status === 'paused') return 'needs_input';
+  if (row.status === 'succeeded') return 'completed';
+  if (row.status === 'failed' || row.status === 'timed_out' || row.status === 'cancelled') {
+    return 'failed';
+  }
+  if (steps.length === 0) return 'received';
+  const ordered = [...steps].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const approvedAt = ordered.findIndex(
+    (step) => step.nodeType === 'approval' && step.status === 'succeeded',
+  );
+  const active = ordered.find((step) => step.status === 'running');
+  if (approvedAt === -1) return active?.nodeType === 'agent_run' ? 'analyzing' : 'executing';
+  const after = ordered.slice(approvedAt + 1);
+  return after.length === 0 ? 'approved' : 'executing';
 }
 
 /**
@@ -1328,6 +1356,28 @@ export const schedulesModule = defineModule({
           () => undefined,
         );
         return result;
+      },
+    });
+
+    defineRoute(app, deps, {
+      operationId: 'schedules.testWorkflowStep',
+      handler: async (request, { body }) => {
+        const scope = runScopeOf(request);
+        const ask = body as {
+          node: WorkflowNode;
+          input?: string | null;
+          trigger?: unknown;
+          steps?: Record<string, string | null>;
+          execute?: boolean;
+        };
+        const ctx = {
+          trigger: ask.trigger ?? null,
+          steps: Object.fromEntries(
+            Object.entries(ask.steps ?? {}).map(([id, output]) => [id, { output }]),
+          ),
+          input: ask.input ?? '',
+        };
+        return testStep(portsFor(request.server), scope, ask.node, ctx, ask.execute === true);
       },
     });
 

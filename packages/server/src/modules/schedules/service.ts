@@ -30,7 +30,9 @@ import {
   type ScheduleOverlap,
   type WorkflowDefinition,
   type WorkflowEdge,
+  type WorkflowFailureAlert,
   type WorkflowLimits,
+  type WorkflowSend,
   type WorkflowNode,
   type WorkflowResumeState,
 } from './schema.js';
@@ -884,7 +886,8 @@ export class SchedulesService {
       patch.nodes !== undefined ||
       patch.edges !== undefined ||
       patch.working_dir !== undefined ||
-      patch.limits !== undefined
+      patch.limits !== undefined ||
+      patch.on_failure !== undefined
     ) {
       const definition = definitionOf({
         nodes:
@@ -894,6 +897,10 @@ export class SchedulesService {
         edges: patch.edges ?? current.definition.edges,
         working_dir: patch.working_dir ?? current.definition.workingDir ?? null,
         limits: patch.limits !== undefined ? patch.limits : (current.definition.limits ?? null),
+        on_failure:
+          patch.on_failure !== undefined
+            ? patch.on_failure
+            : (current.definition.onFailure ?? null),
       });
       const problems = validateDefinition(definition);
       if (problems.length > 0) throw conflict({ reason: 'workflow_invalid', problems });
@@ -1403,6 +1410,15 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
   };
 }
 
+/** Who is told when a run fails (§127), as stored; anything unreadable is nobody. */
+export function failureAlertOf(value: unknown): WorkflowFailureAlert | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { inbox?: unknown; send?: unknown };
+  const send = hasSend(raw.send as WorkflowSend) ? (raw.send as WorkflowSend) : null;
+  const inbox = raw.inbox === true;
+  return inbox || send ? { inbox, send } : null;
+}
+
 /**
  * An app that does not know a condition's `rules` (§123) or a notice's `send` (§124) sends the
  * node without the field; what the saved node with the same id had is kept rather than erased.
@@ -1431,6 +1447,7 @@ export function definitionOf(input: Record<string, unknown>): WorkflowDefinition
     edges: ((input.edges as WorkflowEdge[] | undefined) ?? []).map((edge) => ({ ...edge })),
     workingDir: (input.working_dir as string | null | undefined) ?? null,
     limits: limitsOf(input.limits),
+    onFailure: failureAlertOf(input.on_failure),
   };
 }
 
@@ -1592,6 +1609,16 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
           ),
         );
       }
+    }
+  }
+  // Who is told when a run fails (§127): its targets are checked like a send step's.
+  if (definition.onFailure?.send) {
+    for (const found of sendProblems(definition.onFailure.send)) {
+      problems.push(
+        issue(found.code, `the failure alert cannot be sent (${found.code})`, {
+          detail: found.index === null ? null : String(found.index + 1),
+        }),
+      );
     }
   }
   return problems;
