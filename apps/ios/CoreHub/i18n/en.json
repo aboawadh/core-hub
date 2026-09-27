@@ -43,7 +43,9 @@
     "files": "Files",
     "terminal": "Terminal",
     "config_files": "Config files",
-    "linked_hubs": "Linked hubs"
+    "linked_hubs": "Linked hubs",
+    "workflows": "Workflows",
+    "tools": "Tools"
   },
   "common": {
     "cancel": "Cancel",
