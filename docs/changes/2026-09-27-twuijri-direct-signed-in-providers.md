@@ -123,6 +123,7 @@ MiniMax على Messages بـ Bearer)، دور Codex كامل ببثّ `/response
 
 ## التسليم والخطوة التالية
 - PR: https://github.com/twuijri/core-hub/pull/191 (إلى `main`، بالإنجليزية). الدمج للمالك وحده.
-- CI: يُحدَّث هنا بعد انتهائه.
+- CI على الـ PR (تشغيل 36319171196): أخضر كله — Lint/typecheck/contracts/tests/build، وخوادم الوحدات بشظاياها الثلاث،
+  ورحلات الويب (Playwright ضد المركز الحقيقي)، وصورة Docker و`/health`، واختبار سطح المكتب، وترحيلات SQLite وPostgreSQL.
 - الخطوة التالية للمالك: تأكيد §118، ثم تجربة دور حقيقي مع «برق» على حساب مسجَّل الدخول (Nous Portal واشتراك ChatGPT)
   في صورة الاختبار.
