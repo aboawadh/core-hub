@@ -10,6 +10,8 @@ enum MainContent: Equatable {
     case chat(sessionID: String, profile: String)
     /// One room, opened from the Rooms segment, in its own profile.
     case room(roomID: String, profile: String)
+    /// A conversation Hermes keeps on a channel (Telegram, WhatsApp…), read-only (§61).
+    case channel(conversationID: String, profile: String)
     case destination(DestinationID)
     case settings
 }
@@ -56,6 +58,7 @@ struct ShellView: View {
                         openSession: { session in
                             navigate(.chat(sessionID: session.id, profile: session.profile))
                         },
+                        selectedChannel: selectedChannel,
                         close: { setDrawer(false) }
                     )
                     .frame(width: min(Layout.sidebarWidth + Space.s8, geometry.size.width * 0.86))
@@ -132,6 +135,11 @@ struct ShellView: View {
         return nil
     }
 
+    private var selectedChannel: String? {
+        if case .channel(let id, _) = main { return id }
+        return nil
+    }
+
     @ViewBuilder
     private var page: some View {
         switch main {
@@ -199,6 +207,16 @@ struct ShellView: View {
                 onGone: { navigate(.newChat) }
             )
             .id(roomID)
+        case .channel(let conversationID, let profile):
+            ChannelConversationScreen(
+                model: ChannelConversationModel(app: app, conversationID: conversationID, profile: profile),
+                continued: { sessionID, profile, first in
+                    firstMessages.put(sessionID, first)
+                    main = .chat(sessionID: sessionID, profile: profile)
+                },
+                gone: { navigate(.newChat) }
+            )
+            .id(conversationID)
         case .destination(.tasks):
             TasksScreen(openChat: { sessionID, profile in navigate(.chat(sessionID: sessionID, profile: profile)) })
         case .destination(.schedules):

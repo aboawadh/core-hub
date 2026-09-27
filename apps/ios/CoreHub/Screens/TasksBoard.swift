@@ -180,6 +180,8 @@ struct TaskBoardView: View {
         .task(id: projectFilter) { await load() }
         .task { await loadProjects() }
         .refreshable { await load() }
+        // What an agent or another device does to a card shows here as it happens (`/rt/tasks`).
+        .liveReload("/rt/tasks", events: ["task.", "project.", "subtask.", "comment.", "worktree."]) { await load() }
         .sheet(isPresented: $managing) {
             ProjectsSheet(changed: { Task { await loadProjects(); await load() } })
         }

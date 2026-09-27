@@ -1,0 +1,32 @@
+{
+  "updates_admin": {
+    "source": "Source and channel",
+    "default_channel": "Default channel",
+    "channel_stable": "Stable",
+    "channel_test": "Test",
+    "from_source": "Fetch releases from a repository",
+    "from_source_hint": "The hub reads GitHub releases itself instead of you uploading them.",
+    "repo": "Repository",
+    "repo_hint": "As owner/repo.",
+    "token": "Token",
+    "token_hint": "For a private repository. Written once, never shown.",
+    "token_stored": "Stored. Type a new one to replace it.",
+    "auto_publish": "Publish to the test channel automatically",
+    "auto_publish_hint": "Every new release at the source is published to test on its own.",
+    "shelf": "Releases",
+    "empty": "No releases",
+    "empty_body": "What is published here is what the phone and desktop apps find. None of them is built yet.",
+    "build": "Build",
+    "size": "Size",
+    "published": "Published",
+    "mandatory": "Mandatory",
+    "platform_android": "Android",
+    "platform_ios": "iOS",
+    "platform_macos": "macOS",
+    "platform_windows": "Windows",
+    "platform_linux": "Linux",
+    "delete_title": "Remove {version} from the shelf?",
+    "delete_body": "It disappears from the update list. A build already downloaded keeps working.",
+    "apps_note": "These are the releases the phone and desktop apps find when they check for an update."
+  }
+}

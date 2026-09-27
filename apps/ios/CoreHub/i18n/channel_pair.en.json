@@ -1,0 +1,21 @@
+{
+  "channel_pair": {
+    "title": "Link {name}",
+    "note": "Hermes pairs this profile's agent with a phone. Nothing is picked for you: choose, then scan the code.",
+    "continue": "Continue",
+    "starting": "Making the code…",
+    "qr_label": "The pairing code to scan",
+    "scan_hint": "On the phone that has the WhatsApp account, open WhatsApp → Settings → Linked devices → Link a device, and scan this code. If that is this phone, open this page in Core Hub on another screen (an iPad or a second phone) and scan it there.",
+    "expires": "The code is valid until {time}.",
+    "personal_warning": "Warning: if this is your personal number, everyone who messages it receives the agent’s pairing reply. Choose “Me (Message yourself)” instead.",
+    "done": "Linked. The agent answers on it after its next restart.",
+    "done_as": "Linked as {account}. The agent answers on it after its next restart.",
+    "done_now": "Linked. The agent answers on it now; the first person to message it waits for your approval here.",
+    "done_as_now": "Linked as {account}. The agent answers on it now; the first person to message it waits for your approval here.",
+    "done_self_now": "Linked. Open “Message yourself” in WhatsApp on your phone and write to the agent.",
+    "done_as_self_now": "Linked as {account}. Open “Message yourself” in WhatsApp on your phone and write to the agent.",
+    "failed": "The pairing failed.",
+    "cancelled": "The pairing was stopped.",
+    "again": "Start again"
+  }
+}

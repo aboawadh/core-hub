@@ -5,6 +5,7 @@
 //   node scripts/icons/lucide-mobile.mjs camera image     # add these names to the list, then write
 //   node scripts/icons/lucide-mobile.mjs --check          # exit 1 when a committed file differs
 //   node scripts/icons/lucide-mobile.mjs --android menu   # add names the Android app alone carries
+//   node scripts/icons/lucide-mobile.mjs --ios network    # add names the iOS app alone carries
 //
 // The list of names lives in scripts/icons/lucide-mobile.json, so the apps carry only the icons
 // they use. The shapes come from the pinned `lucide-static` package (its icon-nodes.json), never
@@ -32,6 +33,7 @@ const require = createRequire(import.meta.url);
 const args = process.argv.slice(2);
 const check = args.includes('--check');
 const androidOnly = args.includes('--android');
+const iosOnly = args.includes('--ios');
 const added = args.filter((a) => !a.startsWith('--'));
 
 const listFile = path.join(repo, 'scripts/icons/lucide-mobile.json');
@@ -41,20 +43,25 @@ const nodes = JSON.parse(readFileSync(path.join(pkgDir, 'icon-nodes.json'), 'utf
 
 const list = JSON.parse(readFileSync(listFile, 'utf8'));
 list.android ??= [];
+list.ios ??= [];
 for (const name of added) {
   if (!nodes[name]) throw new Error(`lucide-static ${version} has no icon named "${name}"`);
-  const target = androidOnly ? list.android : list.icons;
+  const target = androidOnly ? list.android : iosOnly ? list.ios : list.icons;
   if (!list.icons.includes(name) && !target.includes(name)) target.push(name);
 }
-// A name both apps carry is not listed again as Android's own.
+// A name both apps carry is not listed again as one app's own.
 list.android = list.android.filter((name) => !list.icons.includes(name));
+list.ios = list.ios.filter((name) => !list.icons.includes(name));
 list.icons.sort();
 list.android.sort();
-for (const name of [...list.icons, ...list.android]) {
+list.ios.sort();
+for (const name of [...list.icons, ...list.android, ...list.ios]) {
   if (!nodes[name]) throw new Error(`lucide-static ${version} has no icon named "${name}"`);
 }
 /** Every icon the Android app carries: the shared ones and its own. */
 const androidIcons = [...list.icons, ...list.android].sort();
+/** Every icon the iOS app carries: the shared ones and its own. */
+const iosIcons = [...list.icons, ...list.ios].sort();
 
 // ------------------------------------------------------------------ outlines
 
@@ -149,7 +156,7 @@ put(
   `${ios}/Contents.json`,
   json({ info: { author: 'xcode', version: 1 }, properties: { 'provides-namespace': true } }),
 );
-for (const name of list.icons) {
+for (const name of iosIcons) {
   const svgParts = parts(name)
     .map(
       (p) =>
@@ -214,7 +221,7 @@ put(
     `// The Lucide icons the app carries (scripts/icons/lucide-mobile.json), as template images.\n` +
     `import SwiftUI\n\n` +
     `enum Lucide: String, CaseIterable {\n` +
-    list.icons.map((n) => `    case ${swiftCase(n)} = "${n}"\n`).join('') +
+    iosIcons.map((n) => `    case ${swiftCase(n)} = "${n}"\n`).join('') +
     `}\n\n` +
     `extension Image {\n` +
     `    /// A Lucide icon as a template image: it takes the foreground colour, like an SF Symbol.\n` +
@@ -245,7 +252,7 @@ function stale() {
   const iosDir = path.join(repo, ios);
   if (existsSync(iosDir)) {
     for (const entry of readdirSync(iosDir)) {
-      if (entry.endsWith('.imageset') && !list.icons.includes(entry.replace(/\.imageset$/, ''))) {
+      if (entry.endsWith('.imageset') && !iosIcons.includes(entry.replace(/\.imageset$/, ''))) {
         found.push(`${ios}/${entry}`);
       }
     }
@@ -286,5 +293,5 @@ if (check) {
   if (added.length) writeFileSync(listFile, json(list));
 }
 console.log(
-  `lucide: ${list.icons.length} shared + ${list.android.length} Android icon(s) from lucide-static ${version} ${check ? 'up to date' : 'written'}`,
+  `lucide: ${list.icons.length} shared + ${list.android.length} Android + ${list.ios.length} iOS icon(s) from lucide-static ${version} ${check ? 'up to date' : 'written'}`,
 );

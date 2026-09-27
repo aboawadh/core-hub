@@ -75,13 +75,13 @@
     "or": "or",
     "scan": "Scan a pairing code",
     "paste": "Paste a pairing code",
-    "paste_hint": "The text of the QR code from Settings → Device connections on the web.",
+    "paste_hint": "The text of the QR code from Settings → Device connections, on a device already signed in (the web or another Core Hub app).",
     "pair": "Pair this phone",
     "pairing": "Pairing…",
     "invalid_url": "Enter the hub address, starting with http:// or https://",
     "pairing_invalid": "This is not a Core Hub pairing code.",
-    "pairing_expired": "This pairing code has expired. Make a new one on the web: Settings → Device connections.",
-    "scanner_hint": "On the web, open Settings → Device connections → App, and point the camera at the code.",
+    "pairing_expired": "This pairing code has expired. Make a new one on a device already signed in (the web or another Core Hub app): Settings → Device connections.",
+    "scanner_hint": "On a device already signed in (the web or another Core Hub app), open Settings → Device connections → App, and point the camera at the code.",
     "camera_denied": "Core Hub may not use the camera. Allow it in the iPhone Settings, or paste the code instead.",
     "camera_unavailable": "This device has no camera. Paste the code instead."
   },
@@ -202,9 +202,7 @@
     "back_to_chats": "Back to chats",
     "management": "Management",
     "tools": "Tools",
-    "global_note": "This page is the whole hub's, not one profile's.",
-    "on_the_web": "On the web",
-    "on_the_web_hint": "Opens in the browser: it needs a computer's screen."
+    "global_note": "This page is the whole hub's, not one profile's."
   },
   "permissions": {
     "camera": "Core Hub uses the camera to scan the pairing code your hub shows on the web, and to take photos you attach to a message.",
@@ -276,7 +274,6 @@
     "period": "Period"
   },
   "channels": {
-    "link_on_web": "Linking a channel (WhatsApp by QR, a Telegram bot) is done on the web; its state shows here.",
     "status_online": "Online",
     "status_offline": "Offline",
     "status_error": "Error",
@@ -292,8 +289,6 @@
     "approved": "Approved",
     "revoke": "Revoke",
     "qr_short": "Linked by scanning a code",
-    "qr_body": "{platform} links by scanning a code with the phone that has the account. This phone cannot scan its own screen: open the page on the web on another screen (a computer or a tablet) and scan it there.",
-    "open_web": "Open on the web",
     "bot_token": "Bot token",
     "allowed": "Allowed users, separated by commas (optional)",
     "pairs_note": "Anyone else who writes gets a code; you approve them here.",
@@ -371,7 +366,6 @@
   "models": {
     "count": "{count} models",
     "default": "Default model",
-    "edit_on_web": "Providers and keys are added and changed on the web.",
     "providers": "Providers"
   },
   "notifications": {
@@ -584,7 +578,7 @@
   },
   "workflows": {
     "empty": "No workflows yet",
-    "empty_body": "Workflows are drawn on the web; they run and are followed here.",
+    "empty_body": "No workflow yet. Make one with + above: add its steps and what follows each.",
     "state_idle": "Idle",
     "state_running": "Running",
     "state_waiting": "Waiting for you",
@@ -605,7 +599,6 @@
     "run": "Run",
     "runs": "Recent runs",
     "no_runs": "It has not run yet.",
-    "edit_on_web": "Steps and links are edited on the web.",
     "run_queued": "Queued",
     "run_running": "Running",
     "run_waiting": "Waiting for you",

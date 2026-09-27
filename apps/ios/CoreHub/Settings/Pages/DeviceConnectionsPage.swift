@@ -60,6 +60,20 @@ struct PairingMaker: View {
                         .environment(\.layoutDirection, .leftToRight)
                     Text(l10n("devices.expires", ["time": pairing.expiresAt.shortText(app.language)]))
                         .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    // The other device scanned it: said here, as the web says it (auth.getPairing).
+                    switch pairing.status {
+                    case .claimed:
+                        NoticeView(text: l10n("pairing_state.claimed"), tone: .success).accessibilityIdentifier("pairing.claimed")
+                    case .expired:
+                        NoticeView(text: l10n("pairing_state.expired"), tone: .warning).accessibilityIdentifier("pairing.expired")
+                    case .cancelled:
+                        NoticeView(text: l10n("pairing_state.cancelled"), tone: .info)
+                    case .pending:
+                        HStack(spacing: Space.s2) {
+                            ProgressView()
+                            Text(l10n("pairing_state.waiting")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                        }
+                    }
                 }
                 Button {
                     Task { await make() }
@@ -70,6 +84,21 @@ struct PairingMaker: View {
                 .disabled(busy)
             }
             .padding(Space.s4)
+        }
+        .task(id: pairing?.id) {
+            if let id = pairing?.id, pairing?.status == .pending { await watch(id) }
+        }
+    }
+
+    /// While the code waits, reads the pairing now and then until another device claims it.
+    private func watch(_ id: String) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if Task.isCancelled { return }
+            guard let current = try? await app.api.call({ try await AuthAPI.authGetPairing(pairingId: id, apiConfiguration: $0) }) else { continue }
+            guard pairing?.id == id else { return }
+            pairing = current
+            if current.status != .pending { return }
         }
     }
 

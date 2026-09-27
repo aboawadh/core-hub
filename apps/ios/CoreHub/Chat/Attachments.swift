@@ -12,6 +12,7 @@ import Foundation
 import Observation
 import PhotosUI
 import QuickLook
+import SafariServices
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -23,11 +24,17 @@ struct OutgoingMessage: Equatable {
     /// Photos sent at original quality go as files (as Telegram's «send as file»), whatever
     /// their kind: the agent gets the untouched bytes.
     var asFiles: Set<String> = []
+    /// Blocks the hub already made (a channel conversation continued here, §62): sent as they are.
+    var preset: [ContentBlock]? = nil
 
-    var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty }
+    var isEmpty: Bool {
+        if let preset { return preset.isEmpty }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
+    }
 
     /// The blocks `sessions.createRun` takes: the text, then one block per file (web: `blocksFor`).
     var blocks: [ContentBlock] {
+        if let preset { return preset }
         var blocks: [ContentBlock] = []
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { blocks.append(.typeTextBlock(TextBlock(type: .text, text: trimmed))) }
@@ -897,12 +904,18 @@ struct FileLinkOpener: ViewModifier {
     let sessionID: String?
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    /// Settings → Display, "Open links in": inside the app or in the Safari app.
+    @Environment(\.chatLook) private var look
     @State private var opener = FileOpener()
+    @State private var browsing: BrowsedLink?
 
     func body(content: Content) -> some View {
         content
             .environment(\.openURL, OpenURLAction { url in handle(url) })
             .fileOpener(opener)
+            .sheet(item: $browsing) { link in
+                SafariView(url: link.url).ignoresSafeArea()
+            }
             .alert(opener.notice ?? "", isPresented: Binding(get: { opener.notice != nil }, set: { if !$0 { opener.notice = nil } })) {
                 Button(l10n("common.close")) { opener.notice = nil }
             }
@@ -915,6 +928,11 @@ struct FileLinkOpener: ViewModifier {
             opener.open(file, profile: profile, app: app)
             return .handled
         }
+        // One of the hub's own pages opens that page in the app, never the hub's web page.
+        if let page = FileLinks.appLink(href, hub: hub) {
+            app.open(page)
+            return .handled
+        }
         guard FileLinks.word(of: href, hub: hub) != nil, let sessionID else { return outside(url) }
         let scope = profile.isEmpty ? app.currentProfile : profile
         Task {
@@ -923,21 +941,44 @@ struct FileLinkOpener: ViewModifier {
             }
             if let file = FileLinks.resolve(href, hub: hub, own: own, files: list?.items, sessionID: sessionID) {
                 opener.open(file, profile: profile, app: app)
-            } else if url.scheme == nil || url.host == nil {
-                opener.notice = l10n("attachments.link_failed")
             } else {
-                _ = await UIApplication.shared.open(url)
+                // A path on the hub that is neither a file of this conversation nor a page the app
+                // has: said here, never handed to a browser as a hub page.
+                opener.notice = l10n("attachments.link_failed")
             }
         }
         return .handled
     }
 
-    /// A whole address opens in the system; a word the phone cannot open says so.
+    /// A whole address opens in the app (a Safari view) or in the system, as the person chose; a
+    /// word the phone cannot open says so. Never a hub page: those opened in the app above.
     private func outside(_ url: URL) -> OpenURLAction.Result {
-        if url.scheme != nil { return .systemAction }
+        if let scheme = url.scheme?.lowercased() {
+            if look.linksInApp, scheme == "http" || scheme == "https" {
+                browsing = BrowsedLink(url: url)
+                return .handled
+            }
+            return .systemAction
+        }
         opener.notice = l10n("attachments.link_failed")
         return .handled
     }
+}
+
+/// An outside page shown in the app (Settings → Display, "Open links in: In the app").
+struct BrowsedLink: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
 
 /// The files of messages, kept in the app's caches under their own names (the system viewer

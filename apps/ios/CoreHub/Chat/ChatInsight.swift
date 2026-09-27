@@ -343,7 +343,7 @@ enum ChatInsightCalls {
 @Observable
 final class ChatInsightModel {
     enum Sheet: String, Identifiable {
-        case context, runs, subagents, changes, files
+        case context, runs, subagents, changes, files, trajectory
         var id: String { rawValue }
     }
 

@@ -1,4 +1,5 @@
-// Settings → Updates: this app's own update check.
+// Settings → Updates: this app's own update check, then (for owners and admins) where the hub takes
+// the app releases from and the shelf of published ones (UpdatesAdmin.swift).
 import CoreHubClient
 import CoreImage.CIFilterBuiltins
 import SwiftUI
@@ -29,6 +30,8 @@ struct UpdatesPage: View {
                     }
                     Button(l10n("updates.check")) { reload() }
                 }
+                // The hub's release source and shelf: the page is for owners and admins.
+                if app.isAdmin { UpdatesAdminSections() }
             }
         }
     }

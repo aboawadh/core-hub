@@ -257,8 +257,8 @@
         "kind": "settings-management"
       },
       "roles": ["admin"],
-      "surfaces": ["web", "desktop"],
-      "note": "Other Core Hubs linked to this one (ADR 0026): invite, redeem an invite, approve, rename, switch off, limit, unlink; which agents linked hubs may ask; each peer's shared agents and one question to one of them; each peer's audit log. Owners and admins; not on the phones yet."
+      "surfaces": ["web", "desktop", "ios"],
+      "note": "Other Core Hubs linked to this one (ADR 0026): invite, redeem an invite, approve, rename, switch off, limit, unlink; which agents linked hubs may ask; each peer's shared agents and one question to one of them; each peer's audit log. Owners and admins; on the iPhone too since 2026-09-27 (every section works in the app on its own); not on Android yet."
     },
     {
       "id": "chat",
@@ -507,7 +507,7 @@
         "kind": "settings-tool"
       },
       "roles": ["owner"],
-      "surfaces": ["web"],
+      "surfaces": ["web", "ios"],
       "global": true,
       "note": "A shell on the hub's host (DECISIONS §70). The owner only — not admins (owner, 2026-09-25) — and only while the hub runs with COREHUB_WEB_TERMINAL=1: a client shows the entry only when GET /terminal answers 200."
     },
@@ -738,6 +738,7 @@
       "agent_manager": "/agents",
       "models": "/settings/models",
       "knowledge": "/settings/knowledge",
+      "linked_hubs": "/settings/linked-hubs",
       "chat": "/chat/:sessionId?",
       "rooms": "/rooms/:roomId?",
       "tasks": "/tasks",
@@ -760,6 +761,7 @@
       "updates": "/settings/updates",
       "plugins": "/settings/plugins",
       "files": "/settings/files",
+      "terminal": "/settings/terminal",
       "agent_skills": "/agents/:agentId/skills",
       "agent_mcp": "/agents/:agentId/mcp",
       "agent_memory": "/agents/:agentId/memory",

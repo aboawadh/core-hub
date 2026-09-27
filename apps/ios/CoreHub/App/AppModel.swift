@@ -38,6 +38,8 @@ final class AppModel {
     private(set) var currentProfile: String = "default"
     /// The agents of the current profile, from the hub's registry.
     private(set) var agents: [Agent] = []
+    /// The person's display preferences (Settings → Display), as the chat draws them (ChatLook).
+    var preferences: Preferences?
     private(set) var connection: RealtimeClient.State = .offline
     /// Why the last sign-out happened, shown once on the sign-in screen.
     var notice: String?
@@ -330,6 +332,7 @@ final class AppModel {
             let list = try await api.call { try await AuthAPI.authListProfiles(apiConfiguration: $0) }
             let allowed = Set(credentials?.profiles ?? [])
             profiles = list.items.filter { allowed.contains($0.slug) }
+            if let saved = try? await api.call({ try await AuthAPI.authGetPreferences(apiConfiguration: $0) }) { preferences = saved }
         } catch {
             // The chat list says what failed; the shell keeps what it had.
         }
@@ -428,6 +431,10 @@ final class AppModel {
         case .chat:
             guard let id = params["sessionId"] else { return .newChat }
             let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            // `?source=channel`: the id is a conversation Hermes keeps on a channel (web `channelHref`).
+            if components.queryItems?.first(where: { $0.name == "source" })?.value == "channel" {
+                return .channel(conversationID: id, profile: profile)
+            }
             return .chat(sessionID: id, profile: profile)
         case .rooms:
             guard let id = params["roomId"] else { return .newChat }
