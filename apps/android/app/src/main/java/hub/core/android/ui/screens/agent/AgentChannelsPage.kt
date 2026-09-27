@@ -5,10 +5,10 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -32,8 +33,14 @@ import hub.core.android.data.HubError
 import hub.core.android.generated.FontTokens
 import hub.core.android.graph
 import hub.core.android.nav.AppPaths
+import hub.core.android.ui.components.ConfirmDelete
+import hub.core.android.ui.components.ConfirmDeleteDialog
 import hub.core.android.ui.components.ErrorNotice
+import hub.core.android.ui.components.InContentDirection
 import hub.core.android.ui.components.LoadView
+import hub.core.android.ui.components.RowAction
+import hub.core.android.ui.components.RowActionsButton
+import hub.core.android.ui.components.rememberConfirmDelete
 import hub.core.android.ui.components.rememberLoad
 import hub.core.android.ui.kit.Badge
 import hub.core.android.ui.kit.BadgeTone
@@ -41,10 +48,12 @@ import hub.core.android.ui.kit.ButtonKind
 import hub.core.android.ui.kit.ConfirmDialog
 import hub.core.android.ui.kit.ControlSize
 import hub.core.android.ui.kit.Custom
+import hub.core.android.ui.kit.EmptyState
 import hub.core.android.ui.kit.GroupedList
 import hub.core.android.ui.kit.HubButton
-import hub.core.android.ui.kit.HubIconButton
+import hub.core.android.ui.kit.HubCard
 import hub.core.android.ui.kit.HubSheet
+import hub.core.android.ui.kit.HubSwitch
 import hub.core.android.ui.kit.HubTextField
 import hub.core.android.ui.kit.Item
 import hub.core.android.ui.kit.Lucide
@@ -53,8 +62,11 @@ import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.Agent
 import hub.core.client.model.Channel
 import hub.core.client.model.ChannelCredentialField
+import hub.core.client.model.ChannelGateway
+import hub.core.client.model.ChannelLink
 import hub.core.client.model.ChannelPlatform
 import hub.core.client.model.ChannelTokenLink
+import hub.core.client.model.JobStatus
 import kotlinx.coroutines.launch
 
 /** Which channels link from the phone, and what the link sends. */
@@ -81,59 +93,99 @@ object ChannelLinks {
     }
 
     /** A linked channel's account in one line: its name, then its handle or number. */
-    fun account(channel: Channel): String? = channel.link?.takeIf { it.linked }?.let { l ->
-        listOfNotNull(l.accountName, l.accountUsername?.let { "@$it" }, l.accountPhone).joinToString(" · ").ifEmpty { null }
+    fun account(channel: Channel): String? = ChannelRules.account(channel.link)
+}
+
+/** Opens the agent's Channels page on the web (a QR pairing is scanned from another screen). */
+@Composable
+private fun rememberOpenWeb(agent: Agent): () -> Unit {
+    val context = LocalContext.current
+    return {
+        context.graph.store.current?.hub?.let { hub -> AppPaths.webUrl(hub, "agent_channels")?.replace(":agentId", agent.id) }
+            ?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
     }
 }
 
 /**
- * Channels: the linked platforms (with Unlink), senders waiting for approval and the approved
- * ones, and linking a platform that signs in with a bot token or credentials. A platform linked by
- * scanning a code (WhatsApp) cannot be scanned from the phone's own screen: the page says so and
- * opens the web on another screen.
+ * Channels (apps batch 9, the web's page): each linked platform as a card — its switch, state and
+ * account, and what it offers (its settings, WhatsApp's mode and reply header, its fields, Unlink or
+ * Forget identity, Restart when the gateway does not serve it yet); linking a platform (a bot token or
+ * credentials here; a QR platform is paired from a computer, and the page says so with the link);
+ * senders waiting for approval and the approved ones; and the agent's incoming webhooks.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChannelsPage(agent: Agent, profile: String) {
-    val context = LocalContext.current
     val ops = rememberOps(agent, profile)
-    val apis = agentApis()
+    val two = rememberAgentsTwoOps(agent, profile)
+    val tools = rememberToolOps(agent, profile)
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
+    val openWeb = rememberOpenWeb(agent)
     var error by remember { mutableStateOf<HubError?>(null) }
-    var linking by remember { mutableStateOf(false) }
-    var unlinking by remember { mutableStateOf<Channel?>(null) }
-    val channels = rememberLoad(agent.id, profile) { apis().agents.agentsListChannels(profile, agent.id).items }
-    val pairing = rememberLoad(agent.id, profile, "pairing") { apis().agents.agentsListPairing(profile, agent.id) }
+    var note by remember { mutableStateOf<ToolNote?>(null) }
+    var linking by remember { mutableStateOf<ChannelPlatform?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    var settings by remember { mutableStateOf<Channel?>(null) }
+    var mode by remember { mutableStateOf<Channel?>(null) }
+    var header by remember { mutableStateOf<Channel?>(null) }
+    var fields by remember { mutableStateOf<Channel?>(null) }
+    var restarting by remember { mutableStateOf(false) }
+    val unlinking = rememberConfirmDelete<Channel>()
+    val clearing = rememberConfirmDelete<Channel>()
+    val busy = remember { mutableStateMapOf<String, Boolean>() }
+    val channels = rememberLoad(agent.id, profile) { two.channels().getOrThrow() }
+    val platforms = rememberLoad(agent.id, profile, "platforms") { two.platforms().getOrThrow() }
+    val pairing = rememberLoad(agent.id, profile, "pairing") { two.pairing().getOrThrow() }
+    val specs = (platforms.state as? hub.core.android.ui.components.Load.Ready)?.value.orEmpty()
+    val pending = (pairing.state as? hub.core.android.ui.components.Load.Ready)?.value?.pending.orEmpty()
+    fun specOf(platform: String) = specs.firstOrNull { it.platform == platform }
     fun after(result: Result<*>) {
         result.onFailure { error = it as HubError }.onSuccess { error = null }
         channels.reload(); pairing.reload()
     }
+    val restartedText = stringResource(R.string.agents2_ch_restarted)
+    /** Restarts the agent's runtime (Hermes's gateway with it), follows the job, then reads the channels again. */
+    fun restart() {
+        restarting = true
+        note = null
+        scope.launch {
+            two.restart().onSuccess { id ->
+                val job = tools.follow(id) {}
+                note = if (job.status == JobStatus.SUCCEEDED) ToolNote(restartedText) else ToolNote(error = HubError(-1, null, job.error?.error))
+            }.onFailure { note = ToolNote(error = it as HubError) }
+            restarting = false
+            channels.reload()
+        }
+    }
     LazyColumn(contentPadding = agentPagePad, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("agent.channels")) {
         item { ErrorNotice(error) }
+        item { ToolNoteView(note) }
         item {
             LoadView(channels) { list ->
-                val linked = list.filter { it.configured || it.link?.linked == true }
-                GroupedList(title = stringResource(R.string.channels_linked)) {
-                    if (linked.isEmpty()) Custom { Text(stringResource(R.string.channels_none), fontSize = FontTokens.sizeSm.sp, color = t.textMuted) }
-                    linked.forEach { channel ->
-                        Item(
-                            channel.label, subtitle = listOfNotNull(ChannelLinks.account(channel), channel.error).joinToString(" · ").ifEmpty { null },
-                            icon = Lucide.Radio, tag = "channel.${channel.platform}",
-                            trailing = {
-                                Badge(
-                                    stringResource(
-                                        when (channel.status) {
-                                            Channel.Status.ONLINE -> R.string.channel_online
-                                            Channel.Status.OFFLINE -> R.string.channel_offline
-                                            Channel.Status.ERROR -> R.string.agent_error
-                                            else -> if (channel.enabled) R.string.agent_on else R.string.agent_off
-                                        },
-                                    ),
-                                    tone = when (channel.status) { Channel.Status.ONLINE -> BadgeTone.Success; Channel.Status.ERROR -> BadgeTone.Danger; else -> BadgeTone.Neutral },
-                                    dot = true,
-                                )
-                                HubIconButton(Lucide.X, stringResource(R.string.channels_unlink), { unlinking = channel }, size = 32.dp, iconSize = 16.dp, modifier = Modifier.testTag("channel.${channel.platform}.unlink"))
+                val shown = ChannelRules.shown(list.items, pending)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (shown.isNotEmpty()) GatewayNote(list.gateway)
+                    if (shown.isEmpty()) EmptyState(stringResource(R.string.channels_none), icon = Lucide.Radio)
+                    shown.forEach { channel ->
+                        val spec = specOf(channel.platform)
+                        ChannelCard(
+                            channel, spec, ChannelRules.waitingOn(pending, channel.platform),
+                            canRestart = AgentCardRules.canRestart(agent), restarting = restarting, busy = busy[channel.platform] == true,
+                            onSwitch = { on ->
+                                busy[channel.platform] = true
+                                scope.launch { after(two.switchChannel(channel.platform, on)); busy[channel.platform] = false }
+                            },
+                            onRestart = ::restart,
+                            onAction = { action ->
+                                when (action) {
+                                    ChannelRules.Action.PAIR, ChannelRules.Action.LINK -> linking = spec ?: return@ChannelCard
+                                    ChannelRules.Action.SETTINGS -> settings = channel
+                                    ChannelRules.Action.MODE -> mode = channel
+                                    ChannelRules.Action.REPLY_HEADER -> header = channel
+                                    ChannelRules.Action.FIELDS -> fields = channel
+                                    ChannelRules.Action.UNLINK -> unlinking.ask(channel)
+                                    ChannelRules.Action.CLEAR -> clearing.ask(channel)
+                                }
                             },
                         )
                     }
@@ -141,7 +193,7 @@ private fun ChannelsPage(agent: Agent, profile: String) {
             }
         }
         item {
-            HubButton(stringResource(R.string.channels_link), { linking = true }, kind = ButtonKind.Subtle, size = ControlSize.Md, icon = Lucide.Link, modifier = Modifier.testTag("channels.link"))
+            HubButton(stringResource(R.string.channels_link), { picking = true }, kind = ButtonKind.Subtle, size = ControlSize.Md, icon = Lucide.Link, modifier = Modifier.testTag("channels.link"))
         }
         item {
             LoadView(pairing) { p ->
@@ -151,10 +203,10 @@ private fun ChannelsPage(agent: Agent, profile: String) {
                         p.pending.forEach { r ->
                             Custom(Modifier.testTag("pairing.${r.requestId}")) {
                                 Text(r.userName ?: r.userId, fontSize = FontTokens.sizeMd.sp)
-                                Text("${r.platform} · ${localTime(r.requestedAt)}", fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                                Text("${r.platform} · ${r.userId} · ${localTime(r.requestedAt)}", fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     HubButton(stringResource(R.string.workflows_approve), { scope.launch { after(ops.approve(r.platform, r.requestId)) } }, size = ControlSize.Sm, icon = Lucide.Check, modifier = Modifier.testTag("pairing.${r.requestId}.approve"))
-                                    HubButton(stringResource(R.string.workflows_deny), { scope.launch { after(ops.deny(r.platform, r.requestId)) } }, kind = ButtonKind.Danger, size = ControlSize.Sm, icon = Lucide.X)
+                                    HubButton(stringResource(R.string.workflows_deny), { scope.launch { after(ops.deny(r.platform, r.requestId)) } }, kind = ButtonKind.Danger, size = ControlSize.Sm, icon = Lucide.X, modifier = Modifier.testTag("pairing.${r.requestId}.deny"))
                                 }
                             }
                         }
@@ -162,7 +214,7 @@ private fun ChannelsPage(agent: Agent, profile: String) {
                     if (p.approved.isNotEmpty()) GroupedList(title = stringResource(R.string.channels_approved)) {
                         p.approved.forEach { a ->
                             Item(
-                                a.userName ?: a.userId, subtitle = a.platform, tag = "approved.${a.userId}",
+                                a.userName ?: a.userId, subtitle = "${a.platform} · ${a.userId}", tag = "approved.${a.userId}",
                                 trailing = { HubButton(stringResource(R.string.channels_revoke), { scope.launch { after(ops.revoke(a.platform, a.userId)) } }, kind = ButtonKind.Ghost, size = ControlSize.Sm) },
                             )
                         }
@@ -170,28 +222,180 @@ private fun ChannelsPage(agent: Agent, profile: String) {
                 }
             }
         }
+        item {
+            val items = (channels.state as? hub.core.android.ui.components.Load.Ready)?.value?.items.orEmpty()
+            WebhooksSection(two, items)
+        }
     }
-    if (linking) LinkSheet(ops, onDone = { linking = false; channels.reload() }, onWeb = {
-        context.graph.store.current?.hub?.let { hub -> AppPaths.webUrl(hub, "agent_channels")?.replace(":agentId", agent.id) }
-            ?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
-    })
-    unlinking?.let { channel ->
-        ConfirmDialog(
-            stringResource(R.string.channels_unlink_confirm, channel.label), null, stringResource(R.string.channels_unlink),
-            onConfirm = { scope.launch { after(ops.unlink(channel.platform)) }; unlinking = null }, onDismiss = { unlinking = null }, danger = true,
-        )
+    if (picking) LinkSheet(ops, null, onDone = { picking = false; channels.reload() }, onWeb = openWeb)
+    linking?.let { spec -> LinkSheet(ops, spec, onDone = { linking = null; channels.reload() }, onWeb = openWeb) }
+    settings?.let { channel ->
+        ChannelSettingsSheet(two, channel.platform, specOf(channel.platform)?.label ?: channel.label, (channels.state as? hub.core.android.ui.components.Load.Ready)?.value?.gateway, onDismiss = { settings = null })
+    }
+    mode?.let { channel -> ChannelModeDialog(channel, onDismiss = { mode = null }) { chosen -> two.setMode(channel.platform, chosen).onSuccess { channels.reload() } } }
+    header?.let { channel ->
+        ReplyHeaderDialog(channel, agent.name, onDismiss = { header = null }) { custom, title -> two.setReplyHeader(channel.platform, custom, title).onSuccess { channels.reload() } }
+    }
+    fields?.let { channel -> ChannelFieldsSheet(channel, onDismiss = { fields = null }) { write -> two.saveChannel(channel.platform, write).onSuccess { channels.reload() } } }
+    ConfirmDeleteDialog(
+        unlinking, { stringResource(R.string.agents2_ch_unlink_title, it.label) }, { two.unlink(it.platform) }, onDeleted = { channels.reload(); pairing.reload() },
+        body = unlinking.pending?.let { unlinkBody(it) }, confirm = stringResource(R.string.channels_unlink),
+    )
+    ConfirmDeleteDialog(
+        clearing, { stringResource(R.string.agents2_ch_clear_title, it.label) }, { two.clearChannel(it.platform) }, onDeleted = { channels.reload() },
+        body = stringResource(R.string.agents2_ch_clear_body), confirm = stringResource(R.string.agents2_ch_clear),
+    )
+}
+
+@Composable
+private fun unlinkBody(channel: Channel): String = when (ChannelRules.unlinkWords(channel)) {
+    ChannelRules.UnlinkWords.TELEGRAM -> stringResource(R.string.agents2_ch_telegram_unlink_body)
+    ChannelRules.UnlinkWords.CREDENTIALS -> stringResource(R.string.agents2_ch_platform_unlink_body, channel.label)
+    ChannelRules.UnlinkWords.WHATSAPP -> stringResource(R.string.agents2_ch_unlink_body)
+}
+
+/** When a change on this page takes effect, and how the profile's messaging gateway is. */
+@Composable
+internal fun GatewayNote(gateway: ChannelGateway?) {
+    val t = LocalTokens.current
+    if (gateway == null || gateway.applies == ChannelGateway.Applies.ON_RESTART) {
+        Text(stringResource(R.string.agents2_ch_restart_note), fontSize = FontTokens.sizeXs.sp, color = t.textMuted, modifier = Modifier.testTag("channels.gateway"))
+        return
+    }
+    Column(Modifier.testTag("channels.gateway"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.agents2_ch_applies_now), fontSize = FontTokens.sizeXs.sp, color = t.textMuted, modifier = Modifier.weight(1f))
+            Badge(
+                stringResource(
+                    when (gateway.state) {
+                        ChannelGateway.State.RUNNING -> R.string.agents2_ch_gateway_running
+                        ChannelGateway.State.STARTING -> R.string.agents2_ch_gateway_starting
+                        ChannelGateway.State.STOPPED -> R.string.agents2_ch_gateway_stopped
+                        ChannelGateway.State.ERROR -> R.string.agents2_ch_gateway_error
+                    },
+                ),
+                tone = when (gateway.state) { ChannelGateway.State.RUNNING -> BadgeTone.Success; ChannelGateway.State.ERROR -> BadgeTone.Danger; else -> BadgeTone.Neutral },
+                dot = true,
+            )
+        }
+        gateway.error?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.danger) }
+    }
+}
+
+/**
+ * One linked platform: the switch, its name and marks (one identity, linked, its state, WhatsApp's
+ * mode), whose account it is, what it offers (a button for the first, «⋯» for the rest), and what
+ * needs attention: a restart the gateway waits for, Hermes's error, senders waiting.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ChannelCard(
+    channel: Channel,
+    spec: ChannelPlatform?,
+    waiting: Int,
+    canRestart: Boolean,
+    restarting: Boolean,
+    busy: Boolean,
+    onSwitch: (Boolean) -> Unit,
+    onRestart: () -> Unit,
+    onAction: (ChannelRules.Action) -> Unit,
+) {
+    val t = LocalTokens.current
+    val link = channel.link
+    val mode = ChannelRules.mode(channel)
+    val actions = ChannelRules.actions(channel, spec)
+    HubCard(Modifier.testTag("channel.${channel.platform}"), padding = 14.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(spec?.label ?: channel.label, fontSize = FontTokens.sizeMd.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            HubSwitch(channel.enabled, onSwitch, Modifier.testTag("channel.${channel.platform}.switch"), enabled = !busy)
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (channel.exclusive) Badge(stringResource(R.string.agents2_ch_exclusive), tone = BadgeTone.Warning)
+            if (link != null) Badge(stringResource(if (link.linked) R.string.agents2_ch_linked else R.string.agents2_ch_not_linked), tone = if (link.linked) BadgeTone.Success else BadgeTone.Neutral)
+            else if (!channel.configured) Badge(stringResource(R.string.agents2_ch_not_configured))
+            if (channel.status != Channel.Status.UNKNOWN) Badge(
+                stringResource(
+                    when (channel.status) {
+                        Channel.Status.ONLINE -> R.string.agents2_ch_status_online
+                        Channel.Status.ERROR -> R.string.agents2_ch_status_error
+                        else -> R.string.agents2_ch_status_offline
+                    },
+                ),
+                tone = when (channel.status) { Channel.Status.ONLINE -> BadgeTone.Success; Channel.Status.ERROR -> BadgeTone.Danger; else -> BadgeTone.Neutral },
+                dot = true, modifier = Modifier.testTag("channel.${channel.platform}.status"),
+            )
+            if (mode != null) Badge(stringResource(if (mode == ChannelLink.Mode.SELF_MINUS_CHAT) R.string.agents2_ch_mode_badge_self else R.string.agents2_ch_mode_badge_bot), tone = BadgeTone.Info)
+        }
+        val account = ChannelRules.account(link)
+        val line = if (link?.linked == true && account != null) stringResource(R.string.agents2_ch_linked_as, account) else stringResource(R.string.agents2_ch_fields_n, channel.fields.size.toString())
+        InContentDirection(line) { Text(line, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, modifier = Modifier.testTag("channel.${channel.platform}.account")) }
+        if (channel.restartNeeded) {
+            NoticeBox(stringResource(R.string.agents2_ch_restart_needed, spec?.label ?: channel.label), BadgeTone.Warning, Modifier.testTag("channel.${channel.platform}.restart_needed"))
+            if (canRestart) HubButton(
+                stringResource(if (restarting) R.string.agents2_ch_restarting else R.string.agents2_ch_restart_now), onRestart,
+                size = ControlSize.Sm, icon = Lucide.RotateCw, loading = restarting, modifier = Modifier.testTag("channel.${channel.platform}.restart"),
+            )
+        }
+        if (channel.status == Channel.Status.ERROR) channel.error?.let { NoticeBox(it, BadgeTone.Danger) }
+        if (waiting > 0) Text(stringResource(R.string.agents2_ch_waiting_review, waiting.toString()), fontSize = FontTokens.sizeXs.sp, color = t.warningSoftText, modifier = Modifier.testTag("channel.${channel.platform}.waiting"))
+        if (actions.isNotEmpty()) {
+            val first = actions.first()
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                HubButton(
+                    actionLabel(first), { onAction(first) }, kind = if (first == ChannelRules.Action.UNLINK || first == ChannelRules.Action.CLEAR) ButtonKind.Ghost else ButtonKind.Secondary,
+                    size = ControlSize.Sm, icon = actionIcon(first), modifier = Modifier.testTag("channel.${channel.platform}.${first.name.lowercase()}"),
+                )
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
+                    val rest = actions.drop(1)
+                    if (rest.isNotEmpty()) RowActionsButton(
+                        rest.map { a -> RowAction(actionLabel(a), actionIcon(a), danger = a == ChannelRules.Action.UNLINK || a == ChannelRules.Action.CLEAR) { onAction(a) } },
+                        Modifier.testTag("channel.${channel.platform}.more"),
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun LinkSheet(ops: AgentOps, onDone: () -> Unit, onWeb: () -> Unit) {
+private fun actionLabel(action: ChannelRules.Action): String = stringResource(
+    when (action) {
+        ChannelRules.Action.PAIR -> R.string.agents2_ch_pair
+        ChannelRules.Action.LINK -> R.string.agents2_ch_link
+        ChannelRules.Action.SETTINGS -> R.string.agents2_chs_open
+        ChannelRules.Action.MODE -> R.string.agents2_ch_mode_change
+        ChannelRules.Action.REPLY_HEADER -> R.string.agents2_ch_reply_open
+        ChannelRules.Action.FIELDS -> R.string.agents2_ch_edit
+        ChannelRules.Action.UNLINK -> R.string.channels_unlink
+        ChannelRules.Action.CLEAR -> R.string.agents2_ch_clear
+    },
+)
+
+private fun actionIcon(action: ChannelRules.Action): Int = when (action) {
+    ChannelRules.Action.PAIR -> Lucide.QrCode
+    ChannelRules.Action.LINK -> Lucide.Link
+    ChannelRules.Action.SETTINGS -> Lucide.SlidersHorizontal
+    ChannelRules.Action.MODE -> Lucide.Smartphone
+    ChannelRules.Action.REPLY_HEADER -> Lucide.Type
+    ChannelRules.Action.FIELDS -> Lucide.Pencil
+    ChannelRules.Action.UNLINK -> Lucide.X
+    ChannelRules.Action.CLEAR -> Lucide.Trash
+}
+
+/**
+ * Link a platform: every platform the hub knows, or straight to [start]'s form. A bot token or
+ * credentials link here; a platform linked by scanning a code (WhatsApp) cannot be scanned from this
+ * phone's own screen: the sheet says to pair it from a computer and opens the page on the web.
+ */
+@Composable
+private fun LinkSheet(ops: AgentOps, start: ChannelPlatform?, onDone: () -> Unit, onWeb: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
     val platforms = rememberLoad(ops.agentId, ops.profile, "platforms") {
         context.graph.apis(context.graph.store.current!!).agents.agentsListChannelPlatforms(ops.profile, ops.agentId).items
     }
-    var chosen by remember { mutableStateOf<ChannelPlatform?>(null) }
+    var chosen by remember { mutableStateOf(start) }
     HubSheet(onDismiss = onDone, title = stringResource(R.string.channels_link)) {
         val p = chosen
         if (p == null) {
@@ -207,10 +411,10 @@ private fun LinkSheet(ops: AgentOps, onDone: () -> Unit, onWeb: () -> Unit) {
                 }
             }
         } else if (!ChannelLinks.onPhone(p)) {
-            // A code shown on this screen cannot be scanned by this phone's own camera.
-            NoticeBox(stringResource(R.string.channels_qr_body, p.label), BadgeTone.Info)
+            // A code shown on this screen cannot be scanned by this phone's own camera: pair from a computer.
+            NoticeBox(stringResource(R.string.agents2_ch_qr_note, p.label), BadgeTone.Info, Modifier.testTag("platform.qr_note"))
             HubButton(stringResource(R.string.on_the_web_open), onWeb, icon = Lucide.ExternalLink, fill = true, modifier = Modifier.fillMaxWidth().testTag("platform.web"))
-            HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.ArrowLeft)
+            if (start == null) HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.ArrowLeft)
         } else {
             val typed = remember(p.platform) { mutableStateMapOf<String, String>() }
             var allowed by remember(p.platform) { mutableStateOf("") }
@@ -240,7 +444,7 @@ private fun LinkSheet(ops: AgentOps, onDone: () -> Unit, onWeb: () -> Unit) {
                             busy = false
                         }
                     }, size = ControlSize.Md, icon = Lucide.Link, loading = busy, enabled = ChannelLinks.missing(p, typed).isEmpty(), modifier = Modifier.testTag("link.submit"))
-                    HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md)
+                    if (start == null) HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md)
                 }
                 p.docsUrl?.let { url ->
                     HubButton(stringResource(R.string.channels_docs), { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }, kind = ButtonKind.Ghost, size = ControlSize.Sm, icon = Lucide.ExternalLink)
