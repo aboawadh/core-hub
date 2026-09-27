@@ -41,6 +41,7 @@ const MARK_H = 845;
 const tokens = JSON.parse(readFileSync(path.join(repo, 'packages/ui-tokens/tokens.json'), 'utf8'));
 const ACCENT = tokens.themes.light.accent;
 const ACCENT_DARK = tokens.themes.dark.accent;
+const ACCENT_STRONG = tokens.themes.light['accent-strong'];
 const WHITE = '#ffffff';
 const BLACK = '#000000';
 
@@ -136,6 +137,30 @@ const pictures = {
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><g transform="translate(${x} ${y})">`,
       )
       .replace(/<\/svg>$/, '</g></svg>');
+  },
+  /**
+   * Google Play's feature graphic (1024 × 500, no transparency): the accent, deepening to the
+   * accent-strong at one corner, a large faint mark bleeding off the far edge, and the white mark in
+   * the middle. No words: Play shows the app's name beside it, in the viewer's language.
+   */
+  playFeature: (width, height) => {
+    const markWidth = height * 0.46;
+    const s = markWidth / MARK_W;
+    const x = (width - MARK_W * s) / 2;
+    const y = (height - MARK_H * s) / 2;
+    const big = (height * 1.5) / MARK_W;
+    const bx = width - MARK_W * big * 0.42;
+    const by = (height - MARK_H * big) / 2;
+    return (
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="${ACCENT}"/><stop offset="1" stop-color="${ACCENT_STRONG}"/>` +
+      `</linearGradient></defs>` +
+      `<rect width="${width}" height="${height}" fill="url(#g)"/>` +
+      `<path transform="translate(${bx} ${by}) scale(${big})" fill="${WHITE}" fill-opacity="0.06" fill-rule="evenodd" d="${MARK}"/>` +
+      `<path transform="translate(${x} ${y}) scale(${s})" fill="${WHITE}" fill-rule="evenodd" d="${MARK}"/>` +
+      `</svg>`
+    );
   },
 };
 
@@ -354,6 +379,16 @@ put(
   }),
 );
 put('apps/android/store/icon-512.png', png(rasterize(pictures.square(512))));
+// Google Play listing graphics, in fastlane supply's layout (docs/store/google/README.md): the
+// 512 px icon (32-bit PNG) and the 1024 × 500 feature graphic (24-bit PNG, no alpha) per language.
+for (const locale of ['en-US', 'ar']) {
+  const images = `apps/android/fastlane/metadata/android/${locale}/images`;
+  put(`${images}/icon.png`, png(rasterize(pictures.square(512))));
+  put(
+    `${images}/featureGraphic.png`,
+    png(rasterize(pictures.playFeature(1024, 500)), { opaque: true }),
+  );
+}
 
 // Desktop: the window icon, the installers' icons (.icns, .ico, Linux PNGs) and the tray.
 const desk = 'apps/desktop/assets';

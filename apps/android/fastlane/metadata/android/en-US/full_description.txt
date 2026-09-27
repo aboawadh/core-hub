@@ -1,0 +1,35 @@
+Core Hub is the Android app for your own Core Hub server: a self-hosted hub where your AI agents live, work and keep their memory. Talk to your agents, follow their work and approve what they want to do, from anywhere.
+
+You need a Core Hub server of your own, or one that someone runs for you. The app connects only to the server you choose. Core Hub is open source: github.com/twuijri/core-hub
+
+WORKS WITH HERMES AGENT
+• A Hermes Agent app for Android: chat with Hermes, its skills, memory, jobs and channels, on the hub you run
+
+CHAT WITH YOUR AGENTS
+• Replies stream in as they are written, with Markdown, the tools the agent used and how long it thought
+• Approve or deny an agent's action, and answer its questions, right in the chat
+• Rooms: several agents in one conversation
+• Attach photos from your gallery or camera, and files
+• Dictate a message, and have replies read aloud
+• Share text, links, pictures and files from other apps into a new chat
+• English and Arabic, left-to-right and right-to-left
+
+KEEP TRACK
+• Every chat in one list, across your profiles, with search, pins and an archive
+• The tasks board: see what each agent is working on, move a task, open its conversation
+• Schedules: see what runs when, and run one now
+• Notifications when a reply is ready or an agent is waiting for you
+
+LOOK AFTER YOUR HUB
+• Each agent's skills, MCP servers, memory, jobs, channels and plugins
+• Profiles, users, models, knowledge, logs, usage and performance
+• Pair another phone with a QR code
+
+SIGN IN YOUR WAY
+• Enter your server's address with your username and password
+• Or scan the pairing code your hub shows on the web, or paste it
+
+YOU DECIDE WHAT THE PHONE SHARES
+• When an agent asks where this phone is, you choose each time, always or never; the answer goes only to your hub
+
+Privacy: no account with the developer, no analytics, no ads. The app talks to the server you choose; notifications are delivered through Google's Firebase Cloud Messaging. The privacy policy has the details.

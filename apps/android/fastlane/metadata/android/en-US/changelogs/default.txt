@@ -1,0 +1,8 @@
+The first release of Core Hub on Google Play.
+
+• Sign in to your own Core Hub server with its address, username and password, or scan the pairing code it shows on the web
+• Chat with your agents: streamed replies, tools, approvals and questions
+• Photos, files, dictation and replies read aloud
+• Chats, rooms, tasks and schedules across every profile
+• Notifications when a reply is ready or an agent is waiting for you
+• English and Arabic, light and dark

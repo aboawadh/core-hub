@@ -379,7 +379,17 @@ its approval.
   Since 2026-09-26 the `applicationId` is `com.twuijri.corehub` (the Kotlin packages stay
   `hub.core.android`), and `.github/workflows/android-signed.yml` (by hand or a release tag)
   builds a signed APK and AAB with Firebase's `google-services.json` from a secret — proven by a
-  run on the branch (docs/RELEASING.md). Since 2026-09-26 **push**: a build with Firebase takes an FCM
+  run on the branch (docs/RELEASING.md). Since 2026-09-27 **the Google Play kit**
+  (`docs/store/google/README.md`, DECISIONS §120, proposed — owner to confirm): the Play listing in
+  English and Arabic (fastlane supply layout, `apps/android/fastlane/metadata/android`), its icon and
+  feature graphic from `pnpm icons:build`, six phone screenshots per language rendered by the
+  `PlayStoreShots` Robolectric test against the demo hub, a limits check
+  (`apps/android/scripts/play-listing.mjs`), and `.github/workflows/play-upload.yml` (by hand) that
+  builds the AAB with self-update off and the release key and uploads it and/or the listing with
+  fastlane supply, as a draft by default; the Play Console answers (Data safety, content rating,
+  App access, Play App Signing, closed test) are written down. **Never run against Play** (the
+  account is still being verified, no `PLAY_SERVICE_ACCOUNT_JSON`), and the app still targets API
+  35 while Play wants 36 for new apps since 2026-08-31. Since 2026-09-26 **push**: a build with Firebase takes an FCM
   token after sign-in and registers it with the hub (`devices.registerPush`; a password sign-in
   first registers this install as a device, a paired phone uses the device its pairing made),
   again when Firebase rotates it, and removes it before sign-out; a tapped push opens the page its
