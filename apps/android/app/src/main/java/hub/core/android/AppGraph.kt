@@ -181,6 +181,7 @@ class AppGraph(
         // While the process lives, a notice the hub announces becomes a notification when no screen shows it.
         scope.launch {
             realtime.events.collect { e ->
+                hub.core.android.realtime.JobsFeed.receive(e)
                 hub.core.android.phone.Locating.requestOf(e)?.let { request -> launch { locations.heard(request) } }
                 if (e.namespace != DEVICES_NAMESPACE || e.event != "notice.created") return@collect
                 val notice = e.payload["notice"]?.let {

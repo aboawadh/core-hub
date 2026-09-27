@@ -149,7 +149,8 @@ internal fun ChannelPairPanel(profile: String, agentId: String, platform: String
                 if (job?.status == JobStatus.SUCCEEDED) onLinked()
                 break
             }
-            delay(1_000)
+            // The next code or the linking wakes this at once (`/rt/jobs`); the poll is the fallback.
+            hub.core.android.realtime.JobsFeed.wait(id, 1_000)
         }
     }
     // Leaving before the phone is linked stops the pairing in Hermes too.
