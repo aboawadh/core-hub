@@ -13,6 +13,11 @@ sealed interface Route {
 
     data object NewChat : Route { override val destination = "new_chat" }
     data class Chat(val sessionId: String, val profile: String) : Route { override val destination = "chat" }
+    /**
+     * A conversation Hermes keeps for a channel (Telegram, WhatsApp…), read-only: the chat
+     * destination, as the web opens it (`/chat/<id>?source=channel`), with Hermes's id.
+     */
+    data class ChannelChat(val conversationId: String, val profile: String) : Route { override val destination = "chat" }
     /** One room, opened from the drawer's Rooms list (the `rooms` segment), in its own profile. */
     data class Room(val roomId: String, val profile: String) : Route { override val destination = "rooms" }
     data object Search : Route { override val destination = "search" }
@@ -98,7 +103,7 @@ class Navigator(start: Route = Route.NewChat) {
     /** Opens a route; a destination already on the stack is brought back rather than stacked twice. */
     fun go(route: Route) {
         if (current == route) return
-        if (route is Route.NewChat || route is Route.Chat || route is Route.Room) {
+        if (route is Route.NewChat || route is Route.Chat || route is Route.ChannelChat || route is Route.Room) {
             stack.clear()
             stack.add(route)
             return
@@ -115,7 +120,7 @@ class Navigator(start: Route = Route.NewChat) {
 
     /** The route Settings' "back to chats" row returns to: the last conversation or the draft. */
     fun backToChats() {
-        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
+        val chat = stack.lastOrNull { it is Route.Chat || it is Route.ChannelChat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
         stack.clear()
         stack.add(chat)
     }

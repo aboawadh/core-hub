@@ -232,6 +232,15 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                     onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
                 )
             }
+            is Route.ChannelChat -> {
+                // A Telegram or WhatsApp conversation Hermes keeps: read-only, with Continue in Core Hub.
+                hub.core.android.ui.screens.ChannelChatScreen(
+                    route.conversationId, route.profile, shell, onMenu = openDrawer,
+                    onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                    onGone = { nav.go(Route.NewChat) },
+                    subtitleProfile = if (route.profile != s.profile) shell.profileName(route.profile) else null,
+                )
+            }
             is Route.Room -> {
                 RoomScreen(
                     route.roomId, route.profile,

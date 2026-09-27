@@ -307,8 +307,21 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
     val selected by shell.selected.collectAsState()
     val chatError by shell.chatError.collectAsState()
     LaunchedEffect(Unit) { if (chats.items.isEmpty()) shell.reloadChats() }
+    // Categories and the channels' conversations (ChatGroups.kt); read again while the list is open.
+    val extras by shell.extras.state.collectAsState()
+    val dialogs = rememberChatGroupsDialogs()
+    val session by shell.session.collectAsState()
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        shell.extras.watch(true)
+        onDispose { shell.extras.watch(false) }
+    }
     val pinned = chats.items.filter { it.pinned }
-    val recent = chats.items.filter { !it.pinned }
+    val conversations = ChatGroupsRules.visible(extras.conversations, extras.showHidden, chats.archive, chats.query)
+    val groups = ChatGroupsRules.group(
+        chats.items.filter { !it.pinned }, extras.categories, conversations,
+        keepEmpty = chats.query.isBlank() && chats.archive != ArchiveFilter.ARCHIVED,
+    )
+    val move: (Session) -> Unit = { dialogs.moving = it }
     LazyColumn(Modifier.fillMaxSize().testTag("chats.list"), contentPadding = PaddingValues(bottom = 8.dp)) {
         item(key = "header") { header() }
         item(key = "search") { ChatsSearch(shell) }
@@ -319,26 +332,33 @@ private fun ChatsPanel(shell: ShellViewModel, nav: Navigator, header: @Composabl
                 ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable(onClick = shell::dismissChatError))
             }
         }
+        extras.error?.let { error ->
+            item(key = "groups-error") {
+                ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clickable(onClick = shell.extras::dismissError))
+            }
+        }
         if (pinned.isNotEmpty()) {
             item(key = "pinned") { SectionLabel(stringResource(R.string.chats_pinned)) }
-            items(pinned, key = { "p" + it.id }) { ChatRow(it, badges, shell, nav, onOpen) }
+            items(pinned, key = { "p" + it.id }) { ChatRow(it, badges, shell, nav, onOpen, move) }
         }
-        if (recent.isNotEmpty()) {
-            item(key = "recent") { SectionLabel(stringResource(R.string.chats_recent, recent.size)) }
-            items(recent, key = { it.id }) { ChatRow(it, badges, shell, nav, onOpen) }
-        }
+        chatGroups(
+            groups, extras, extras.categories, shell, nav, dialogs, badges, isAdmin = session?.user?.isAdmin == true,
+            folded = chats.query.isBlank(), onOpen = onOpen,
+        ) { ChatRow(it, badges, shell, nav, onOpen, move) }
         if (chats.nextCursor != null) {
             item(key = "more") {
                 LaunchedEffect(chats.items.size) { shell.loadMore() }
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { Spinner(18.dp, t.textMuted) }
             }
         }
-        if (!chats.loading && chats.items.isEmpty() && chats.error == null) {
+        if (!chats.loading && chats.items.isEmpty() && conversations.isEmpty() && chats.error == null) {
             item(key = "empty") {
                 Text(stringResource(R.string.chats_empty), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
             }
         }
+        chatGroupsFooter(extras, chats.archive, shell, dialogs, newCategoryProfile = chats.profileFilter ?: session?.profile.orEmpty())
     }
+    ChatGroupsDialogsView(dialogs, extras.categories, shell, nav)
 }
 
 /**
@@ -442,7 +462,7 @@ private val contentStyle = TextStyle(textDirection = TextDirection.Content)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav: Navigator, onOpen: () -> Unit) {
+private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav: Navigator, onOpen: () -> Unit, onMove: ((Session) -> Unit)? = null) {
     val t = LocalTokens.current
     val picked by shell.selected.collectAsState()
     val selecting = picked.isNotEmpty()
@@ -503,6 +523,9 @@ private fun ChatRow(session: Session, badge: Boolean, shell: ShellViewModel, nav
                 { menu = false; shell.changeChat(session, hub.core.client.model.SessionPatch(archived = !session.archived)) },
                 Modifier.testTag("chat.row.archive"), icon = if (session.archived) Lucide.ArchiveRestore else Lucide.Archive,
             )
+            if (onMove != null) {
+                MenuItem(stringResource(R.string.cat_move_to), { menu = false; onMove(session) }, Modifier.testTag("chat.row.move"), icon = Lucide.Tag)
+            }
             MenuDivider()
             MenuItem(
                 stringResource(R.string.chat_controls_delete), { menu = false; deleting.ask(session) },

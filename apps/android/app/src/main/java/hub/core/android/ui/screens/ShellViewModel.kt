@@ -85,6 +85,8 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
     private val _chats = MutableStateFlow(ChatsState())
     val chats: StateFlow<ChatsState> = _chats.asStateFlow()
+    /** The list's categories and channel conversations (ChatGroups.kt). */
+    val extras = ChatExtras(viewModelScope, ChatGroupsOps { graph.store.current?.let(graph::apis) })
     private var loadJob: Job? = null
 
     /** What waits for the person in every profile they may enter (the pending list). */
@@ -184,6 +186,7 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
     private fun load(cursor: String?) {
         val s = graph.store.current ?: return
         val filter = _chats.value
+        if (cursor == null) extras.reload(filter.profileFilter ?: s.profile, all = filter.profileFilter == null)
         loadJob?.cancel()
         _chats.update { it.copy(loading = true, error = null) }
         loadJob = viewModelScope.launch {
