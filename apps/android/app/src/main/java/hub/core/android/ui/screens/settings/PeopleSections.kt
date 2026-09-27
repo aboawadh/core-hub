@@ -59,7 +59,8 @@ internal fun AllChannelAccountsSection(ops: AdminTwoOps, users: List<User>) {
                     list.forEach { link ->
                         Item(
                             PeopleRules.nameOf(link.userId, users),
-                            subtitle = "${platformText(link.platform)} · ${link.senderId} · " +
+                            // The account id reads left to right inside any language (an isolate keeps `@` in place).
+                            subtitle = "${platformText(link.platform)} · \u2066${link.senderId}\u2069 · " +
                                 (link.lastUsedAt?.let { stringResource(R.string.admin_links_last_used, localTime(it)) } ?: stringResource(R.string.admin_links_never_used)),
                             icon = Lucide.Link, tag = "link.${link.id}",
                             trailing = {
