@@ -394,7 +394,7 @@ export class HermesRuntime {
    * opens a new gateway. The named profiles' gateways keep running: their homes do not move.
    */
   async withRootHeld<T>(work: () => T | Promise<T>): Promise<T> {
-    return this.withGatewayStopped('default', async () => {
+    const held = async () => {
       const channels = [this.tui, ...this.retiredTui].filter(
         (channel): channel is TuiChannel => channel !== null,
       );
@@ -402,7 +402,20 @@ export class HermesRuntime {
       this.retiredTui.clear();
       await Promise.all(channels.map((channel) => channel.close()));
       return await work();
-    });
+    };
+    if (this.mode === 'managed' && !this.child && this.restartTimer) {
+      // A gateway waiting out its crash backoff must not start in the middle of the move: it
+      // starts when the work is done instead.
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+      const binary = this.executable();
+      try {
+        return await held();
+      } finally {
+        if (binary && !this.stopping && !this.child) this.launch(binary);
+      }
+    }
+    return this.withGatewayStopped('default', held);
   }
 
   /** The key the adapter sends; minted lazily so a hub that never uses Hermes writes none. */

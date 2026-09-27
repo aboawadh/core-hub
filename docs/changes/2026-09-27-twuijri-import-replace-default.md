@@ -1,5 +1,5 @@
 # استيراد أرشيف بروفايل ليصير البروفايل الافتراضي، والقديم نسخة احتياطية
-المسؤول: twuijri · الفرع: feat/import-replace-default · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/import-replace-default · الحالة: review
 
 ## المشكلة والهدف
 طلب المالك (٢٠٢٦-٠٩-٢٧): كثيرون ينتقلون إلى Core Hub من برامج أقدم ويحملون معهم البروفايل الافتراضي لبرنامجهم.
@@ -82,20 +82,93 @@
 
 ## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)
 إضافة فقط:
-- `ProfileImport.replace_default` (اختياري، `false` افتراضيًّا). مع `true` لا يُستعمل `slug` (يبقى مطلوبًا في المخطط كما
-  كان؛ يرسل العميل أي معرّف صالح).
+- `ProfileImport.replace_default` (اختياري؛ غيابه = `false`. بلا `default:` في المخطط عمدًا، لأن مولّد TypeScript يجعل
+  الحقل ذا القيمة الافتراضية مطلوبًا في نوع الطلب). مع `true` لا يُستعمل `slug` (يبقى مطلوبًا في المخطط كما كان؛ يرسل
+  العميل أي معرّف صالح).
 - وصف `auth.importProfile`: السلوك الجديد، الرفض `409` لاستبدال جارٍ، ونتيجة المهمة الإضافية
   `{replaced_default: true, backup: {profile_id, slug, name}, skipped}`.
 - `docs/contracts/DECISIONS.md` §التالي الحر.
 
 ## الملفات والتأثير
-(يُملأ عند التنفيذ.)
+- **العقد:** `packages/contracts/openapi.yaml` (`ProfileImport.replace_default`، ووصف `auth.importProfile`)،
+  `docs/contracts/DECISIONS.md` §116.
+- **الخادم `auth`:**
+  - `profile-archive.ts`: `sink` في مرشّح tar و`extractArchive` (فكّ المجلدات والملفات العادية فقط، وكل مسار يُتحقق
+    أنه داخل الهدف).
+  - `profile-transfer.ts`: `runImportAsDefault` و`backupSlugFor` (بلا حد) وقفل استبدال واحد لكل مركز، والمنفذ
+    `defaultProfile` و`renamed`، و`added` صار يقبل المصدر.
+  - `routes.ts`: فرع `replace_default` في `POST /profile-imports` (للمدير، `409` لاستبدال جارٍ، وسطرا تدقيق).
+  - `index.ts`: تصدير `mirrorDisplayName` و`BACKUP_SLUG` ونوع المنفذ.
+- **الخادم `agents`:**
+  - `hermes-default-swap.ts` (جديد): `SHARED_AT_ROOT`، و`swapDefaultProfile` بسجلّ للتراجع،
+    و`createDefaultProfileReplacement`.
+  - `hermes-runtime.ts`: `withRootHeld` (بوابة الجذر محبوسة، وبوابة TUI مغلقة، وبوابة تنتظر إعادة التشغيل بعد انهيار
+    لا تبدأ في منتصف النقل).
+  - `index.ts`: `hermesDefaultReplacementFor` (إيقاف خادم اللوحة، وإعادة أدوات المركز ومكتبة المهارات، ثم بوابات
+    البروفايلات).
+- **الخادم، الربط:** `modules/index.ts` (المنفذ في `profileTransferPorts`). **النصوص:** `i18n/{ar,en}.json` (٦ مفاتيح).
+- **الويب:** `people/ProfileTransfer.tsx` (المربع، وإخفاء حقل المعرّف، والتحذير الثاني بـ`useConfirm`، ولوحة
+  النهاية باسم النسخة وزر «انتقل إلى …»)، `people/queries.ts`، `i18n/{ar,en}.json` (٨ مفاتيح).
+- **iOS:** `Settings/Pages/ProfileTransfer.swift` (مفتاح، وتحذير ثانٍ مدمّر، ورسالة النهاية، ورسالة المركز الأقدم)،
+  `AdminPagesRules.swift` (`importBody(replaceDefault:)`، `replacedBackup`)، `i18n/admin.{ar,en}.json`.
+- **Android:** `settings/ProfileTransfer.kt` (نفس ذلك بـ`ToggleRow` و`ConfirmDialog(danger)`)، `AdminKit.kt`،
+  `res/values{,-ar}/strings_admin.xml`.
+- **الاختبارات:** `tests/unit/profile-import-default.test.ts` (٧)، `hermes-runtime.test.ts` (+١)، ويب
+  `tests/profile-transfer.test.tsx` (+٢)، Android `AdminPagesTest.kt` (+١)، iOS `AdminPagesTests.swift` (+١).
+- **الوثائق:** `docs/STATUS.md` (صف `auth`).
+- **الهاتفان:** لا زرّ «انتقل إلى النسخة» فيهما (الرسالة تسمّيها، وتظهر في قائمة البروفايلات تحت الورقة مباشرة)؛
+  الويب فيه الزر.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(يُملأ عند التنفيذ.)
+كلها عبر `mj-run`، على `origin/main` 39de41d8 (لم يتحرك `main` أثناء العمل).
+```
+$ npx vitest run --project unit tests/unit/profile-import-default.test.ts tests/unit/profile-transfer.test.ts \
+    tests/unit/profile-transfer-providers.test.ts src/modules/auth/profile-archive.test.ts src/modules/agents/hermes-runtime.test.ts
+ Test Files  5 passed (5)
+      Tests  38 passed (38)
+$ (packages/web) npx vitest run tests/profile-transfer.test.tsx
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+$ pnpm contract:test
+ Test Files  19 passed (19)
+      Tests  405 passed (405)
+$ (apps/android, JDK 17) ./gradlew :app:testDebugUnitTest --tests '*AdminPagesTest*'   (بعد generate:native)
+BUILD SUCCESSFUL — AdminPagesTest: tests="14" skipped="0" failures="0"
+$ pnpm lint                     → All matched files use Prettier code style!  (eslint بلا خطأ)
+$ pnpm typecheck                → exit 0
+$ pnpm i18n:check               → i18n:check  OK (ios: 2175 keys, ar/en in parity)
+$ pnpm contracts:lint           → contracts:lint  OK (التحذير الوحيد قديم: مثال `program` في السطر 7420)
+$ pnpm contracts:check-clients  → check-clients  OK — 996 client file(s) scanned, 254 contract path(s) known.
+$ pnpm nav:check                → nav:check  OK — 39 destinations
+```
+- **الاختبارات تلتقط غياب التغيير:** بإعادة `auth/routes.ts` إلى نسخة `main` (الحقل يُتجاهل فيصير استيرادًا عاديًّا)
+  سقطت السبعة: `Tests  7 failed (7)`.
+- ما تغطيه اختبارات الخادم السبعة: النجاح (الجذر صار الأرشيف، والنسخة فيها ملفات الافتراضي القديم وجلساته و`state.db`
+  ومهامه المجدولة و`.env` قناته، ولوحة المهام و`auth.json` و`logs` والبروفايلات المسمّاة لم تُمس، و`kanban.db` في
+  الأرشيف تُرك، والمزوّد المشترك باقٍ بمفتاحه في الافتراضي والنسخة، ومعرّف الافتراضي لم يتغير)؛ أربعة استيرادات
+  متتالية مع اسم مأخوذ عند المركز (`-3`) وشاهد حذف عند هرمز (`-4`) ← `default-backup`، `-2`، `-5`، `-6`؛ فشل النقل
+  الخامس ← الشجرة مطابقة لما قبل حرفًا حرفًا ولا صف نسخة والاسم كما كان والرسالة «The import did not happen …»؛ فشل
+  صفوف المركز بعد النقل (ملف مزوّدين غير صالح) ← الشيء نفسه؛ أرشيف بجذرين ← لا تغيير والرسالة بالعربية؛ عضو ← `403`،
+  واستبدال ثانٍ أثناء الأول ← `409` ثم يعود القفل حرًّا؛ مركز لا يشغّل هرمز ← `409 hermes_not_supervised`.
+- **لم يُشغَّل على هرمز حقيقي** (لا Docker في هذه المهمة): النقل يعمل على بيت حقيقي على القرص، لكن حبس البوابة
+  وإغلاق TUI مجرّبان بعملية مزيّفة فقط (`hermes-runtime.test.ts`)، وiOS لم يُبنَ محليًّا (Linux) — يبنيه CI.
+- CI: يُحدَّث بعد فتح الطلب.
 
 ## المخاطر والرجوع
-(يُملأ عند التنفيذ.)
+- **ما يحدث لحظة الاستبدال:** محادثة جارية في أي بروفايل تنقطع (بوابة TUI واحدة لكل البروفايلات)، وبوابة الجذر
+  تتوقف ثوانيَ. الحوار يقول ذلك.
+- **القنوات تبقى تجيب من النسخة** حتى ينقلها الشخص؛ إن ربط البوت نفسه في الافتراضي الجديد دون فكّه من النسخة
+  يتصادمان (تيليجرام لا يسمح باثنين)، وفحص الحصرية في المركز ينبهه.
+- **محادثات المركز القديمة تبقى في الافتراضي**: تُقرأ، لكن متابعة إحداها تبدأ محادثة جديدة عند هرمز.
+- **قائمة ما يبقى في الجذر** مأخوذة من هرمز `v2026.9.14`؛ إن أضاف هرمز لاحقًا ملفًّا مشتركًا جديدًا في الجذر فسينتقل إلى
+  النسخة حتى تُضاف إليها. الضرر محدود (يبقى في النسخة، لا يضيع)، لكنه يستحق مراجعة عند رفع إصدار هرمز.
+- **Honcho** (إن استُعمل) يسمّي الذاكرة باسم البروفايل؛ ذاكرة الافتراضي القديم هناك لا تنتقل إلى اسم النسخة.
+- فشل التراجع نفسه (قرص امتلأ أثناء الإعادة) يُسجَّل بخطأ صريح يسمّي المسارات، ويبقى المجلد المؤقت ليراه إنسان.
+- **الرجوع عن الميزة:** إرجاع الفرع يزيل الخيار؛ الاستيراد العادي لم يتغير، والنسخ `default-backup*` التي صُنعت
+  تبقى بروفايلات عادية. **الرجوع عن استبدال تمّ:** النسخة كاملة؛ الرجوع اليدوي بنقل مجلدها إلى الجذر، أو (مقترح
+  لاحق) عملية «اجعل هذا البروفايل الافتراضي».
 
 ## التسليم والخطوة التالية
-(يُملأ عند التنفيذ.)
+PR واحد إلى `main`. الدمج للمالك. للمالك أن يؤكد: بقاء محادثات المركز في الافتراضي، وانتقال القنوات مع النسخة،
+وقائمة ما يبقى في الجذر. التالي المقترح: تجربة على هرمز حقيقي (صورة محلية) قبل صورة `test`، وعملية «اجعل هذا
+البروفايل الافتراضي» للرجوع بنقرة.
