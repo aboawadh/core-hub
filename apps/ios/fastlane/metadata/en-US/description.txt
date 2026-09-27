@@ -2,6 +2,9 @@ Core Hub is the iPhone and iPad app for your own Core Hub server: a self-hosted 
 
 You need a Core Hub server of your own, or one that someone runs for you. The app connects only to the server you choose. Core Hub is open source: github.com/twuijri/core-hub
 
+WORKS WITH HERMES AGENT
+• A Hermes Agent app for iPhone and iPad: chat with Hermes, its skills, memory, jobs and channels, on the hub you run
+
 CHAT WITH YOUR AGENTS
 • Replies stream in as they are written, with Markdown, the tools the agent used and how long it thought
 • Approve or deny an agent's action, and answer its questions, right in the chat

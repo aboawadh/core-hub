@@ -13,9 +13,9 @@
 /** @type {Record<Lang, Record<string, string>>} */
 export const STRINGS = {
   ar: {
-    'meta.title': 'كور هب — التحميل',
+    'meta.title': 'كور هب — تطبيق Hermes Agent لسطح المكتب والجوال والويب',
     'meta.description':
-      'حمّل كور هب على Windows وmacOS وLinux وAndroid، أو شغّل مركزك الخاص بصورة Docker واحدة.',
+      'حمّل كور هب على Windows وmacOS وLinux وAndroid: واجهة لوكيل Hermes Agent وClaude Code وCodex وغيرها، أو شغّل مركزك الخاص بصورة Docker واحدة.',
     'brand.name': 'كور هب',
     'nav.skip': 'تخطَّ إلى التحميل',
     'nav.downloads': 'التحميل',
@@ -91,9 +91,9 @@ export const STRINGS = {
     noscript: 'الروابط المباشرة تحتاج JavaScript. الملفات كلها في صفحة الإصدارات على GitHub.',
   },
   en: {
-    'meta.title': 'Core Hub — Download',
+    'meta.title': 'Core Hub — Hermes Agent desktop, mobile and web app',
     'meta.description':
-      'Download Core Hub for Windows, macOS, Linux and Android, or run your own hub from one Docker image.',
+      'Download Core Hub for Windows, macOS, Linux and Android: a desktop, mobile and web UI for Hermes Agent, Claude Code, Codex and more, or run your own hub from one Docker image.',
     'brand.name': 'Core Hub',
     'nav.skip': 'Skip to downloads',
     'nav.downloads': 'Download',

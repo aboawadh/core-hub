@@ -29,6 +29,11 @@ The desktop and Android apps update themselves from version 1.1.3 on.
 **One self-hosted hub for every AI agent you use: chat, tasks, schedules and workflows,
 from the web, the desktop and your phone.**
 
+**Looking for a Hermes Agent desktop app, web UI or mobile app?** Core Hub is one: it runs
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) for you (or uses the one already on
+your computer) and gives it a native app on Windows, macOS, Linux, iPhone and Android, plus Claude
+Code, Codex, Gemini CLI, opencode and more.
+
 Core Hub is a server you run on your own machine. It is built around
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) (MIT), which ships inside the
 image, and it adds a curated catalog of coding agents you install on demand. Everything the
