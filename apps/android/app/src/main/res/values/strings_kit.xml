@@ -48,4 +48,6 @@
     <string name="kit_trigger_weekly">Mondays at 09:00</string>
     <string name="kit_trigger_in_hour">In an hour</string>
     <string name="kit_trigger_tomorrow">Tomorrow at 09:00</string>
+    <string name="kit_date_clear">Clear the date</string>
+    <string name="kit_not_date">Enter a date and time</string>
 </resources>

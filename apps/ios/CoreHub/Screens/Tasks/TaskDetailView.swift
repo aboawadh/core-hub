@@ -84,8 +84,10 @@ struct TaskDetailView: View {
                 if let notice { Section { NoticeView(text: notice, tone: .info) } }
                 facts
                 descriptionSection
+                lists
                 dependencies
                 runSection
+                CommentsSection(comments: detail?.comments ?? [], send: say)
                 actions
             }
             .listStyle(.insetGrouped)
@@ -197,6 +199,45 @@ struct TaskDetailView: View {
             FactRow(label: l10n("tasks.detail.assignee"), value: assigneeText)
                 .accessibilityIdentifier("task.detail.assignee")
             FactRow(label: l10n("tasks.detail.due"), value: shown.dueAt?.shortText(app.language) ?? l10n("tasks.detail.no_due"))
+            // Start on its own once it is ready and given to an agent; a Hermes card has none.
+            if !shown.hermes {
+                Toggle(isOn: Binding(get: { detail?.autoStart ?? task.autoStart }, set: { on in
+                    let facts = shown
+                    Task { await act { try await TasksAPI.tasksUpdateTask(xHubProfile: facts.profile, taskId: facts.id, taskPatch: TaskPatch(autoStart: on), apiConfiguration: $0) } }
+                })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(l10n("tasks.auto_start.label"))
+                        Text(l10n("tasks.auto_start.hint")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    }
+                }
+                .disabled(busy)
+                .accessibilityIdentifier("task.auto_start")
+            }
+        }
+    }
+
+    /// The checklist, the definition of done and the constraints — or, for a Hermes card, Hermes's
+    /// own history of it (Hermes briefs its own worker, §103/§104).
+    @ViewBuilder
+    private var lists: some View {
+        if shown.hermes {
+            if let history = detail?.hermes { HermesHistorySection(history: history) }
+        } else {
+            SubtasksSection(
+                lines: detail?.subtasks ?? [],
+                editable: detail != nil && !busy,
+                tick: { line in subtaskCall { try await TasksAPI.tasksUpdateSubtask(xHubProfile: $0.profile, taskId: $0.id, subtaskId: line.id, subtaskWrite: SubtaskWrite(status: SubtaskRules.toggled(line.status)), apiConfiguration: $1) } },
+                add: addLine,
+                delete: { line in subtaskCall { try await TasksAPI.tasksDeleteSubtask(xHubProfile: $0.profile, taskId: $0.id, subtaskId: line.id, apiConfiguration: $1) } },
+                reorder: reorder
+            )
+            let status = shown.status
+            CheckLinesSection(kind: .done, items: detail?.definitionOfDone ?? task.definitionOfDone ?? [], status: status) { items in
+                subtaskCall { try await TasksAPI.tasksUpdateTask(xHubProfile: $0.profile, taskId: $0.id, taskPatch: CheckLines.patch(.done, items), apiConfiguration: $1) }
+            }
+            CheckLinesSection(kind: .constraints, items: detail?.constraints ?? task.constraints ?? [], status: status) { items in
+                subtaskCall { try await TasksAPI.tasksUpdateTask(xHubProfile: $0.profile, taskId: $0.id, taskPatch: CheckLines.patch(.constraints, items), apiConfiguration: $1) }
+            }
         }
     }
 
@@ -291,11 +332,12 @@ struct TaskDetailView: View {
 
     private var editSheet: some View {
         let facts = shown
-        let initial = TaskRules.editValues(title: facts.title, description: facts.description, priority: facts.priority, projectID: facts.projectID)
+        let initial = TaskRules.editValues(title: facts.title, description: facts.description, priority: facts.priority, projectID: facts.projectID, dueAt: facts.dueAt)
         var fields = [
             FormField(key: "title", label: l10n("tasks.form.title"), required: true),
             FormField(key: "description", label: l10n("tasks.form.description"), kind: .multiline, help: l10n("tasks.form.description_help")),
             FormField(key: "priority", label: l10n("tasks.form.priority"), kind: .choice, required: true, options: priorityOptions),
+            FormField(key: "due", label: l10n("tasks.detail.due"), kind: .date),
         ]
         // Another project only when the list came and holds this one.
         if projects.contains(where: { $0.id == facts.projectID }) {
@@ -405,6 +447,60 @@ struct TaskDetailView: View {
             }
         } catch {
             failure = HubFailure(error).describe(l10n)
+        }
+    }
+
+    /// A checklist or list write in the task's profile (given the task's facts and the configuration),
+    /// then the task read again.
+    private func subtaskCall<T>(_ call: @escaping (TaskFacts, CoreHubClientAPIConfiguration) async throws -> T) {
+        let facts = shown
+        Task { await act { try await call(facts, $0) } }
+    }
+
+    private func addLine(_ title: String) async -> Bool {
+        let facts = shown
+        do {
+            _ = try await app.api.call { try await TasksAPI.tasksCreateSubtask(xHubProfile: facts.profile, taskId: facts.id, subtaskWrite: SubtaskWrite(title: title), apiConfiguration: $0) }
+            failure = nil
+            await load()
+            changed()
+            return true
+        } catch {
+            failure = HubFailure(error).describe(l10n)
+            return false
+        }
+    }
+
+    /// The new order shows at once; each line whose place changed is told its new index.
+    private func reorder(_ order: [String]) {
+        guard let lines = detail?.subtasks else { return }
+        let moves = SubtaskRules.reindex(lines, order: order)
+        let byID = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0) })
+        detail?.subtasks = order.enumerated().compactMap { place, id in
+            guard var line = byID[id] else { return nil }
+            line.index = place
+            return line
+        }
+        guard !moves.isEmpty else { return }
+        subtaskCall { facts, configuration in
+            for move in moves {
+                _ = try await TasksAPI.tasksUpdateSubtask(xHubProfile: facts.profile, taskId: facts.id, subtaskId: move.id, subtaskWrite: SubtaskWrite(index: move.index), apiConfiguration: configuration)
+            }
+        }
+    }
+
+    /// Say something on the task; on a Hermes card it is said on Hermes's card, in your name.
+    private func say(_ text: String) async -> Bool {
+        guard !text.isEmpty else { return false }
+        let facts = shown
+        do {
+            _ = try await app.api.call { try await TasksAPI.tasksCreateComment(xHubProfile: facts.profile, taskId: facts.id, tasksCreateCommentRequest: TasksCreateCommentRequest(content: text), apiConfiguration: $0) }
+            failure = nil
+            await load()
+            return true
+        } catch {
+            failure = HubFailure(error).describe(l10n)
+            return false
         }
     }
 

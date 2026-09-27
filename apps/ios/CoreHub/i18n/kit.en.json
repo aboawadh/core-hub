@@ -45,6 +45,9 @@
       "weekly": "Mondays at 09:00",
       "in_hour": "In an hour",
       "tomorrow": "Tomorrow at 09:00"
-    }
+    },
+    "date_add": "Add a date",
+    "date_clear": "Clear the date",
+    "not_date": "Enter a date and time"
   }
 }

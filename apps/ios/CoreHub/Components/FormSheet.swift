@@ -4,8 +4,9 @@
 // FormSheet.kt has the same rules.
 import SwiftUI
 
-/// What a field holds. Values travel as text: a toggle is "true"/"false", a choice its option's value.
-enum FormKind: Equatable { case text, multiline, number, toggle, choice, secret }
+/// What a field holds. Values travel as text: a toggle is "true"/"false", a choice its option's value,
+/// a date and time `yyyy-MM-ddTHH:mm` in the phone's time zone (`FormRules.dateText`), empty for none.
+enum FormKind: Equatable { case text, multiline, number, toggle, choice, secret, date }
 
 struct FormOption: Equatable, Hashable {
     let value: String
@@ -32,7 +33,7 @@ struct FormField: Equatable, Identifiable {
 
 /// Why a value is refused.
 enum FormProblem: Equatable {
-    case required, notANumber, notWhole, notAnOption
+    case required, notANumber, notWhole, notAnOption, notADate
     case tooSmall(Decimal)
     case tooLarge(Decimal)
 
@@ -42,6 +43,7 @@ enum FormProblem: Equatable {
         case .notANumber: return l10n("kit.not_number")
         case .notWhole: return l10n("kit.not_whole")
         case .notAnOption: return l10n("kit.not_option")
+        case .notADate: return l10n("kit.not_date")
         case .tooSmall(let limit): return l10n("kit.too_small", ["limit": "\(limit)"])
         case .tooLarge(let limit): return l10n("kit.too_large", ["limit": "\(limit)"])
         }
@@ -54,6 +56,26 @@ enum FormRules {
         let t = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
         guard !t.isEmpty, t.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == "." || $0 == "-" || $0 == "+") }) else { return nil }
         return Decimal(string: t, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static func dateFormatter(_ zone: TimeZone) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = zone
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return f
+    }
+
+    /// A `.date` field's value as a moment, read in `zone` (the phone's); nil when it is not one.
+    static func date(_ text: String, zone: TimeZone = .current) -> Date? {
+        let t = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "T")
+        return t.isEmpty ? nil : dateFormatter(zone).date(from: t)
+    }
+
+    /// A moment as a `.date` field's value, to the minute, in `zone`; nil gives the empty value.
+    static func dateText(_ date: Date?, zone: TimeZone = .current) -> String {
+        date.map { dateFormatter(zone).string(from: $0) } ?? ""
     }
 
     static func problem(_ field: FormField, _ value: String) -> FormProblem? {
@@ -75,9 +97,17 @@ enum FormRules {
             return nil
         case .choice:
             return field.options.contains { $0.value == t } ? nil : .notAnOption
+        case .date:
+            return date(t) == nil ? .notADate : nil
         default:
             return nil
         }
+    }
+
+    /// What "Add a date" starts from: tomorrow at 09:00 on the phone's clock.
+    static func tomorrowAtNine(now: Date = Date(), calendar: Calendar = .current) -> Date {
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow) ?? tomorrow
     }
 
     /// Every refused field, by key; empty when the form can be saved.
@@ -180,6 +210,8 @@ struct FormSheet: View {
             } else {
                 picker.pickerStyle(.menu).accessibilityIdentifier("\(tag).\(field.key)")
             }
+        case .date:
+            dateRow(field, label: label)
         case .multiline:
             VStack(alignment: .leading, spacing: Space.s1) {
                 Text(label).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
@@ -218,6 +250,34 @@ struct FormSheet: View {
                 .textInputAutocapitalization(field.mono ? .never : .sentences)
                 .autocorrectionDisabled(field.mono)
                 .accessibilityIdentifier("\(tag).\(field.key)")
+        }
+    }
+
+    /// A date and time: "Add" while empty, then the system picker and, unless required, Clear.
+    @ViewBuilder
+    private func dateRow(_ field: FormField, label: String) -> some View {
+        if let when = FormRules.date(values[field.key] ?? "") {
+            HStack {
+                DatePicker(label, selection: Binding(get: { when }, set: { values[field.key] = FormRules.dateText($0) }), displayedComponents: [.date, .hourAndMinute])
+                    .accessibilityIdentifier("\(tag).\(field.key)")
+                if !field.required {
+                    Button { values[field.key] = "" } label: { LucideIcon(.x, size: 16).foregroundStyle(Tone.textMuted) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(l10n("kit.date_clear"))
+                        .accessibilityIdentifier("\(tag).\(field.key).clear")
+                }
+            }
+        } else {
+            Button {
+                values[field.key] = FormRules.dateText(FormRules.tomorrowAtNine())
+            } label: {
+                HStack {
+                    Text(label).foregroundStyle(Tone.text)
+                    Spacer()
+                    LucideLabel(l10n("kit.date_add"), icon: .calendarClock, size: 16)
+                }
+            }
+            .accessibilityIdentifier("\(tag).\(field.key)")
         }
     }
 

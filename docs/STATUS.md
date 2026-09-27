@@ -571,6 +571,25 @@ its approval.
   A description cleared on the phone is sent as `null` (§114). Unit tests on both (Android also against a scripted hub, and a Robolectric shot of the
   detail); **iOS verified only on the CI simulator, neither tried on the owner's phones**.
   Comments, checklist, history, projects and bulk actions are part II.
+- **Tasks on the phones, part II (both apps)** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-tasks-2.md`, apps night batch 5): the task sheet adds
+  **"Start automatically"** (`auto_start`), the **checklist** (subtasks: tick, add, delete, drag
+  into another order — iOS by holding the row, Android by holding its grip; each moved line's
+  `index` is written), the **definition of done** and **constraints** (§104: add and delete lines,
+  ticked only while the task is in review, the whole list saved), **comments** (read, and say
+  something — on a Hermes card it goes to Hermes), and for a **Hermes card its own history** (runs
+  and events, §103) instead of the lists. The edit form sets or clears the **due date** (a new
+  date-and-time field in the shared form kit of both apps; a cleared date is sent as `null`, §114).
+  The board gets a **project filter** (the selector's profile's projects), a **projects sheet**
+  (create; edit name, state active/paused/archived, repository and branch — the web's project
+  settings; archive/restore; delete, asked first and saying its tasks go with it) and **Select**:
+  tick cards, then set a priority, say the same comment, archive (done cards only) or delete them,
+  one call per profile; refused cards stay ticked with a count. The card shows its checklist
+  count. **Not possible yet**: editing or deleting a comment (the contract has only
+  `tasks.createComment`); bulk move or assign (not in `TaskBulkUpdate`); the hub's own task
+  timeline (`tasks.listActivity`) and the task's worktree section are not shown (the web does not
+  show the former; the latter is left for later). Android: JVM tests against a scripted hub and
+  Robolectric pictures; iOS: unit tests on the CI simulator; **not tried on the owner's phones**.
 - **Schedules on the phones (both apps)** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-schedules.md`, apps night batch 3): the Schedules list reads
   every profile page by page; **+** (iOS top bar, Android "New schedule") makes one in the selector's

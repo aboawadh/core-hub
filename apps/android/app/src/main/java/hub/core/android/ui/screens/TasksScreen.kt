@@ -1,5 +1,6 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -38,6 +39,9 @@ import hub.core.client.model.Task
 import hub.core.client.model.TaskColumns
 import hub.core.client.model.TaskMove
 import hub.core.client.model.TaskStatus
+import hub.core.client.model.BulkResult
+import hub.core.client.model.Project
+import hub.core.client.model.TaskBulkUpdatePatch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,6 +70,17 @@ data class TasksUi(
     val notice: Int? = null,
     /** The new-task sheet is open (the top bar's + opens it). */
     val creating: Boolean = false,
+    /** Tasks II: the selector's profile's projects, and the one the board is narrowed to. */
+    val projects: List<Project> = emptyList(),
+    val projectId: String? = null,
+    /** "Select" is on, and the ticked cards (§103). */
+    val selecting: Boolean = false,
+    val ticked: Set<String> = emptySet(),
+    val bulkBusy: Boolean = false,
+    /** How many a bulk edit changed and how many were refused, when some were. */
+    val bulkRefused: Pair<Int, Int>? = null,
+    /** The projects sheet is open. */
+    val managing: Boolean = false,
 )
 
 /**
@@ -86,6 +101,7 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
     init {
         graph.realtime.subscribeAll(TASKS_NAMESPACE)
         reload()
+        loadProjects()
         viewModelScope.launch {
             graph.realtime.events.collect { e ->
                 if (e.namespace == TASKS_NAMESPACE && (e.event.startsWith("task.") || e.event.startsWith("subtask."))) {
@@ -100,7 +116,8 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
     fun reload() {
         val s = graph.store.current ?: return
         viewModelScope.launch {
-            hubCall { graph.apis(s).tasks.tasksGetColumns(profiles = TasksApi.ProfilesTasksGetColumns.ALL) }
+            val project = _ui.value.projectId
+            hubCall { graph.apis(s).tasks.tasksGetColumns(profiles = TasksApi.ProfilesTasksGetColumns.ALL, projectId = project) }
                 .onSuccess { b -> _ui.update { it.copy(board = b, loading = false, error = null) } }
                 .onFailure { e -> _ui.update { it.copy(loading = false, error = e as HubError) } }
         }
@@ -129,6 +146,54 @@ class TasksViewModel(private val graph: AppGraph) : ViewModel() {
     fun say(message: Int?) = _ui.update { it.copy(notice = message) }
 
     fun creating(open: Boolean) = _ui.update { it.copy(creating = open) }
+
+    // ------------------------------------------------------------------ Tasks II
+
+    /** The projects of the profile the selector is on, as on the web; a filter on a gone project is dropped. */
+    fun loadProjects() {
+        val home = homeProfile ?: return
+        viewModelScope.launch {
+            ops.projects(home).onSuccess { list ->
+                val gone = _ui.value.projectId?.let { id -> list.none { it.id == id } } == true
+                _ui.update { it.copy(projects = list, projectId = if (gone) null else it.projectId) }
+                if (gone) reload()
+            }
+        }
+    }
+
+    fun filter(projectId: String?) {
+        _ui.update { it.copy(projectId = projectId) }
+        reload()
+    }
+
+    fun managing(open: Boolean) = _ui.update { it.copy(managing = open) }
+
+    fun selecting(on: Boolean) = _ui.update { it.copy(selecting = on, ticked = emptySet(), bulkRefused = null) }
+
+    fun tick(task: Task) = _ui.update { it.copy(ticked = if (task.id in it.ticked) it.ticked - task.id else it.ticked + task.id) }
+
+    fun tickedTasks(): List<Task> = _ui.value.board?.columns.orEmpty().flatMap { it.tasks }.filter { it.id in _ui.value.ticked }
+
+    /** The same change on every ticked card; with no refusal the selection ends. */
+    fun bulk(patch: TaskBulkUpdatePatch) = settle { ops.bulkUpdate(tickedTasks(), patch) }
+
+    fun bulkDelete() = settle { ops.bulkDelete(tickedTasks()) }
+
+    private fun settle(block: suspend () -> Result<List<BulkResult>>) {
+        _ui.update { it.copy(bulkBusy = true, error = null) }
+        viewModelScope.launch {
+            block()
+                .onSuccess { answers ->
+                    val (changed, refused) = BulkRules.tally(answers)
+                    _ui.update {
+                        if (refused > 0) it.copy(bulkBusy = false, ticked = it.ticked.intersect(BulkRules.refused(answers)), bulkRefused = changed to refused)
+                        else it.copy(bulkBusy = false, ticked = emptySet(), selecting = false, bulkRefused = null)
+                    }
+                }
+                .onFailure { e -> _ui.update { it.copy(bulkBusy = false, error = e as? HubError ?: HubError(-1, null, e.message)) } }
+            reload()
+        }
+    }
 }
 
 /** The top bar's +: a new task in the profile the selector is on. */
@@ -189,12 +254,31 @@ fun TasksScreen(shell: ShellViewModel, onOpenChat: (sessionId: String, profile: 
         }
         ui.notice?.let { NoticeBox(stringResource(it), BadgeTone.Warning, Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
         LaunchedEffect(ui.notice) { if (ui.notice != null) { delay(2_500); vm.say(null) } }
+        BoardTools(ui, vm)
         if (Board.columns(board).all { it.second.isEmpty() }) {
             EmptyState(stringResource(R.string.tasks_empty_column), icon = Lucide.ListChecks)
             return@Column
         }
-        // Columns side by side with drag between them (B14/B15), as on the web.
-        TaskBoard(board, Board.showsProfiles(board), shell::profileName, vm, onOpen = { opened = it })
+        // Columns side by side with drag between them (B14/B15), as on the web. While selecting, a
+        // tap ticks a card instead of opening it.
+        Box(Modifier.weight(1f)) {
+            TaskBoard(
+                board, Board.showsProfiles(board), shell::profileName, vm,
+                onOpen = { if (ui.selecting) vm.tick(it) else opened = it },
+                selected = if (ui.selecting) ui.ticked else null,
+            )
+        }
+        if (ui.selecting) BulkBar(ui, vm)
+    }
+    if (ui.managing) {
+        val many by shell.profiles.collectAsState()
+        val home = vm.homeProfile
+        if (home != null) {
+            ProjectsSheet(
+                home, if (many.size > 1) stringResource(R.string.taskl_projects_title_in, shell.profileName(home)) else stringResource(R.string.taskl_projects_title),
+                vm.ops, onChanged = { vm.loadProjects(); vm.reload() }, onDismiss = { vm.managing(false) },
+            )
+        }
     }
     opened?.let { task ->
         TaskDetailSheet(

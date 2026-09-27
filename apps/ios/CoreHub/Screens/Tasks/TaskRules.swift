@@ -54,12 +54,12 @@ enum TaskRules {
     // MARK: - The forms' values
 
     /// The edit form filled from a task.
-    static func editValues(title: String, description: String?, priority: TaskPriority, projectID: String) -> [String: String] {
-        ["title": title, "description": description ?? "", "priority": priority.rawValue, "project": projectID]
+    static func editValues(title: String, description: String?, priority: TaskPriority, projectID: String, dueAt: Date? = nil) -> [String: String] {
+        ["title": title, "description": description ?? "", "priority": priority.rawValue, "project": projectID, "due": FormRules.dateText(dueAt)]
     }
 
-    /// Only what changed, or nil when nothing did. A cleared description is sent as `null`
-    /// (contract decision §114), which the hub stores as no description.
+    /// Only what changed, or nil when nothing did. A cleared description or due date is sent as
+    /// `null` (contract decision §114), which the hub stores as none.
     static func patch(from original: [String: String], to values: [String: String]) -> TaskPatch? {
         var patch = TaskPatch()
         var changed = false
@@ -81,6 +81,16 @@ enum TaskRules {
         if let project = values["project"], !project.isEmpty, project != original["project"] {
             patch.projectId = project
             changed = true
+        }
+        // The due date: another moment, or cleared — sent as `null` (§114).
+        if let due = values["due"], due != (original["due"] ?? "") {
+            if let when = FormRules.date(due) {
+                patch.dueAt = when
+                changed = true
+            } else if due.trimmingCharacters(in: .whitespaces).isEmpty {
+                patch.sendNull.insert(.dueAt)
+                changed = true
+            }
         }
         return changed ? patch : nil
     }
