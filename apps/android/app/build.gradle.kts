@@ -272,7 +272,7 @@ val generateSharedSources by tasks.registering(GenerateSharedSources::class) {
 
 android {
     namespace = "hub.core.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // The store identity (owner, 2026-09-25): Firebase's Android app and the Play listing use
@@ -282,7 +282,7 @@ android {
         // Android has from API 26 without core-library desugaring; adaptive icons and the
         // notification channels the app posts to are 26+ as well. Below 26 is ~1% of devices.
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         // The signed-build workflow stamps its run number + 100 so each build a store sees is newer,
         // and newer than the old app's (same id, up to 63). A local or pull-request build is 1.
         versionCode = providers.environmentVariable("COREHUB_ANDROID_VERSION_CODE").orNull?.toIntOrNull() ?: 1

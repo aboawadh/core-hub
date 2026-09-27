@@ -388,8 +388,8 @@ its approval.
   builds the AAB with self-update off and the release key and uploads it and/or the listing with
   fastlane supply, as a draft by default; the Play Console answers (Data safety, content rating,
   App access, Play App Signing, closed test) are written down. **Never run against Play** (the
-  account is still being verified, no `PLAY_SERVICE_ACCOUNT_JSON`), and the app still targets API
-  35 while Play wants 36 for new apps since 2026-08-31. Since 2026-09-26 **push**: a build with Firebase takes an FCM
+  account is still being verified, no `PLAY_SERVICE_ACCOUNT_JSON`), and since 2026-09-27 the app
+  compiles against and targets API 36 (Android 16), as Play wants for new apps since 2026-08-31. Since 2026-09-26 **push**: a build with Firebase takes an FCM
   token after sign-in and registers it with the hub (`devices.registerPush`; a password sign-in
   first registers this install as a device, a paired phone uses the device its pairing made),
   again when Firebase rotates it, and removes it before sign-out; a tapped push opens the page its

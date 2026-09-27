@@ -43,13 +43,13 @@ number (or the `version_code` input), which always grows and stays above the Git
 (100 + / 1000 + that workflow's run number): a phone with the GitHub APK can take the Play build as
 an update when both carry the same signature (see [Play App Signing](#play-app-signing)).
 
-**Target API level — blocker to clear first.** Since 31 August 2026 Play takes new apps and
-updates only when they target **Android 16 (API 36)**; an extension to 1 November 2026 can be
-requested in Play Console (developer.android.com/google/play/requirements/target-sdk, checked
-2026-09-27). The app targets API 35 today (`app/build.gradle.kts`). Raising `targetSdk` and
-`compileSdk` to 36 changes behaviour for the GitHub APK too, so it is its own change with its own
-testing; until then request the extension, or the first upload will be refused. The workflow warns
-when the target is below 36.
+**Target API level.** Since 31 August 2026 Play takes new apps and updates only when they target
+**Android 16 (API 36)** (developer.android.com/google/play/requirements/target-sdk, checked
+2026-09-27). The app compiles against and targets API 36 (`compileSdk`/`targetSdk` in
+`app/build.gradle.kts`, since the change `docs/changes/2026-09-27-twuijri-android-target-36.md`,
+which also lists every Android 16 behaviour change that applies at that target and how the app was
+checked against it). The GitHub APK targets 36 as well: one build setting for both. The workflow
+stops before uploading when the bundle's target is below 36, since Play would refuse it.
 
 ## Uploading (`play-upload.yml`)
 
@@ -323,7 +323,6 @@ A personal developer account created after 13 November 2023 must run a **closed 
 ## What the owner still does
 
 - Finish identity verification; create the app `com.twuijri.corehub` (App, Free).
-- Clear the target API blocker (API 36 change, or request the extension to 1 November 2026).
 - Choose the Play App Signing option (recommended: upload our existing key with PEPK).
 - Make the service account and the secret `PLAY_SERVICE_ACCOUNT_JSON`.
 - Enter the contact email, App access (demo account and hub address), and the App content forms
