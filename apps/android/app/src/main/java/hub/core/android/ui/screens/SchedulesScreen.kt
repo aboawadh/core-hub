@@ -132,9 +132,15 @@ class SchedulesViewModel(private val graph: AppGraph) : ViewModel() {
 
 private val whenFormat: DateTimeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
 
-/** A time in the phone's own zone and format. */
-fun localTime(time: OffsetDateTime): String =
-    time.atZoneSameInstant(java.time.ZoneId.systemDefault()).format(whenFormat.withLocale(java.util.Locale.getDefault()))
+/**
+ * A time in the phone's own zone, written in the app's language (month names and order follow the
+ * in-app choice, not the phone's: [hub.core.android.Digits.useAppLocale]) with Latin digits (§113).
+ */
+fun localTime(
+    time: OffsetDateTime,
+    zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+    locale: java.util.Locale = java.util.Locale.getDefault(),
+): String = time.atZoneSameInstant(zone).format(whenFormat.withLocale(locale))
 
 @Composable
 fun jobLabel(status: JobStatus): String = stringResource(

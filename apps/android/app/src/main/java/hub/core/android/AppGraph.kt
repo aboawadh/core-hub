@@ -53,7 +53,8 @@ enum class AppLanguage(val tag: String) {
 
     companion object {
         fun of(tag: String?): AppLanguage? = entries.firstOrNull { it.tag == tag }
-        fun system(): AppLanguage = if (Locale.getDefault().language == "ar") AR else EN
+        /** The phone's language (not the process default, which follows the app's choice: [Digits.useAppLocale]). */
+        fun system(): AppLanguage = if (Digits.phoneLocales()[0].language == "ar") AR else EN
     }
 }
 
@@ -290,6 +291,8 @@ open class CoreHubApp : Application() {
         // Latin digits in background work too (notifications, workers): DECISIONS §113.
         Locale.setDefault(Digits.latin(Locale.getDefault()))
         graph = makeGraph()
+        // …and the app's language for dates and month names there too, not the phone's.
+        runCatching { Digits.useAppLocale(graph.prefs.language) }
     }
 
     /** The graph of this process; the screenshot tests' application builds it without the Keystore. */

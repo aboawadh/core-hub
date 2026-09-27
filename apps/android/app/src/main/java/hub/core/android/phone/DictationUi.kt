@@ -27,7 +27,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import android.os.LocaleList
 import android.os.Looper
 import android.os.SystemClock
 import android.speech.RecognitionListener
@@ -136,7 +135,7 @@ object Dictations {
 /** The phone's languages, in the person's order. */
 object PhoneLanguages {
     fun list(): List<String> {
-        val locales = LocaleList.getDefault()
+        val locales = hub.core.android.Digits.phoneLocales()
         return (0 until locales.size()).map { locales[it].toLanguageTag() }
     }
 }
