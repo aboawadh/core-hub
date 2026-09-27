@@ -154,11 +154,16 @@ interface Scope {
  * Notices, preferences and webhooks are **global** operations: they belong to a person and
  * to the hub, not to one workspace. The rows are still workspace-scoped, so a scope is
  * resolved from the header when one is sent and from the caller's default when none is.
+ *
+ * The webhook operations declare the header as optional (`ProfileOptional`, decision §115), so
+ * the route guard has already resolved it — to `default` when it is absent. A request without
+ * the header that names `?profile=` is still answered as hubs before v1.1.3 answered it: from
+ * that profile. That form is not in the contract; it is kept so an old script keeps working.
  */
 function scopeOf(request: FastifyRequest): Scope {
   const principal = request.principal;
   if (!principal) throw new HubError('internal', { message: 'route has no principal' });
-  if (request.workspace) {
+  if (request.workspace && !legacyProfileQuery(request)) {
     return {
       workspace: request.workspace.id,
       profile: request.workspace.slug,
@@ -173,6 +178,13 @@ function scopeOf(request: FastifyRequest): Scope {
       DEFAULT_WORKSPACE_SLUG,
   );
   return { workspace: workspace.id, profile: workspace.slug, userId: principal.user.id };
+}
+
+/** True when the header is absent and a `?profile=` value stands in for it (see `scopeOf`). */
+function legacyProfileQuery(request: FastifyRequest): boolean {
+  if (request.headers['x-hub-profile'] !== undefined) return false;
+  const profile = (request.query as { profile?: unknown } | undefined)?.profile;
+  return typeof profile === 'string' && profile.trim() !== '';
 }
 
 const dbOf = (request: FastifyRequest): ModuleDb => requireSqlite(request.server.hub.database);

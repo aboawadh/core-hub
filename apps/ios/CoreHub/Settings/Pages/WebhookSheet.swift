@@ -225,9 +225,9 @@ struct WebhookSheet: View {
         let profile = profile, id = hook?.id
         do {
             if let id {
-                _ = try await app.api.call { try await NotifyAPI.notifyUpdateWebhook(xHubProfile: profile, webhookId: id, webhookWrite: body, apiConfiguration: $0) }
+                _ = try await app.api.call { try await NotifyAPI.notifyUpdateWebhook(webhookId: id, webhookWrite: body, xHubProfile: profile, apiConfiguration: $0) }
             } else {
-                _ = try await app.api.call { try await NotifyAPI.notifyCreateWebhook(xHubProfile: profile, webhookWrite: body, apiConfiguration: $0) }
+                _ = try await app.api.call { try await NotifyAPI.notifyCreateWebhook(webhookWrite: body, xHubProfile: profile, apiConfiguration: $0) }
             }
             failure = nil
             saved()
