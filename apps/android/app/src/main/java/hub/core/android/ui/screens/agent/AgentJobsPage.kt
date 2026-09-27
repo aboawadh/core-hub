@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 /**
  * The agent's jobs: the Schedules list narrowed to this agent and profile (§٤ rule 8), as on the
  * web — run one now, pause or resume it, delete it (asks first; a Hermes job goes from Hermes's
- * scheduler too). Making or editing one is the Schedules page's.
+ * scheduler too); New job and Edit open the Schedules page's form, narrowed to this agent.
  */
 @Composable
 private fun JobsPage(agent: Agent, profile: String) {
@@ -56,6 +56,9 @@ private fun JobsPage(agent: Agent, profile: String) {
     var busy by remember { mutableStateOf<String?>(null) }
     val confirm = rememberConfirmDelete<Schedule>()
     val load = rememberLoad(agent.id, profile) { ops.jobs(profile, agent.id).getOrThrow() }
+    // New and Edit open the Schedules page's own form, narrowed to this agent (native since 2026-09-27).
+    var creating by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Schedule?>(null) }
     fun act(job: Schedule, block: suspend () -> Result<*>, done: () -> Unit = {}) {
         busy = job.id
         scope.launch {
@@ -67,6 +70,12 @@ private fun JobsPage(agent: Agent, profile: String) {
     LoadView(load) { jobs ->
         LazyColumn(contentPadding = agentPagePad, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("agent.jobs")) {
             item { Text(stringResource(R.string.sched_jobs_note), fontSize = FontTokens.sizeSm.sp, color = t.textMuted) }
+            item {
+                HubButton(
+                    stringResource(R.string.sched_jobs_new), { creating = true }, size = ControlSize.Md, icon = Lucide.Plus,
+                    modifier = Modifier.testTag("agent.jobs.new"),
+                )
+            }
             item { ScheduleNoteView(note) }
             if (jobs.isEmpty()) item {
                 EmptyState(stringResource(R.string.sched_jobs_none), body = stringResource(R.string.sched_jobs_none_body), icon = Lucide.RotateCcwClock)
@@ -99,6 +108,10 @@ private fun JobsPage(agent: Agent, profile: String) {
                         )
                         Spacer(Modifier.weight(1f))
                         HubIconButton(
+                            Lucide.Pencil, stringResource(R.string.sched_jobs_edit), { editing = job }, size = 32.dp, iconSize = 16.dp,
+                            modifier = Modifier.testTag("job.${job.id}.edit"),
+                        )
+                        HubIconButton(
                             Lucide.Trash, stringResource(R.string.kit_delete), { confirm.ask(job) }, size = 32.dp, iconSize = 16.dp,
                             modifier = Modifier.testTag("job.${job.id}.delete"),
                         )
@@ -106,6 +119,12 @@ private fun JobsPage(agent: Agent, profile: String) {
                 }
             }
         }
+    }
+    if (creating) {
+        ScheduleEditorSheet(null, profile, null, listOf(agent), ops, onDismiss = { creating = false }) { creating = false; load.reload() }
+    }
+    editing?.let { job ->
+        ScheduleEditorSheet(job, job.profile, null, listOf(agent), ops, onDismiss = { editing = null }) { editing = null; load.reload() }
     }
     ConfirmDeleteDialog(
         confirm, { stringResource(R.string.kit_delete_confirm, it.name) },

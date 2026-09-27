@@ -166,7 +166,10 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
                             },
                             onClick = {
                                 if (unread) set(notice, read = true)
-                                NoticeLinks.route(notice.resource, notice.profile)?.let(onOpen)
+                                NoticeLinks.route(notice.resource, notice.profile)?.let { route ->
+                                    hub.core.android.nav.Focus.item.value = hub.core.android.nav.Focus.of(notice.resource, notice.profile)
+                                    onOpen(route)
+                                }
                             },
                         )
                     }

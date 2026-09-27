@@ -330,7 +330,15 @@ private fun BackgroundRow(item: BackgroundItem, now: Long, stopping: Boolean, pr
             ms?.let { Text(BackgroundRules.clock(it), fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
             Spacer(Modifier.weight(1f))
             if (route != null) {
-                HubButton(stringResource(R.string.background_open_item), { onGo(route) }, kind = ButtonKind.Ghost, size = ControlSize.Sm, icon = Lucide.ExternalLink)
+                HubButton(
+                    stringResource(R.string.background_open_item),
+                    {
+                        // The task or workflow run itself opens on its page (nav/Focus.kt).
+                        hub.core.android.nav.Focus.item.value = hub.core.android.nav.Focus.of(item.resource, item.profile)
+                        onGo(route)
+                    },
+                    kind = ButtonKind.Ghost, size = ControlSize.Sm, icon = Lucide.ExternalLink,
+                )
             }
             if (item.stoppable) {
                 HubButton(

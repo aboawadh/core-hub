@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,6 +234,15 @@ class WorkflowsModel(private val apis: () -> HubApis?, private val home: () -> S
         )
     }
 
+    /** A run opened from elsewhere (Background, Pending, a notice): its workflow's sheet, showing the run. */
+    suspend fun openRunOf(profile: String, runId: String) {
+        val run = call { it.schedules.schedulesGetWorkflowRun(profile, runId) }.getOrElse { e -> _ui.update { it.copy(error = e as HubError) }; return }
+        val workflow = _ui.value.items.firstOrNull { it.id == run.workflowId && it.profile == run.profile }
+            ?: call { it.schedules.schedulesGetWorkflow(run.profile, run.workflowId) }.getOrElse { e -> _ui.update { it.copy(error = e as HubError) }; return }
+        open(workflow)
+        _ui.update { it.copy(run = run) }
+    }
+
     suspend fun openRun(profile: String, runId: String) {
         call { it.schedules.schedulesGetWorkflowRun(profile, runId) }
             .onSuccess { run -> _ui.update { it.copy(run = run, error = null) } }
@@ -299,6 +309,7 @@ class WorkflowsViewModel(graph: AppGraph) : ViewModel() {
     fun closeRun() = model.closeRun()
     fun run(w: Workflow, input: String, limits: WorkflowLimitsOverride?) = viewModelScope.launch { model.run(w, input, limits) }
     fun openRun(profile: String, id: String) = viewModelScope.launch { model.openRun(profile, id) }
+    fun openRunOf(profile: String, id: String) = viewModelScope.launch { model.openRunOf(profile, id) }
     fun respond(approve: Boolean, reason: String?) = viewModelScope.launch { model.respond(approve, reason) }
     fun cancel() = viewModelScope.launch { model.cancel() }
 }
@@ -368,6 +379,12 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     val ui by vm.ui.collectAsState()
     val t = LocalTokens.current
     val badges = ui.items.map { it.profile }.distinct().size > 1
+    val focus by hub.core.android.nav.Focus.item.collectAsState()
+    LaunchedEffect(focus, ui.loading) {
+        if (ui.loading) return@LaunchedEffect
+        val f = hub.core.android.nav.Focus.take(hub.core.android.nav.FocusItem.Kind.WORKFLOW_RUN) ?: return@LaunchedEffect
+        vm.openRunOf(f.profile, f.id)
+    }
     Column(Modifier.fillMaxSize()) {
         if (ui.opened == null) ui.error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (ui.loading) {

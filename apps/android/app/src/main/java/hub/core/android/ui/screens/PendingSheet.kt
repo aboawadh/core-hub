@@ -94,7 +94,15 @@ fun PendingButton(shell: ShellViewModel, nav: Navigator) {
                         if (profiles.size > 1) Badge(shell.profileName(approval.profile), tone = BadgeTone.Accent)
                         PendingList.routeOf(approval)?.let { route ->
                             HubButton(
-                                stringResource(R.string.pending_open), { open = false; nav.go(route) }, kind = ButtonKind.Ghost, size = ControlSize.Sm,
+                                stringResource(R.string.pending_open), {
+                                    open = false
+                                    // A workflow's step opens its run on Schedules (nav/Focus.kt).
+                                    approval.workflowRunId?.let { id ->
+                                        hub.core.android.nav.Focus.item.value =
+                                            hub.core.android.nav.FocusItem(hub.core.android.nav.FocusItem.Kind.WORKFLOW_RUN, id, approval.profile)
+                                    }
+                                    nav.go(route)
+                                }, kind = ButtonKind.Ghost, size = ControlSize.Sm,
                                 icon = Lucide.ExternalLink, modifier = Modifier.testTag("pending.go.${approval.id}"),
                             )
                         }

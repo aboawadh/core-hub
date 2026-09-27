@@ -62,8 +62,10 @@
     <string name="sched_dur_s">%1$ss</string>
     <string name="sched_dur_m">%1$sm %2$ss</string>
     <string name="sched_dur_h">%1$sh %2$sm</string>
-    <string name="sched_jobs_note">What runs on its own for this agent in this profile. For Hermes these are the jobs in its own scheduler. Make or edit one on the Schedules page.</string>
+    <string name="sched_jobs_note">What runs on its own for this agent in this profile. For Hermes these are the jobs in its own scheduler. Make one with New job, or change one with Edit.</string>
     <string name="sched_jobs_none">No jobs</string>
     <string name="sched_jobs_none_body">Nothing is scheduled for this agent in this profile. Make a schedule on the Schedules page and it shows here.</string>
     <string name="sched_jobs_delete_body">It is deleted from Hermes\'s scheduler too.</string>
+    <string name="sched_jobs_new">New job</string>
+    <string name="sched_jobs_edit">Edit</string>
 </resources>
