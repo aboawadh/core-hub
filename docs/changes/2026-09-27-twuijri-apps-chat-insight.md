@@ -99,7 +99,9 @@ Test Case '-[CoreHubTests.ChatInsightTests testTheCatalogueCarriesTheModelsWindo
 Test Case '-[CoreHubTests.ChatInsightTests testTheRingSaysHowFullTheWindowIsAndWhereTheFigureCameFrom]' passed
 ```
 
-CI على #181 بعد الدفع: يُضاف أدناه.
+CI على #181 بعد الدمج (الالتزام `3942e442`): كل الفحوص نجحت — Android build, unit tests, lint (6m25s)، Build and test
+on the iOS simulator (5m46s)، Generate the Swift client، Lint/typecheck/contracts/client tests/build، Server unit tests ×3،
+Web smoke journeys، Change record، Docker، Desktop، Installers ×3، db:generate + db:migrate.
 
 ## المخاطر والرجوع
 - الوكلاء الفرعيون يُقرؤون مرة عند فتح كل محادثة (طلب واحد إضافي)، ثم من الأحداث؛ القراءة كل 15 ثانية فقط ما دام أحدهم يعمل.
