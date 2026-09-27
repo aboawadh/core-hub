@@ -89,7 +89,15 @@ tests="12" skipped="0" failures="0" errors="0"   # منها: webhooks carry the 
 ```
 iOS: يُترجم ويُختبر في CI فقط (`ios.yml` يعمل عند تغيّر `openapi.yaml` و`apps/ios`).
 
-CI: يُضاف بعد الدفع.
+CI على PR #186 (قبل commit هذا السطر):
+```
+$ gh pr checks 186 --repo twuijri/core-hub
+15 pass, 1 skipping (Upload the listing to App Store Connect)
+Android build, unit tests, lint  pass · Build and test on the iOS simulator  pass
+Generate the Swift client (CoreHubClient)  pass · Server unit tests (shard 1/3, 2/3, 3/3)  pass
+Lint, typecheck, contracts, client tests, build  pass · Web smoke journeys (Playwright)  pass
+Docker image builds and answers /health  pass · db:generate + db:migrate  pass
+```
 
 ## المخاطر والرجوع
 - التطبيقات الحالية (v1.1.3) ترسل الترويسة فلا يتغير لها شيء؛ القديمة (v1.1.2) تعمل كما كانت.
