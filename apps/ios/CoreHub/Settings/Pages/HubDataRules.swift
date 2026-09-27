@@ -100,7 +100,7 @@ enum SkillsUsageRules {
     }
 }
 
-enum WebhookRules {
+enum NotifyWebhookRules {
     static let defaultRetries = 5
     static let maxRetries = 10
     /// The header a receiver checks (`derived.webhookSignatureHeader` in the contract package).
@@ -118,7 +118,7 @@ enum WebhookRules {
         var enabled = true
         var includeContent = false
         var allowPrivate = false
-        var retries = String(WebhookRules.defaultRetries)
+        var retries = String(NotifyWebhookRules.defaultRetries)
         var secret: SecretChoice = .new
     }
 

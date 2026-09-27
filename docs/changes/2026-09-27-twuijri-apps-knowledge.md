@@ -32,7 +32,7 @@
 
 ## الملفات والتأثير
 - Android (`ui/screens/settings/`): `HubDataKit.kt` (العملاء والقواعد: `HubDataApis`، `HubDataOps`، `KnowledgeRules`،
-  `SkillsUsageRules`، `WebhookRules`)، `KnowledgePage.kt`، `SkillsUsagePage.kt`، `HubPluginsPage.kt`، `WebhooksPage.kt`،
+  `SkillsUsageRules`، `NotifyWebhookRules`)، `KnowledgePage.kt`، `SkillsUsagePage.kt`، `HubPluginsPage.kt`، `WebhooksPage.kt`،
   `WebhookSheet.kt` — حُذف `native = false` من الأربع؛ `res/values*/strings_knowledge.xml`.
 - iOS (`Settings/Pages/`): `HubDataRules.swift`، `KnowledgePage.swift`، `SkillsUsagePage.swift`، `HubPluginsPage.swift`،
   `WebhooksPage.swift`، `WebhookSheet.swift` — حُذف `native: false` من «استخدام المهارات»؛ `i18n/knowledge.{en,ar}.json`.
@@ -56,7 +56,14 @@ $ pnpm typecheck               → EXIT 0
 ```
 صور الأندرويد: `apps/android/app/build/shots/knowledge/android-{knowledge,skills-usage,skills-usage-top,plugins,webhooks,webhooks-deliveries}-{light-en,dark-ar}.png` (راجعتُها: المعرفة، التقرير، وبطاقة الوجهة مع نتيجة الاختبار والتسليمات وزر إعادة الإرسال بالعربية).
 
-iOS: لا يُبنى على لينكس؛ النتيجة من `ios.yml` على الفرع تُضاف هنا.
+iOS: لا يُبنى على لينكس. التشغيل الأول لـ`ios.yml` على الفرع (36286294590): `** BUILD SUCCEEDED **`، 270 اختبارًا وفشل واحد —
+تاريخ اليوم بالعربية خرج بأرقام هندية لأن `setLocalizedDateFormatFromTemplate` يأخذ أرقام المنطقة؛ صار نمطًا ثابتًا (`d MMM y`)
+ويبقى الاختبار يتحقق من ذلك.
+
+الدمج مع فرع الليلة (بعد الدفعة 9): تعارضان نصيّان فقط في `STATUS.md` وفهرس الليلة (أُبقي الطرفان)، واسم مكرر: الدفعة 9 عرّفت
+`WebhookRules` لوجهات الوكيل في الحزمة نفسها، فصارت قواعد هذه الصفحة `NotifyWebhookRules` في التطبيقين. بعد الدمج أُعيدت فحوص
+الأندرويد (`KnowledgeReportsTest` 12، `KnowledgeShots` 2، `NavigationParityTest` 10، `StringsParityTest` 4، lint: EXIT 0) و`i18n:check`
+و`contracts:check-clients` و`lint` و`typecheck` و`change-record:check` (كلها EXIT 0).
 
 ## المخاطر والرجوع
 - صفحات iOS لم تُبنَ محليًا؛ تعتمد على مهمة iOS في CI.

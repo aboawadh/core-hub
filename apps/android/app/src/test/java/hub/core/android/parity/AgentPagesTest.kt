@@ -55,8 +55,12 @@ class AgentPagesTest {
         assertEquals(JsonPrimitive("fast"), SettingValues.parse(choice, "fast"))
         assertNull(SettingValues.parse(choice, "slow"))
         assertTrue(SettingValues.on(field("toggle", value = "true")))
-        assertFalse(SettingValues.editable(field("json")))
-        assertTrue(SettingValues.editable(field("secret")))
+        // A list is one item per line and JSON must parse (apps batch 9: no longer read-only on the phone).
+        assertEquals(kotlinx.serialization.json.JsonArray(listOf(JsonPrimitive("a"), JsonPrimitive("b"))), SettingValues.parse(field("list"), "a\n\n b \n"))
+        assertEquals(JsonPrimitive(3), (SettingValues.parse(field("json"), "{\"x\": 3}") as kotlinx.serialization.json.JsonObject)["x"])
+        assertNull(SettingValues.parse(field("json"), "{x"))
+        assertEquals("a\nb", SettingValues.typedText(field("list", value = "[\"a\",\"b\"]")))
+        assertEquals("", SettingValues.typedText(field("secret", value = "\"shh\"")))
     }
 
     @Test fun `token and credential platforms link here, a code is scanned from the web`() {

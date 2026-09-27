@@ -3,8 +3,8 @@ package hub.core.android.parity
 import hub.core.android.ui.screens.HubDataApis
 import hub.core.android.ui.screens.HubDataOps
 import hub.core.android.ui.screens.KnowledgeRules
+import hub.core.android.ui.screens.NotifyWebhookRules
 import hub.core.android.ui.screens.SkillsUsageRules
-import hub.core.android.ui.screens.WebhookRules
 import hub.core.client.infrastructure.Serializer
 import hub.core.client.model.ActiveAgent
 import hub.core.client.model.Job
@@ -107,58 +107,58 @@ class KnowledgeReportsTest {
     }
 
     @Test fun `a webhook sheet starts signed and checks the address and the profiles`() {
-        val fresh = WebhookRules.draft(null)
-        assertEquals(WebhookRules.SecretChoice.NEW, fresh.secret)
+        val fresh = NotifyWebhookRules.draft(null)
+        assertEquals(NotifyWebhookRules.SecretChoice.NEW, fresh.secret)
         assertTrue(fresh.allProfiles)
-        assertFalse(WebhookRules.ready(fresh))
+        assertFalse(NotifyWebhookRules.ready(fresh))
         val typed = fresh.copy(name = "Ops", url = "ftp://example.com")
-        assertTrue(WebhookRules.badUrl(typed.url))
-        assertFalse(WebhookRules.ready(typed))
-        assertTrue(WebhookRules.ready(typed.copy(url = "https://example.com/x")))
-        assertFalse(WebhookRules.badUrl(""))
+        assertTrue(NotifyWebhookRules.badUrl(typed.url))
+        assertFalse(NotifyWebhookRules.ready(typed))
+        assertTrue(NotifyWebhookRules.ready(typed.copy(url = "https://example.com/x")))
+        assertFalse(NotifyWebhookRules.badUrl(""))
         val some = typed.copy(url = "https://example.com/x", allProfiles = false)
-        assertTrue(WebhookRules.noProfile(some))
-        assertFalse(WebhookRules.ready(some))
-        assertTrue(WebhookRules.ready(some.copy(profiles = setOf("work"))))
+        assertTrue(NotifyWebhookRules.noProfile(some))
+        assertFalse(NotifyWebhookRules.ready(some))
+        assertTrue(NotifyWebhookRules.ready(some.copy(profiles = setOf("work"))))
 
-        val signed = WebhookRules.draft(hook())
-        assertEquals(WebhookRules.SecretChoice.KEEP, signed.secret)
+        val signed = NotifyWebhookRules.draft(hook())
+        assertEquals(NotifyWebhookRules.SecretChoice.KEEP, signed.secret)
         assertEquals("3", signed.retries)
-        assertEquals(listOf(WebhookRules.SecretChoice.KEEP, WebhookRules.SecretChoice.NEW, WebhookRules.SecretChoice.NONE), WebhookRules.secretChoices(hook()))
-        assertEquals(WebhookRules.SecretChoice.NONE, WebhookRules.draft(hook(secret = false)).secret)
-        assertEquals(listOf(WebhookRules.SecretChoice.NEW, WebhookRules.SecretChoice.NONE), WebhookRules.secretChoices(hook(secret = false)))
-        assertFalse(WebhookRules.draft(hook(profiles = """["work"]""")).allProfiles)
+        assertEquals(listOf(NotifyWebhookRules.SecretChoice.KEEP, NotifyWebhookRules.SecretChoice.NEW, NotifyWebhookRules.SecretChoice.NONE), NotifyWebhookRules.secretChoices(hook()))
+        assertEquals(NotifyWebhookRules.SecretChoice.NONE, NotifyWebhookRules.draft(hook(secret = false)).secret)
+        assertEquals(listOf(NotifyWebhookRules.SecretChoice.NEW, NotifyWebhookRules.SecretChoice.NONE), NotifyWebhookRules.secretChoices(hook(secret = false)))
+        assertFalse(NotifyWebhookRules.draft(hook(profiles = """["work"]""")).allProfiles)
     }
 
     @Test fun `retries keep to 0-10 and a new secret is 32 random bytes in hex`() {
-        assertEquals(10, WebhookRules.retries("99"))
-        assertEquals(0, WebhookRules.retries("0"))
-        assertEquals(5, WebhookRules.retries(""))
-        val secret = WebhookRules.newSecret { bytes -> bytes.indices.forEach { bytes[it] = it.toByte() } }
+        assertEquals(10, NotifyWebhookRules.retries("99"))
+        assertEquals(0, NotifyWebhookRules.retries("0"))
+        assertEquals(5, NotifyWebhookRules.retries(""))
+        val secret = NotifyWebhookRules.newSecret { bytes -> bytes.indices.forEach { bytes[it] = it.toByte() } }
         assertEquals("whsec_" + (0 until 32).joinToString("") { "%02x".format(it) }, secret)
-        assertEquals(6 + 64, WebhookRules.newSecret().length)
+        assertEquals(6 + 64, NotifyWebhookRules.newSecret().length)
     }
 
     @Test fun `a failed delivery with no retry left can be sent again`() {
-        assertTrue(WebhookRules.canRedeliver(delivery("dead")))
-        assertTrue(WebhookRules.canRedeliver(delivery("failed")))
-        assertFalse(WebhookRules.canRedeliver(delivery("failed", next = "2026-09-27T10:05:00Z")))
-        assertFalse(WebhookRules.canRedeliver(delivery("delivered")))
-        assertTrue(WebhookRules.waiting(listOf(delivery("queued"))))
-        assertTrue(WebhookRules.waiting(listOf(delivery("failed", next = "2026-09-27T10:05:00Z"))))
-        assertFalse(WebhookRules.waiting(listOf(delivery("dead"))))
+        assertTrue(NotifyWebhookRules.canRedeliver(delivery("dead")))
+        assertTrue(NotifyWebhookRules.canRedeliver(delivery("failed")))
+        assertFalse(NotifyWebhookRules.canRedeliver(delivery("failed", next = "2026-09-27T10:05:00Z")))
+        assertFalse(NotifyWebhookRules.canRedeliver(delivery("delivered")))
+        assertTrue(NotifyWebhookRules.waiting(listOf(delivery("queued"))))
+        assertTrue(NotifyWebhookRules.waiting(listOf(delivery("failed", next = "2026-09-27T10:05:00Z"))))
+        assertFalse(NotifyWebhookRules.waiting(listOf(delivery("dead"))))
     }
 
     @Test fun `a test job says how the delivery went once it is over`() {
-        assertNull(WebhookRules.outcome(job("running")))
-        assertEquals(WebhookRules.TestOutcome(true, 204, null), WebhookRules.outcome(job("succeeded", """{"delivered":true,"status":204,"error":null}""")))
-        assertEquals(WebhookRules.TestOutcome(false, 500, null), WebhookRules.outcome(job("succeeded", """{"delivered":false,"status":500}""")))
+        assertNull(NotifyWebhookRules.outcome(job("running")))
+        assertEquals(NotifyWebhookRules.TestOutcome(true, 204, null), NotifyWebhookRules.outcome(job("succeeded", """{"delivered":true,"status":204,"error":null}""")))
+        assertEquals(NotifyWebhookRules.TestOutcome(false, 500, null), NotifyWebhookRules.outcome(job("succeeded", """{"delivered":false,"status":500}""")))
         assertEquals(
-            WebhookRules.TestOutcome(false, 0, "refused"),
-            WebhookRules.outcome(job("failed", error = """{"error":"refused","code":"bad_request"}""")),
+            NotifyWebhookRules.TestOutcome(false, 0, "refused"),
+            NotifyWebhookRules.outcome(job("failed", error = """{"error":"refused","code":"bad_request"}""")),
         )
-        assertEquals(WebhookRules.UrlRefusal.PRIVATE, WebhookRules.urlRefusal("url_private"))
-        assertNull(WebhookRules.urlRefusal("profile_not_allowed"))
+        assertEquals(NotifyWebhookRules.UrlRefusal.PRIVATE, NotifyWebhookRules.urlRefusal("url_private"))
+        assertNull(NotifyWebhookRules.urlRefusal("profile_not_allowed"))
     }
 
     // ------------------------------------------------------------------ the calls
@@ -251,8 +251,8 @@ class KnowledgeReportsTest {
         assertEquals("work", requests[0].getHeader("X-Hub-Profile"))
         val events = ops().events().getOrThrow().map { it.name }
 
-        val draft = WebhookRules.draft(null).copy(name = " Ops ", url = "https://example.com/hook", events = setOf("run.completed", "gone.event"), retries = "4")
-        ops().create(WebhookRules.write(draft, events, "whsec_abc")).getOrThrow()
+        val draft = NotifyWebhookRules.draft(null).copy(name = " Ops ", url = "https://example.com/hook", events = setOf("run.completed", "gone.event"), retries = "4")
+        ops().create(NotifyWebhookRules.write(draft, events, "whsec_abc")).getOrThrow()
         val created = body(requests[2])
         assertEquals("Ops", created["name"]!!.jsonPrimitive.content)
         assertEquals(listOf("run.completed"), created["events"]!!.jsonArray.map { it.jsonPrimitive.content })
@@ -260,14 +260,14 @@ class KnowledgeReportsTest {
         assertEquals(4, created["max_retries"]!!.jsonPrimitive.content.toInt())
         assertEquals(0, created["profiles"]!!.jsonArray.size)
 
-        val stop = WebhookRules.draft(hook()).copy(secret = WebhookRules.SecretChoice.NONE)
-        ops().update("W1", WebhookRules.write(stop, events, null)).getOrThrow()
+        val stop = NotifyWebhookRules.draft(hook()).copy(secret = NotifyWebhookRules.SecretChoice.NONE)
+        ops().update("W1", NotifyWebhookRules.write(stop, events, null)).getOrThrow()
         val patched = body(requests[3])
         assertEquals(JsonNull, patched["secret"])
         assertEquals("work", requests[3].getHeader("X-Hub-Profile"))
 
-        val keep = WebhookRules.draft(hook())
-        ops().update("W1", WebhookRules.write(keep, events, null)).getOrThrow()
+        val keep = NotifyWebhookRules.draft(hook())
+        ops().update("W1", NotifyWebhookRules.write(keep, events, null)).getOrThrow()
         assertFalse("secret" in body(requests[4]))
 
         ops().setEnabled("W1", false).getOrThrow()
@@ -277,7 +277,7 @@ class KnowledgeReportsTest {
 
     @Test fun `a test is followed to its end, deliveries are read and one is sent again, and a webhook deleted`() = runTest {
         val outcome = ops().test("W1", pause = {}).getOrThrow()
-        assertEquals(WebhookRules.TestOutcome(true, 200, null), outcome)
+        assertEquals(NotifyWebhookRules.TestOutcome(true, 200, null), outcome)
         assertEquals(2, jobPolls)
         assertTrue(requests.any { it.requestUrl!!.encodedPath.endsWith("/jobs/J1") && it.getHeader("X-Hub-Profile") == "work" })
 

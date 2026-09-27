@@ -86,15 +86,15 @@ class HubDataOps(private val profile: String, private val apis: () -> HubDataApi
     suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(id, delivery) }
 
     /** Queues the test delivery and follows its job to the end (as the web polls it). */
-    suspend fun test(id: String, pause: suspend () -> Unit = { kotlinx.coroutines.delay(700) }, tries: Int = 60): Result<WebhookRules.TestOutcome> = hubCall {
+    suspend fun test(id: String, pause: suspend () -> Unit = { kotlinx.coroutines.delay(700) }, tries: Int = 60): Result<NotifyWebhookRules.TestOutcome> = hubCall {
         val jobId = apis().notify.notifyTestWebhook(id).jobId
-        var outcome: WebhookRules.TestOutcome? = null
+        var outcome: NotifyWebhookRules.TestOutcome? = null
         var left = tries
         while (outcome == null && left-- > 0) {
-            outcome = WebhookRules.outcome(apis().jobs.jobsGet(profile, jobId))
+            outcome = NotifyWebhookRules.outcome(apis().jobs.jobsGet(profile, jobId))
             if (outcome == null) pause()
         }
-        outcome ?: WebhookRules.TestOutcome(false, 0, null)
+        outcome ?: NotifyWebhookRules.TestOutcome(false, 0, null)
     }
 }
 
@@ -144,7 +144,7 @@ object SkillsUsageRules {
         if (chosen == null || agents.any { it.agentId == chosen }) agents else agents + ActiveAgent(chosen, false, null)
 }
 
-object WebhookRules {
+object NotifyWebhookRules {
     const val DEFAULT_RETRIES = 5
     const val MAX_RETRIES = 10
 

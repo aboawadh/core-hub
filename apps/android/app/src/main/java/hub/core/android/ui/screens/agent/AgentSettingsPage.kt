@@ -44,33 +44,55 @@ import hub.core.android.ui.kit.HubTextField
 import hub.core.android.ui.kit.Item
 import hub.core.android.ui.kit.Lucide
 import hub.core.android.ui.kit.MenuItem
+import hub.core.android.ui.kit.NoticeBox
 import hub.core.android.ui.kit.ToggleRow
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.Agent
+import hub.core.client.model.AgentCapability
+import hub.core.client.model.AgentInstall
+import hub.core.client.model.AgentKind
 import hub.core.client.model.SettingsField
+import hub.core.client.model.SettingsSection
 import java.math.BigDecimal
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
-/** A settings field's value, shown and typed (the kinds the phone edits in place). */
+/** A settings field's value, shown and typed (every kind the adapter declares; web `AgentSettingsScreen`). */
 object SettingValues {
-    /** The kinds edited on the phone; `list` and `json` are read here and edited on the web. */
-    fun editable(field: SettingsField): Boolean = field.kind !in setOf(SettingsField.Kind.LIST, SettingsField.Kind.JSON)
-
     fun text(value: JsonElement?): String? = when (value) {
         null, is JsonNull -> null
         is JsonPrimitive -> value.contentOrNull
         else -> value.toString()
     }
 
+    /** What the field reads as in its row: a list's items, JSON as `{…}`, a secret hidden. */
+    fun shown(field: SettingsField): String? = when (field.kind) {
+        SettingsField.Kind.LIST -> (field.value as? JsonArray)?.joinToString(", ") { text(it).orEmpty() }?.ifEmpty { null } ?: text(field.value)
+        SettingsField.Kind.JSON -> field.value?.takeIf { it !is JsonNull }?.let { if (it is JsonArray) "[…]" else "{…}" }
+        else -> text(field.value)
+    }
+
+    /** The text the editor starts with: a list one item per line, JSON pretty, a secret empty. */
+    fun typedText(field: SettingsField): String = when (field.kind) {
+        SettingsField.Kind.SECRET -> ""
+        SettingsField.Kind.LIST -> SettingsCardRules.listText(field.value)
+        SettingsField.Kind.JSON -> SettingsCardRules.jsonText(field.value)
+        else -> text(field.value).orEmpty()
+    }
+
+    /** A list or JSON is edited over several lines. */
+    fun multiline(field: SettingsField): Boolean = field.kind == SettingsField.Kind.LIST || field.kind == SettingsField.Kind.JSON
+
     /**
      * What a person typed as the field's value, or null when it is not one: a whole number for
      * `integer`, a number for `number` (a comma taken as the decimal point), within `min` and
-     * `max`; text as typed. An empty entry puts the field back to its default (`JsonNull`).
+     * `max`; a list one item per line; JSON that parses; text as typed. An empty entry puts the
+     * field back to its default (`JsonNull`).
      */
     fun parse(field: SettingsField, typed: String): JsonElement? {
         val t = typed.trim()
@@ -81,6 +103,8 @@ object SettingValues {
             SettingsField.Kind.NUMBER -> t.replace(',', '.').toBigDecimalOrNull()?.takeIf(::inRange)?.let { JsonPrimitive(it.toDouble()) }
             SettingsField.Kind.TOGGLE -> t.toBooleanStrictOrNull()?.let(::JsonPrimitive)
             SettingsField.Kind.CHOICE -> t.takeIf { v -> field.options.any { it.value == v } }?.let(::JsonPrimitive)
+            SettingsField.Kind.LIST -> SettingsCardRules.listValue(typed)
+            SettingsField.Kind.JSON -> SettingsCardRules.jsonValue(typed)
             else -> JsonPrimitive(typed)
         }
     }
@@ -89,26 +113,38 @@ object SettingValues {
 }
 
 /**
- * The adapter's settings (ADR 0002), editable in place: switches, a choice from a menu, and text or
- * numbers in a small dialog; lists and JSON are edited on the web. Presets (§100) head the page.
+ * The adapter's settings (ADR 0002), editable in place: switches, a choice from a menu, and text,
+ * numbers, lists (one item per line) and JSON in a small dialog. The web's cards come first: signing
+ * a coding agent in to its own account, Presets (§100) and context compression (§57); what Hermes
+ * wrote and waits for review (§58) closes the page. What a save said shows over the sections.
  */
 @Composable
 private fun SettingsPage(agent: Agent, profile: String) {
     val ops = rememberOps(agent, profile)
+    val two = rememberAgentsTwoOps(agent, profile)
     val apis = agentApis()
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
     var error by remember { mutableStateOf<HubError?>(null) }
+    var saved by remember { mutableStateOf<SettingsCardRules.Saved?>(null) }
     var editing by remember { mutableStateOf<Pair<String, SettingsField>?>(null) }
     var choosing by remember { mutableStateOf<String?>(null) }
     val load = rememberLoad(agent.id, profile) { apis().agents.agentsGetSettings(profile, agent.id).sections }
     fun write(section: String, key: String, value: JsonElement) {
-        scope.launch { ops.setSetting(section, key, value).onFailure { error = it as HubError }.onSuccess { error = null }; load.reload() }
+        scope.launch {
+            two.setSetting(section, key, value)
+                .onFailure { error = it as HubError; saved = null }
+                .onSuccess { error = null; saved = SettingsCardRules.saved(it.restartJobId, it.section.applies) }
+            load.reload()
+        }
     }
     LoadView(load) { sections ->
         LazyColumn(contentPadding = agentPagePad, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("agent.settings")) {
+            if (agent.install.signIn == true && agent.install.source == AgentInstall.Source.MANAGED) item { SignInCard(agent, two) }
             item { PresetsCard(ops, onApplied = { load.reload() }) }
+            if (agent.capabilities.contains(AgentCapability.COMPRESS)) item { CompressionCard(two) }
             item { ErrorNotice(error) }
+            saved?.let { item { SavedNote(it) } }
             sections.forEach { section ->
                 item(key = section.key) {
                     GroupedList(title = agentText(section.title)) {
@@ -137,31 +173,36 @@ private fun SettingsPage(agent: Agent, profile: String) {
                                         }
                                     }
                                 }
-                                SettingValues.editable(field) -> Item(
+                                else -> Item(
                                     agentText(field.label),
-                                    value = if (field.kind == SettingsField.Kind.SECRET) (if (field.value != null && field.value !is JsonNull) "••••" else "—") else SettingValues.text(field.value) ?: SettingValues.text(field.default)?.let { "($it)" } ?: "—",
+                                    value = if (field.kind == SettingsField.Kind.SECRET) (if (field.value != null && field.value !is JsonNull) "••••" else "—") else SettingValues.shown(field) ?: SettingValues.text(field.default)?.let { "($it)" } ?: "—",
                                     subtitle = field.help?.let { agentText(it) }, chevron = true, tag = "setting.$id",
                                     onClick = { editing = section.key to field },
                                 )
-                                else -> Item(agentText(field.label), value = SettingValues.text(field.value) ?: "—", subtitle = stringResource(R.string.settings_edit_on_web))
                             }
                         }
                     }
                 }
-                section.note?.let { note -> item { Text(agentText(note), fontSize = FontTokens.sizeXs.sp, color = t.textMuted) } }
+                item(key = section.key + ".note") {
+                    (section.note?.let { agentText(it) } ?: sectionLine(section))?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted) }
+                }
             }
+            if (agent.kind == AgentKind.HERMES) item { PendingWritesCard(two) }
         }
     }
     editing?.let { (section, field) ->
-        var typed by remember(field.key) { mutableStateOf(if (field.kind == SettingsField.Kind.SECRET) "" else SettingValues.text(field.value).orEmpty()) }
+        var typed by remember(field.key) { mutableStateOf(SettingValues.typedText(field)) }
         val parsed = SettingValues.parse(field, typed)
+        val many = SettingValues.multiline(field)
         HubDialog({ editing = null }, agentText(field.label)) {
             field.help?.let { Text(agentText(it), fontSize = FontTokens.sizeSm.sp, color = t.textMuted) }
+            if (many) Text(stringResource(if (field.kind == SettingsField.Kind.LIST) R.string.agents2_settings_hint_list else R.string.agents2_settings_hint_json), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             HubTextField(
                 typed, { typed = it }, placeholder = field.hint ?: SettingValues.text(field.default),
+                singleLine = !many, minLines = if (many) 4 else 1, maxLines = if (many) 12 else 1, mono = field.kind == SettingsField.Kind.JSON,
                 keyboardOptions = KeyboardOptions(keyboardType = if (field.kind == SettingsField.Kind.INTEGER) KeyboardType.Number else if (field.kind == SettingsField.Kind.NUMBER) KeyboardType.Decimal else KeyboardType.Text),
                 visualTransformation = if (field.kind == SettingsField.Kind.SECRET) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                error = if (parsed == null) stringResource(R.string.settings_value_bad) else null, fieldTag = "setting.editor",
+                error = if (parsed == null) stringResource(if (field.kind == SettingsField.Kind.JSON) R.string.agents2_settings_json_bad else R.string.settings_value_bad) else null, fieldTag = "setting.editor",
             )
             Text(stringResource(R.string.settings_empty_is_default), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
@@ -170,6 +211,29 @@ private fun SettingsPage(agent: Agent, profile: String) {
             }
         }
     }
+}
+
+/** When the section's values apply, when the adapter wrote no note of its own. */
+@Composable
+private fun sectionLine(section: SettingsSection): String? = when {
+    section.applies == SettingsSection.Applies.NEXT_MESSAGE -> stringResource(R.string.agents2_settings_applies_next_message)
+    section.restartRequired -> stringResource(R.string.agents2_settings_restart_required)
+    else -> null
+}
+
+@Composable
+private fun SavedNote(saved: SettingsCardRules.Saved) {
+    NoticeBox(
+        stringResource(
+            when (saved) {
+                SettingsCardRules.Saved.RESTARTING -> R.string.agents2_settings_saved_restarting
+                SettingsCardRules.Saved.RESTART_NEEDED -> R.string.agents2_settings_saved_restart_needed
+                SettingsCardRules.Saved.NEXT_MESSAGE -> R.string.agents2_settings_saved_next_message
+                SettingsCardRules.Saved.SAVED -> R.string.agents2_settings_saved
+            },
+        ),
+        BadgeTone.Success, Modifier.testTag("setting.saved"),
+    )
 }
 
 /** Presets (§100): saved bundles of this agent's settings in the profile; activate, save the current, delete. */

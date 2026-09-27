@@ -14,7 +14,7 @@ struct WebhookSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.dismiss) private var dismiss
-    @State private var draft = WebhookRules.Draft()
+    @State private var draft = NotifyWebhookRules.Draft()
     @State private var ready = false
     @State private var events: [NotifyListWebhookEvents200ResponseItemsInner]?
     @State private var eventsError: String?
@@ -25,7 +25,7 @@ struct WebhookSheet: View {
     @State private var shownSecret: String?
 
     private var arabic: Bool { app.language == .ar }
-    private var refusalKey: String? { WebhookRules.urlRefusalKey(failure?.reason) }
+    private var refusalKey: String? { NotifyWebhookRules.urlRefusalKey(failure?.reason) }
 
     var body: some View {
         if let shownSecret {
@@ -47,7 +47,7 @@ struct WebhookSheet: View {
                         .environment(\.layoutDirection, .leftToRight)
                         .accessibilityIdentifier("webhook.form.url")
                         .onChange(of: draft.url) { _, _ in if refusalKey != nil { failure = nil } }
-                    if WebhookRules.badURL(draft.url) {
+                    if NotifyWebhookRules.badURL(draft.url) {
                         Text(l10n("knowledge.webhooks_url_scheme")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.danger)
                     } else if let refusalKey {
                         Text(l10n(refusalKey)).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.danger)
@@ -63,11 +63,11 @@ struct WebhookSheet: View {
                 }
 
                 Section {
-                    Text("\(WebhookRules.signatureHeader): sha256=<hex>")
+                    Text("\(NotifyWebhookRules.signatureHeader): sha256=<hex>")
                         .font(.system(size: FontSize.sizeXs, design: .monospaced)).foregroundStyle(Tone.textMuted)
                         .environment(\.layoutDirection, .leftToRight)
                     Picker(l10n("knowledge.webhooks_signing"), selection: $draft.secret) {
-                        ForEach(WebhookRules.secretChoices(hook), id: \.self) { choice in
+                        ForEach(NotifyWebhookRules.secretChoices(hook), id: \.self) { choice in
                             Text(secretLabel(choice)).tag(choice)
                         }
                     }
@@ -89,7 +89,7 @@ struct WebhookSheet: View {
                         TextField(l10n("knowledge.webhooks_events_filter"), text: $filter)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .accessibilityIdentifier("webhook.form.events.filter")
-                        let shown = WebhookRules.filterEvents(events, needle: filter, arabic: arabic)
+                        let shown = NotifyWebhookRules.filterEvents(events, needle: filter, arabic: arabic)
                         ForEach(shown, id: \.name) { event in
                             Toggle(isOn: Binding(
                                 get: { draft.events.contains(event.name) },
@@ -130,7 +130,7 @@ struct WebhookSheet: View {
                             ))
                             .accessibilityIdentifier("webhook.form.profile.\(choice.slug)")
                         }
-                        if WebhookRules.noProfile(draft) {
+                        if NotifyWebhookRules.noProfile(draft) {
                             Text(l10n("knowledge.webhooks_profiles_pick_one")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.danger)
                         }
                     }
@@ -171,7 +171,7 @@ struct WebhookSheet: View {
                         ProgressView()
                     } else {
                         Button(l10n("common.save")) { Task { await submit() } }
-                            .disabled(!WebhookRules.ready(draft))
+                            .disabled(!NotifyWebhookRules.ready(draft))
                             .accessibilityIdentifier("webhook.form.save")
                     }
                 }
@@ -179,7 +179,7 @@ struct WebhookSheet: View {
         }
         .onAppear {
             guard !ready else { return }
-            draft = WebhookRules.draft(hook)
+            draft = NotifyWebhookRules.draft(hook)
             ready = true
         }
         .task { await loadEvents() }
@@ -197,7 +197,7 @@ struct WebhookSheet: View {
         }
     }
 
-    private func secretLabel(_ choice: WebhookRules.SecretChoice) -> String {
+    private func secretLabel(_ choice: NotifyWebhookRules.SecretChoice) -> String {
         let signed = hook?.secret != nil
         switch choice {
         case .keep: return l10n("knowledge.webhooks_secret_keep")
@@ -220,8 +220,8 @@ struct WebhookSheet: View {
     private func submit() async {
         saving = true
         defer { saving = false }
-        let secret = draft.secret == .new ? WebhookRules.newSecret() : nil
-        let body = WebhookRules.write(draft, known: events?.map(\.name), secret: secret)
+        let secret = draft.secret == .new ? NotifyWebhookRules.newSecret() : nil
+        let body = NotifyWebhookRules.write(draft, known: events?.map(\.name), secret: secret)
         let profile = profile, id = hook?.id
         do {
             if let id {

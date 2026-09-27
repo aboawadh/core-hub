@@ -117,7 +117,7 @@ private fun WebhookCard(hook: Webhook, ops: HubDataOps, onEdit: () -> Unit, onDe
     val scope = rememberCoroutineScope()
     var switching by remember(hook.id) { mutableStateOf(false) }
     var testing by remember(hook.id) { mutableStateOf(false) }
-    var outcome by remember(hook.id) { mutableStateOf<WebhookRules.TestOutcome?>(null) }
+    var outcome by remember(hook.id) { mutableStateOf<NotifyWebhookRules.TestOutcome?>(null) }
     var error by remember(hook.id) { mutableStateOf<HubError?>(null) }
     var open by remember(hook.id) { mutableStateOf(false) }
     var deliveries by remember(hook.id) { mutableStateOf<List<WebhookDelivery>?>(null) }
@@ -127,7 +127,7 @@ private fun WebhookCard(hook: Webhook, ops: HubDataOps, onEdit: () -> Unit, onDe
     LaunchedEffect(open, tick) {
         while (open) {
             ops.deliveries(hook.id).onSuccess { deliveries = it }.onFailure { error = it as HubError }
-            delay(if (WebhookRules.waiting(deliveries.orEmpty())) 1_500 else 5_000)
+            delay(if (NotifyWebhookRules.waiting(deliveries.orEmpty())) 1_500 else 5_000)
         }
     }
     WebhookCardView(
@@ -166,7 +166,7 @@ internal fun WebhookCardView(
     hook: Webhook,
     switching: Boolean = false,
     testing: Boolean = false,
-    outcome: WebhookRules.TestOutcome? = null,
+    outcome: NotifyWebhookRules.TestOutcome? = null,
     error: HubError? = null,
     deliveries: List<WebhookDelivery>? = null,
     open: Boolean = false,
@@ -258,7 +258,7 @@ private fun Deliveries(deliveries: List<WebhookDelivery>?, redelivered: Boolean,
                         )
                         d.error?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.danger, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     }
-                    if (WebhookRules.canRedeliver(d)) {
+                    if (NotifyWebhookRules.canRedeliver(d)) {
                         HubButton(
                             stringResource(R.string.knowledge_webhooks_redeliver), { onRedeliver(d) }, kind = ButtonKind.Secondary, size = ControlSize.Sm,
                             icon = Lucide.RefreshCw, modifier = Modifier.testTag("delivery.${d.id}.redeliver"),

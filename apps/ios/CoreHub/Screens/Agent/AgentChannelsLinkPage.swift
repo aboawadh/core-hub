@@ -1,6 +1,10 @@
-// An agent's Channels: linking, unlinking and the senders waiting for approval. A platform linked by
-// scanning a code (WhatsApp) cannot be scanned from this phone's own screen: the page says so and
-// opens the web for another screen.
+// An agent's Channels (apps batch 9, the web's page): each linked platform as a card — its switch, state
+// and account, and what it offers (its settings, WhatsApp's mode and reply header, its fields, Unlink or
+// Forget identity, Restart when the gateway does not serve it yet); linking a platform (a bot token or
+// credentials here; a platform linked by scanning a code (WhatsApp) cannot be scanned from this phone's
+// own screen, so the page says to pair it from a computer and opens the web); the senders waiting for
+// approval and the approved ones; and the agent's incoming webhooks. Android's AgentChannelsPage.kt is
+// its twin.
 import CoreHubClient
 import SwiftUI
 
@@ -30,11 +34,7 @@ enum ChannelLinks {
         return ChannelTokenLink(credentials: credentials, allowedUsers: allowedUsers)
     }
 
-    static func account(_ channel: Channel) -> String? {
-        guard let link = channel.link, link.linked else { return nil }
-        let parts = [link.accountName, link.accountUsername.map { "@\($0)" }, link.accountPhone].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
+    static func account(_ channel: Channel) -> String? { ChannelRules.account(channel.link) }
 }
 
 struct AgentChannelsLinkPage: View {
@@ -42,46 +42,56 @@ struct AgentChannelsLinkPage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @Environment(\.openURL) private var openURL
-    @State private var channels: [Channel]?
+    @State private var list: AgentsListChannels200Response?
+    @State private var specs: [ChannelPlatform] = []
     @State private var pairing: PairingList?
     @State private var error: String?
-    @State private var linking = false
-    @State private var unlinking: Channel?
+    @State private var note: ToolNote?
+    @State private var picking = false
+    @State private var linking: Keyed<ChannelPlatform>?
+    @State private var settings: Keyed<Channel>?
+    @State private var mode: Keyed<Channel>?
+    @State private var header: Keyed<Channel>?
+    @State private var fields: Keyed<Channel>?
+    @State private var restarting = false
+    @State private var busy: Set<String> = []
+    @State private var question: ToolQuestion?
 
     var body: some View {
         List {
             if let error { NoticeView(text: error, tone: .danger) }
-            Section(l10n("channels.linked")) {
-                let linked = (channels ?? []).filter { $0.configured || $0.link?.linked == true }
-                if channels == nil { ProgressView().frame(maxWidth: .infinity) }
-                if channels != nil && linked.isEmpty {
+            if let note { NoticeView(text: note.text, tone: note.tone) }
+            Section {
+                let shown = ChannelRules.shown(list?.items ?? [], pending: pairing?.pending ?? [])
+                if list == nil { ProgressView().frame(maxWidth: .infinity) }
+                if list != nil && shown.isEmpty {
                     Text(l10n("channels.none")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
                 }
-                ForEach(linked, id: \.platform) { channel in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(channel.label)
-                            if let line = ChannelLinks.account(channel) ?? channel.error {
-                                Text(line).font(.system(size: FontSize.sizeXs)).foregroundStyle(channel.error != nil ? Tone.danger : Tone.textMuted)
+                if !shown.isEmpty { GatewayNote(gateway: list?.gateway) }
+                ForEach(shown, id: \.platform) { channel in
+                    let spec = specs.first { $0.platform == channel.platform }
+                    ChannelCard(
+                        channel: channel, spec: spec, waiting: ChannelRules.waitingOn(pairing?.pending ?? [], channel.platform),
+                        canRestart: AgentCardRules.canRestart(agent), restarting: restarting, busy: busy.contains(channel.platform),
+                        switched: { on in
+                            Task {
+                                busy.insert(channel.platform)
+                                await act { _ = try await AgentsAPI.agentsUpdateChannel(xHubProfile: $0, agentId: agent.id, platform: channel.platform, channelWrite: ChannelWrite(enabled: on), apiConfiguration: $1) }
+                                busy.remove(channel.platform)
                             }
-                        }
-                        Spacer()
-                        StatusDot(kind: channel.status == .online ? .good : channel.status == .error ? .bad : .neutral, label: l10n("channels.status_\(channel.status.rawValue)"))
-                    }
-                    .swipeActions {
-                        Button(role: .destructive) { unlinking = channel } label: { Text(l10n("channels.unlink")) }
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) { unlinking = channel } label: { Text(l10n("channels.unlink")) }
-                    }
-                    .accessibilityIdentifier("channel.\(channel.platform)")
+                        },
+                        restart: { Task { await restart() } },
+                        choose: { action in choose(action, channel, spec) }
+                    )
                 }
                 Button {
-                    linking = true
+                    picking = true
                 } label: {
                     LucideLabel(l10n("channels.link"), icon: .link, size: 16)
                 }
                 .accessibilityIdentifier("channels.link")
+            } header: {
+                Text(l10n("channels.linked"))
             }
             if let pairing {
                 Section(l10n("channels.waiting")) {
@@ -91,12 +101,14 @@ struct AgentChannelsLinkPage: View {
                     ForEach(pairing.pending, id: \.requestId) { request in
                         VStack(alignment: .leading, spacing: Space.s1) {
                             Text(request.userName ?? request.userId)
-                            Text("\(request.platform) · \(request.requestedAt.shortText(app.language))").font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                            Text("\(request.platform) · \(request.userId) · \(request.requestedAt.shortText(app.language))").font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                             HStack {
                                 Button(l10n("workflows.approve")) { Task { await act { _ = try await AgentsAPI.agentsApprovePairing(xHubProfile: $0, agentId: agent.id, platform: request.platform, requestId: request.requestId, apiConfiguration: $1) } } }
                                     .buttonStyle(.borderedProminent).tint(Tone.accent)
+                                    .accessibilityIdentifier("pairing.\(request.requestId).approve")
                                 Button(l10n("workflows.deny"), role: .destructive) { Task { await act { try await AgentsAPI.agentsDenyPairing(xHubProfile: $0, agentId: agent.id, platform: request.platform, requestId: request.requestId, apiConfiguration: $1) } } }
                                     .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("pairing.\(request.requestId).deny")
                             }
                         }
                         .accessibilityIdentifier("pairing.\(request.requestId)")
@@ -108,7 +120,7 @@ struct AgentChannelsLinkPage: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(sender.userName ?? sender.userId)
-                                    Text(sender.platform).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                                    Text("\(sender.platform) · \(sender.userId)").font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                                 }
                                 Spacer()
                                 Button(l10n("channels.revoke")) { Task { await act { try await AgentsAPI.agentsRevokePairing(xHubProfile: $0, agentId: agent.id, platform: sender.platform, userId: sender.userId, apiConfiguration: $1) } } }
@@ -118,18 +130,51 @@ struct AgentChannelsLinkPage: View {
                     }
                 }
             }
+            WebhooksSection(agent: agent, channels: list?.items ?? [])
         }
         .refreshable { await load() }
         .task(id: app.currentProfile) { await load() }
-        .sheet(isPresented: $linking, onDismiss: { Task { await load() } }) {
-            NavigationStack { ChannelLinkSheet(agent: agent, openWeb: openWeb) }
+        .toolQuestion($question)
+        .sheet(isPresented: $picking, onDismiss: { Task { await load() } }) {
+            NavigationStack { ChannelLinkSheet(agent: agent, start: nil, openWeb: openWeb) }
         }
-        .confirmationDialog(unlinking.map { l10n("channels.unlink_confirm", ["platform": $0.label]) } ?? "", isPresented: Binding(get: { unlinking != nil }, set: { if !$0 { unlinking = nil } }), titleVisibility: .visible) {
-            Button(l10n("channels.unlink"), role: .destructive) {
-                if let channel = unlinking {
-                    Task { await act { _ = try await AgentsAPI.agentsUnlinkChannel(xHubProfile: $0, agentId: agent.id, platform: channel.platform, apiConfiguration: $1) } }
-                }
-                unlinking = nil
+        .sheet(item: $linking, onDismiss: { Task { await load() } }) { spec in
+            NavigationStack { ChannelLinkSheet(agent: agent, start: spec.value, openWeb: openWeb) }
+        }
+        .sheet(item: $settings) { channel in
+            ChannelSettingsSheet(agent: agent, platform: channel.id, name: specs.first { $0.platform == channel.id }?.label ?? channel.value.label, gateway: list?.gateway)
+        }
+        .sheet(item: $mode, onDismiss: { Task { await load() } }) { channel in
+            ChannelModeSheet(agent: agent, channel: channel.value)
+        }
+        .sheet(item: $header, onDismiss: { Task { await load() } }) { channel in
+            ReplyHeaderSheet(agent: agent, channel: channel.value)
+        }
+        .sheet(item: $fields, onDismiss: { Task { await load() } }) { channel in
+            ChannelFieldsSheet(agent: agent, channel: channel.value)
+        }
+    }
+
+    private func choose(_ action: ChannelRules.Action, _ channel: Channel, _ spec: ChannelPlatform?) {
+        switch action {
+        case .pair, .link: linking = spec.map { Keyed(id: $0.platform, value: $0) }
+        case .settings: settings = Keyed(id: channel.platform, value: channel)
+        case .mode: mode = Keyed(id: channel.platform, value: channel)
+        case .replyHeader: header = Keyed(id: channel.platform, value: channel)
+        case .fields: fields = Keyed(id: channel.platform, value: channel)
+        case .unlink:
+            let body: String
+            switch ChannelRules.unlinkWords(channel) {
+            case .telegram: body = l10n("agents2.ch.telegram_unlink_body")
+            case .credentials: body = l10n("agents2.ch.platform_unlink_body", ["name": channel.label])
+            case .whatsapp: body = l10n("agents2.ch.unlink_body")
+            }
+            question = ToolQuestion(title: l10n("agents2.ch.unlink_title", ["name": channel.label]), body: body, confirm: l10n("channels.unlink")) {
+                Task { await act { _ = try await AgentsAPI.agentsUnlinkChannel(xHubProfile: $0, agentId: agent.id, platform: channel.platform, apiConfiguration: $1) } }
+            }
+        case .clear:
+            question = ToolQuestion(title: l10n("agents2.ch.clear_title", ["name": channel.label]), body: l10n("agents2.ch.clear_body"), confirm: l10n("agents2.ch.clear")) {
+                Task { await act { _ = try await AgentsAPI.agentsClearChannel(xHubProfile: $0, agentId: agent.id, platform: channel.platform, apiConfiguration: $1) } }
             }
         }
     }
@@ -143,11 +188,14 @@ struct AgentChannelsLinkPage: View {
     private func load() async {
         let profile = app.currentProfile
         do {
-            channels = try await app.api.call { try await AgentsAPI.agentsListChannels(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }.items
+            list = try await app.api.call { try await AgentsAPI.agentsListChannels(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
             pairing = try? await app.api.call { try await AgentsAPI.agentsListPairing(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
+            if specs.isEmpty {
+                specs = (try? await app.api.call { try await AgentsAPI.agentsListChannelPlatforms(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }.items) ?? []
+            }
             error = nil
         } catch {
-            self.error = HubFailure(error).describe(l10n)
+            self.error = AgentToolErrors.describe(error, l10n)
         }
     }
 
@@ -157,14 +205,40 @@ struct AgentChannelsLinkPage: View {
             try await app.api.call { try await operation(profile, $0) }
             error = nil
         } catch {
-            self.error = HubFailure(error).describe(l10n)
+            self.error = AgentToolErrors.describe(error, l10n)
+        }
+        await load()
+    }
+
+    /// Restarts the agent's runtime (Hermes's gateway with it), follows the job, then reads the channels again.
+    private func restart() async {
+        let profile = app.currentProfile
+        restarting = true
+        note = nil
+        defer { restarting = false }
+        do {
+            let accepted = try await app.api.call { try await AgentsAPI.agentsRestart(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
+            let job = try await AgentJobs.follow(accepted.jobId, profile: profile, api: app.api) { _ in }
+            note = job.status == .succeeded ? ToolNote(text: l10n("agents2.ch.restarted")) : ToolNote(text: job.error?.error ?? l10n("agents2.ch.status.error"), tone: .danger)
+        } catch is CancellationError {
+            return
+        } catch {
+            note = ToolNote(text: AgentToolErrors.describe(error, l10n), tone: .danger)
         }
         await load()
     }
 }
 
+/// A value shown in a sheet, named by its platform.
+struct Keyed<Value>: Identifiable {
+    let id: String
+    let value: Value
+}
+
 struct ChannelLinkSheet: View {
     let agent: Agent
+    /// A platform to open straight at (a card's Link or Pair), or nil for the list.
+    let start: ChannelPlatform?
     let openWeb: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
@@ -172,6 +246,17 @@ struct ChannelLinkSheet: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        if let start {
+            ChannelLinkForm(agent: agent, platform: start, openWeb: openWeb, done: { dismiss() })
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button(l10n("common.close")) { dismiss() } }
+                }
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         AsyncContent(key: agent.id) {
             let profile = app.currentProfile
             return try await app.api.call { try await AgentsAPI.agentsListChannelPlatforms(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }.items
@@ -219,7 +304,8 @@ struct ChannelLinkForm: View {
             if !ChannelLinks.onPhone(platform) {
                 // A code shown on this screen cannot be scanned by this phone's own camera.
                 Section {
-                    NoticeView(text: l10n("channels.qr_body", ["platform": platform.label]), tone: .info)
+                    NoticeView(text: l10n("agents2.ch.qr_note", ["platform": platform.label]), tone: .info)
+                        .accessibilityIdentifier("platform.qr_note")
                     Button {
                         openWeb()
                     } label: {

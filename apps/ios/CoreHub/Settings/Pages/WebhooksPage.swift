@@ -88,7 +88,7 @@ struct WebhookCard: View {
     @Environment(\.l10n) private var l10n
     @State private var switching = false
     @State private var testing = false
-    @State private var outcome: WebhookRules.TestOutcome?
+    @State private var outcome: NotifyWebhookRules.TestOutcome?
     @State private var error: String?
     @State private var open = false
     @State private var deliveries: [WebhookDelivery]?
@@ -149,7 +149,7 @@ struct WebhookCard: View {
         .task(id: "\(open)/\(tick)") {
             while open, !Task.isCancelled {
                 await loadDeliveries()
-                let wait = WebhookRules.waiting(deliveries ?? []) ? 1_500 : 5_000
+                let wait = NotifyWebhookRules.waiting(deliveries ?? []) ? 1_500 : 5_000
                 try? await Task.sleep(for: .milliseconds(wait))
             }
         }
@@ -198,7 +198,7 @@ struct WebhookCard: View {
                             }
                         }
                         Spacer(minLength: 0)
-                        if WebhookRules.canRedeliver(delivery) {
+                        if NotifyWebhookRules.canRedeliver(delivery) {
                             Button(l10n("knowledge.webhooks_redeliver")) { Task { await redeliver(delivery) } }
                                 .buttonStyle(.bordered).font(.system(size: FontSize.sizeXs))
                                 .accessibilityIdentifier("delivery.\(delivery.id).redeliver")
@@ -232,7 +232,7 @@ struct WebhookCard: View {
         }
     }
 
-    private func describe(_ outcome: WebhookRules.TestOutcome) -> String {
+    private func describe(_ outcome: NotifyWebhookRules.TestOutcome) -> String {
         if outcome.delivered { return l10n("knowledge.webhooks_test_ok", ["status": String(outcome.status)]) }
         if outcome.status > 0 { return l10n("knowledge.webhooks_test_status", ["status": String(outcome.status)]) }
         return l10n("knowledge.webhooks_test_failed", ["error": outcome.error ?? "—"])
@@ -263,7 +263,7 @@ struct WebhookCard: View {
             let job = try await app.api.call { try await NotifyAPI.notifyTestWebhook(webhookId: id, apiConfiguration: $0.inProfile(profile)) }
             for _ in 0..<60 {
                 let state = try await app.api.call { try await JobsAPI.jobsGet(xHubProfile: profile, jobId: job.jobId, apiConfiguration: $0) }
-                if let done = WebhookRules.outcome(state) {
+                if let done = NotifyWebhookRules.outcome(state) {
                     outcome = done
                     error = nil
                     changed()
@@ -271,7 +271,7 @@ struct WebhookCard: View {
                 }
                 try await Task.sleep(for: .milliseconds(700))
             }
-            outcome = WebhookRules.TestOutcome(delivered: false, status: 0, error: nil)
+            outcome = NotifyWebhookRules.TestOutcome(delivered: false, status: 0, error: nil)
         } catch is CancellationError {
         } catch {
             self.error = HubFailure(error).describe(l10n)

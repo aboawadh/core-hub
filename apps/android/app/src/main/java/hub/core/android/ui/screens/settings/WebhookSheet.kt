@@ -74,8 +74,8 @@ internal fun WebhookSheet(
         val catalogue = rememberLoad("webhook-events") { ops.events().getOrThrow() }
         val events = (catalogue.state as? Load.Ready)?.value
         WebhookForm(hook, profiles, events, (catalogue.state as? Load.Failed)?.error, arabic, onDismiss) { draft ->
-            val secret = if (draft.secret == WebhookRules.SecretChoice.NEW) WebhookRules.newSecret() else null
-            val body = WebhookRules.write(draft, events?.map { it.name }, secret)
+            val secret = if (draft.secret == NotifyWebhookRules.SecretChoice.NEW) NotifyWebhookRules.newSecret() else null
+            val body = NotifyWebhookRules.write(draft, events?.map { it.name }, secret)
             (if (hook != null) ops.update(hook.id, body) else ops.create(body)).map { secret }.onSuccess(onSaved)
         }
     }
@@ -90,15 +90,15 @@ internal fun WebhookForm(
     eventsError: HubError?,
     arabic: Boolean,
     onCancel: () -> Unit,
-    onSave: suspend (WebhookRules.Draft) -> Result<*>,
+    onSave: suspend (NotifyWebhookRules.Draft) -> Result<*>,
 ) {
     val t = LocalTokens.current
     val scope = rememberCoroutineScope()
-    var draft by remember(hook?.id) { mutableStateOf(WebhookRules.draft(hook)) }
+    var draft by remember(hook?.id) { mutableStateOf(NotifyWebhookRules.draft(hook)) }
     var filter by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    val refusal = WebhookRules.urlRefusal(error?.reason)
+    val refusal = NotifyWebhookRules.urlRefusal(error?.reason)
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HubTextField(draft.name, { draft = draft.copy(name = it.take(80)) }, label = stringResource(R.string.knowledge_webhooks_name), size = ControlSize.Md, fieldTag = "webhook.form.name")
         HubTextField(
@@ -106,10 +106,10 @@ internal fun WebhookForm(
             placeholder = "https://", mono = true, size = ControlSize.Md, fieldTag = "webhook.form.url",
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             error = when {
-                WebhookRules.badUrl(draft.url) -> stringResource(R.string.knowledge_webhooks_url_scheme)
-                refusal == WebhookRules.UrlRefusal.SCHEME -> stringResource(R.string.knowledge_webhooks_url_scheme)
-                refusal == WebhookRules.UrlRefusal.UNRESOLVABLE -> stringResource(R.string.knowledge_webhooks_url_unresolvable)
-                refusal == WebhookRules.UrlRefusal.PRIVATE -> stringResource(R.string.knowledge_webhooks_url_private)
+                NotifyWebhookRules.badUrl(draft.url) -> stringResource(R.string.knowledge_webhooks_url_scheme)
+                refusal == NotifyWebhookRules.UrlRefusal.SCHEME -> stringResource(R.string.knowledge_webhooks_url_scheme)
+                refusal == NotifyWebhookRules.UrlRefusal.UNRESOLVABLE -> stringResource(R.string.knowledge_webhooks_url_unresolvable)
+                refusal == NotifyWebhookRules.UrlRefusal.PRIVATE -> stringResource(R.string.knowledge_webhooks_url_private)
                 else -> null
             },
         )
@@ -122,18 +122,18 @@ internal fun WebhookForm(
 
         Heading(stringResource(R.string.knowledge_webhooks_signing))
         Hint(stringResource(R.string.knowledge_webhooks_signing_hint))
-        Text("${WebhookRules.SIGNATURE_HEADER}: sha256=<hex>", fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = t.textMuted)
-        WebhookRules.secretChoices(hook).forEach { choice ->
+        Text("${NotifyWebhookRules.SIGNATURE_HEADER}: sha256=<hex>", fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = t.textMuted)
+        NotifyWebhookRules.secretChoices(hook).forEach { choice ->
             RadioRow(
                 stringResource(
                     when (choice) {
-                        WebhookRules.SecretChoice.KEEP -> R.string.knowledge_webhooks_secret_keep
-                        WebhookRules.SecretChoice.NEW -> if (hook?.secret != null) R.string.knowledge_webhooks_secret_new else R.string.knowledge_webhooks_secret_make
-                        WebhookRules.SecretChoice.NONE -> if (hook?.secret != null) R.string.knowledge_webhooks_secret_remove else R.string.knowledge_webhooks_secret_none
+                        NotifyWebhookRules.SecretChoice.KEEP -> R.string.knowledge_webhooks_secret_keep
+                        NotifyWebhookRules.SecretChoice.NEW -> if (hook?.secret != null) R.string.knowledge_webhooks_secret_new else R.string.knowledge_webhooks_secret_make
+                        NotifyWebhookRules.SecretChoice.NONE -> if (hook?.secret != null) R.string.knowledge_webhooks_secret_remove else R.string.knowledge_webhooks_secret_none
                     },
                 ),
                 draft.secret == choice, { draft = draft.copy(secret = choice) }, "webhook.form.secret.${choice.name.lowercase()}",
-                hint = if (choice == WebhookRules.SecretChoice.NEW) stringResource(R.string.knowledge_webhooks_secret_new_hint) else null,
+                hint = if (choice == NotifyWebhookRules.SecretChoice.NEW) stringResource(R.string.knowledge_webhooks_secret_new_hint) else null,
             )
         }
 
@@ -147,7 +147,7 @@ internal fun WebhookForm(
                     filter, { filter = it }, placeholder = stringResource(R.string.knowledge_webhooks_events_filter), leadingIcon = Lucide.Search,
                     mono = true, size = ControlSize.Sm, fieldTag = "webhook.form.events.filter",
                 )
-                val shown = WebhookRules.filterEvents(events, filter, arabic)
+                val shown = NotifyWebhookRules.filterEvents(events, filter, arabic)
                 Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
                     shown.forEach { e ->
                         CheckRow(
@@ -173,7 +173,7 @@ internal fun WebhookForm(
                         { on -> draft = draft.copy(profiles = if (on) draft.profiles + p.slug else draft.profiles - p.slug) }, "webhook.form.profile.${p.slug}",
                     )
                 }
-                if (WebhookRules.noProfile(draft)) Text(stringResource(R.string.knowledge_webhooks_profiles_pick_one), fontSize = FontTokens.sizeXs.sp, color = t.danger)
+                if (NotifyWebhookRules.noProfile(draft)) Text(stringResource(R.string.knowledge_webhooks_profiles_pick_one), fontSize = FontTokens.sizeXs.sp, color = t.danger)
             }
         }
 
@@ -198,7 +198,7 @@ internal fun WebhookForm(
                         saving = false
                     }
                 },
-                size = ControlSize.Md, icon = Lucide.Check, loading = saving, enabled = WebhookRules.ready(draft),
+                size = ControlSize.Md, icon = Lucide.Check, loading = saving, enabled = NotifyWebhookRules.ready(draft),
                 modifier = Modifier.testTag("webhook.form.save"),
             )
         }

@@ -89,61 +89,61 @@ final class HubDataRulesTests: XCTestCase {
     // MARK: - Webhooks
 
     func testAWebhookSheetStartsSignedAndChecksTheAddressAndTheProfiles() {
-        let fresh = WebhookRules.draft(nil)
+        let fresh = NotifyWebhookRules.draft(nil)
         XCTAssertEqual(fresh.secret, .new)
         XCTAssertTrue(fresh.allProfiles)
-        XCTAssertFalse(WebhookRules.ready(fresh))
+        XCTAssertFalse(NotifyWebhookRules.ready(fresh))
         var typed = fresh
         typed.name = "Ops"
         typed.url = "ftp://example.com"
-        XCTAssertTrue(WebhookRules.badURL(typed.url))
-        XCTAssertFalse(WebhookRules.ready(typed))
+        XCTAssertTrue(NotifyWebhookRules.badURL(typed.url))
+        XCTAssertFalse(NotifyWebhookRules.ready(typed))
         typed.url = "https://example.com/x"
-        XCTAssertTrue(WebhookRules.ready(typed))
-        XCTAssertFalse(WebhookRules.badURL(""))
+        XCTAssertTrue(NotifyWebhookRules.ready(typed))
+        XCTAssertFalse(NotifyWebhookRules.badURL(""))
         typed.allProfiles = false
-        XCTAssertTrue(WebhookRules.noProfile(typed))
-        XCTAssertFalse(WebhookRules.ready(typed))
+        XCTAssertTrue(NotifyWebhookRules.noProfile(typed))
+        XCTAssertFalse(NotifyWebhookRules.ready(typed))
         typed.profiles = ["work"]
-        XCTAssertTrue(WebhookRules.ready(typed))
+        XCTAssertTrue(NotifyWebhookRules.ready(typed))
 
-        let signed = WebhookRules.draft(hook())
+        let signed = NotifyWebhookRules.draft(hook())
         XCTAssertEqual(signed.secret, .keep)
         XCTAssertEqual(signed.retries, "3")
-        XCTAssertEqual(WebhookRules.secretChoices(hook()), [.keep, .new, .unsigned])
-        XCTAssertEqual(WebhookRules.draft(hook(secret: false)).secret, .unsigned)
-        XCTAssertEqual(WebhookRules.secretChoices(hook(secret: false)), [.new, .unsigned])
-        XCTAssertFalse(WebhookRules.draft(hook(profiles: ["work"])).allProfiles)
+        XCTAssertEqual(NotifyWebhookRules.secretChoices(hook()), [.keep, .new, .unsigned])
+        XCTAssertEqual(NotifyWebhookRules.draft(hook(secret: false)).secret, .unsigned)
+        XCTAssertEqual(NotifyWebhookRules.secretChoices(hook(secret: false)), [.new, .unsigned])
+        XCTAssertFalse(NotifyWebhookRules.draft(hook(profiles: ["work"])).allProfiles)
     }
 
     func testRetriesKeepToTheRangeAndANewSecretIs32BytesInHex() {
-        XCTAssertEqual(WebhookRules.retries("99"), 10)
-        XCTAssertEqual(WebhookRules.retries("0"), 0)
-        XCTAssertEqual(WebhookRules.retries(""), 5)
-        let secret = WebhookRules.newSecret { bytes in for index in bytes.indices { bytes[index] = UInt8(index) } }
+        XCTAssertEqual(NotifyWebhookRules.retries("99"), 10)
+        XCTAssertEqual(NotifyWebhookRules.retries("0"), 0)
+        XCTAssertEqual(NotifyWebhookRules.retries(""), 5)
+        let secret = NotifyWebhookRules.newSecret { bytes in for index in bytes.indices { bytes[index] = UInt8(index) } }
         XCTAssertEqual(secret, "whsec_" + (0..<32).map { String(format: "%02x", $0) }.joined())
-        XCTAssertEqual(WebhookRules.newSecret().count, 6 + 64)
+        XCTAssertEqual(NotifyWebhookRules.newSecret().count, 6 + 64)
     }
 
     func testTheBodyDropsUnknownEventsKeepsOrStopsTheSecret() throws {
-        var draft = WebhookRules.draft(nil)
+        var draft = NotifyWebhookRules.draft(nil)
         draft.name = " Ops "
         draft.url = "https://example.com/hook"
         draft.events = ["run.completed", "gone.event"]
         draft.retries = "4"
-        let created = try encoded(WebhookRules.write(draft, known: ["run.completed"], secret: "whsec_abc"))
+        let created = try encoded(NotifyWebhookRules.write(draft, known: ["run.completed"], secret: "whsec_abc"))
         XCTAssertEqual(created["name"] as? String, "Ops")
         XCTAssertEqual(created["events"] as? [String], ["run.completed"])
         XCTAssertEqual(created["secret"] as? String, "whsec_abc")
         XCTAssertEqual(created["max_retries"] as? Int, 4)
         XCTAssertEqual((created["profiles"] as? [String])?.count, 0)
 
-        var stop = WebhookRules.draft(hook())
+        var stop = NotifyWebhookRules.draft(hook())
         stop.secret = .unsigned
-        let stopped = try encoded(WebhookRules.write(stop, known: nil, secret: nil))
+        let stopped = try encoded(NotifyWebhookRules.write(stop, known: nil, secret: nil))
         XCTAssertTrue(stopped["secret"] is NSNull)
 
-        let kept = try encoded(WebhookRules.write(WebhookRules.draft(hook()), known: nil, secret: nil))
+        let kept = try encoded(NotifyWebhookRules.write(NotifyWebhookRules.draft(hook()), known: nil, secret: nil))
         XCTAssertNil(kept["secret"])
 
         let toggled = try encoded(WebhookWrite(enabled: false, maxRetries: nil))
@@ -151,27 +151,27 @@ final class HubDataRulesTests: XCTestCase {
     }
 
     func testAFailedDeliveryWithNoRetryLeftCanBeSentAgain() {
-        XCTAssertTrue(WebhookRules.canRedeliver(delivery(.dead)))
-        XCTAssertTrue(WebhookRules.canRedeliver(delivery(.failed)))
-        XCTAssertFalse(WebhookRules.canRedeliver(delivery(.failed, next: date)))
-        XCTAssertFalse(WebhookRules.canRedeliver(delivery(.delivered)))
-        XCTAssertTrue(WebhookRules.waiting([delivery(.queued)]))
-        XCTAssertTrue(WebhookRules.waiting([delivery(.failed, next: date)]))
-        XCTAssertFalse(WebhookRules.waiting([delivery(.dead)]))
+        XCTAssertTrue(NotifyWebhookRules.canRedeliver(delivery(.dead)))
+        XCTAssertTrue(NotifyWebhookRules.canRedeliver(delivery(.failed)))
+        XCTAssertFalse(NotifyWebhookRules.canRedeliver(delivery(.failed, next: date)))
+        XCTAssertFalse(NotifyWebhookRules.canRedeliver(delivery(.delivered)))
+        XCTAssertTrue(NotifyWebhookRules.waiting([delivery(.queued)]))
+        XCTAssertTrue(NotifyWebhookRules.waiting([delivery(.failed, next: date)]))
+        XCTAssertFalse(NotifyWebhookRules.waiting([delivery(.dead)]))
     }
 
     func testATestJobSaysHowTheDeliveryWentOnceItIsOver() {
-        XCTAssertNil(WebhookRules.outcome(job(.running)))
+        XCTAssertNil(NotifyWebhookRules.outcome(job(.running)))
         XCTAssertEqual(
-            WebhookRules.outcome(job(.succeeded, result: ["delivered": .bool(true), "status": .int(204), "error": .null])),
-            WebhookRules.TestOutcome(delivered: true, status: 204, error: nil)
+            NotifyWebhookRules.outcome(job(.succeeded, result: ["delivered": .bool(true), "status": .int(204), "error": .null])),
+            NotifyWebhookRules.TestOutcome(delivered: true, status: 204, error: nil)
         )
         XCTAssertEqual(
-            WebhookRules.outcome(job(.failed, error: ModelError(error: "refused", code: .badRequest))),
-            WebhookRules.TestOutcome(delivered: false, status: 0, error: "refused")
+            NotifyWebhookRules.outcome(job(.failed, error: ModelError(error: "refused", code: .badRequest))),
+            NotifyWebhookRules.TestOutcome(delivered: false, status: 0, error: "refused")
         )
-        XCTAssertEqual(WebhookRules.urlRefusalKey("url_private"), "knowledge.webhooks_url_private")
-        XCTAssertNil(WebhookRules.urlRefusalKey("profile_not_allowed"))
+        XCTAssertEqual(NotifyWebhookRules.urlRefusalKey("url_private"), "knowledge.webhooks_url_private")
+        XCTAssertNil(NotifyWebhookRules.urlRefusalKey("profile_not_allowed"))
     }
 
     func testEveryStringThePagesUseExistsInBothLanguages() {
