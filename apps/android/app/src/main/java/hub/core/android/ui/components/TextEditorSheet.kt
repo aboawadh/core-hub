@@ -60,8 +60,12 @@ fun DocumentField(
     )
 }
 
-/** Whether a save was refused because the text changed elsewhere since it was read (`409 changed`). */
-fun changedElsewhere(error: Throwable?): Boolean = error is HubError && error.status == 409 && error.code == "changed"
+/**
+ * Whether a save was refused because the text changed elsewhere since it was read: `409` with
+ * `details.reason = changed` (the hub's `conflict` code), or a `changed` code.
+ */
+fun changedElsewhere(error: Throwable?): Boolean =
+    error is HubError && error.status == 409 && (error.reason == "changed" || error.code == "changed")
 
 /**
  * A sheet that edits [initial] and saves it with [onSave] (which sends the revision it read, so a
