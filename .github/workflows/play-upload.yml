@@ -156,8 +156,11 @@ jobs:
           grep -rq 'FIREBASE = true' apps/android/app/build/generated/source/buildConfig/release/
           # Play's target API level rule (new apps and updates from 31 August 2026: API 36).
           target=$(grep -o 'android:targetSdkVersion="[0-9]*"' "$manifest" | grep -o '[0-9]*')
+          # The app targets 36 (app/build.gradle.kts); a lower target here means that setting went
+          # back, and Play would refuse the upload anyway, so stop before sending anything.
           if [ "$target" -lt 36 ]; then
-            echo "::warning::targetSdk is $target; Google Play takes new apps and updates only at API 36 or later since 31 August 2026 (an extension to 1 November 2026 can be requested in Play Console)."
+            echo "::error::targetSdk is $target; Google Play takes new apps and updates only at API 36 or later since 31 August 2026. Raise targetSdk in apps/android/app/build.gradle.kts."
+            exit 1
           fi
           # jarsigner exits 0 on an unsigned bundle too, so its words are what count.
           jarsigner -verify "$aab" > "$RUNNER_TEMP/aab-verify.txt" 2>&1 || true
