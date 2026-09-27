@@ -88,6 +88,16 @@ $ pnpm i18n:check              → i18n:check  ios: 1670 keys, ar/en in parity �
 $ pnpm contracts:check-clients → check-clients  OK — 940 client file(s) scanned, 254 contract path(s) known.
 $ pnpm lint                    → All matched files use Prettier code style!
 ```
+```
+$ gh workflow run ios.yml --ref night/apps-agents-2   (run 36285941847، الالتزام 3583cd5f)
+✓ Generate the Swift client (CoreHubClient)
+✓ Build and test on the iOS simulator — Executed 258 tests, with 0 failures · AgentsTwoRulesTests: 7 passed
+```
+بعد ذلك تغيّران صغيران في Swift (وصف الويب هوك `null` صريحًا، وحذف نصوص غير مستعملة) يتحقق منهما iOS في #181.
+
+بعد دمج `origin/night/2026-09-27-apps` (رؤية المحادثة): أعدتُ `i18n:check` و`contracts:check-clients` و`lint` و`change-record:check`
+و`typecheck` (exit 0) واختبارات الأندرويد نفسها واللنت أعلاه — كلها نجحت.
+
 صور الأندرويد: `apps/android/app/build/shots/agents/android-mcp.png` (نظرتُ فيها: بطاقة «أدوات كور هب» بمجموعتين ومفتاحي «السماح
 بالتغييرات» وأدوات الكتابة بلون التحذير وآخر استدعاءين أحدهما مرفوض بسببه بكلماتنا؛ خادم github بـ stdio وملخّص الأمر ونتيجة اختبار
 «Hermes connected — 3 tools, 0.8 s.» بأسماء الأدوات؛ كتابة بانتظار المراجعة بنص عربي؛ محرر الخادم بالنوعين والمعاملات وصف
