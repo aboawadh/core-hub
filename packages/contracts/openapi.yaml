@@ -18757,7 +18757,6 @@ components:
             the default profile's new name when present (its name stays when absent).
         replace_default:
           type: boolean
-          default: false
           description: |
             Import the archive **as the default profile** (decision §116). The current
             default's Hermes home is kept whole as a new profile `default-backup` (then
