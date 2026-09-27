@@ -175,10 +175,15 @@ export async function applyAgeRating(api, declaration) {
 export async function ensureFree(api, appId) {
   const schedule = await getOrNull(api, `/apps/${q(appId)}/appPriceSchedule`);
   if (schedule) {
+    // An app whose price was never set still answers the schedule (its id is the app's), but its
+    // manualPrices are a 404: that is "no prices yet", not an error.
     const res = await api(
       'GET',
       `/appPriceSchedules/${q(schedule.id)}/manualPrices?include=appPricePoint&limit=50`,
-    );
+    ).catch((err) => {
+      if (err instanceof AscError && err.status === 404) return { data: [] };
+      throw err;
+    });
     const points = (res.included ?? []).filter((i) => i.type === 'appPricePoints');
     if ((res.data ?? []).length > 0) {
       return points.every((p) => Number(p.attributes?.customerPrice) === 0) ? 'free' : 'paid';
