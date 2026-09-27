@@ -158,6 +158,8 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
   });
   try {
     const welcome = await app.firstWindow();
+    // Local mode says up front that a Hermes already here keeps its own settings (2026-09-27).
+    await expect(welcome.getByTestId('local-own-hermes')).toContainText('مجلد بيانات التطبيق');
     await welcome.getByTestId('choose-local').click();
     // The app offers Hermes's own installer and says exactly what would run.
     const missing = welcome.getByTestId('hermes-missing');

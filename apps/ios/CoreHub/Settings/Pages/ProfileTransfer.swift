@@ -143,11 +143,17 @@ struct ImportProfileView: View {
     @State private var stage: Stage?
     @State private var job: Job?
     @State private var failure: String?
+    /// «Replace the default profile with this one» (decision §116), and the backup it ended with.
+    @State private var replaceDefault = false
+    @State private var replaced: (backup: String, name: String)?
+    @State private var outdated: String?
 
     enum Stage { case uploading, running }
 
     private var size: Int { file.flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize } ?? 0 }
-    private var ready: Bool { file != nil && !slug.isEmpty && ProfileRules.slugProblem(slug, taken: taken) == nil && stage == nil }
+    private var ready: Bool {
+        file != nil && stage == nil && (replaceDefault || (!slug.isEmpty && ProfileRules.slugProblem(slug, taken: taken) == nil))
+    }
 
     /// What the file picker offers: a gzip archive, and any file for a name the phone does not know.
     private static let archiveTypes: [UTType] = [.gzip, UTType(filenameExtension: "tgz") ?? .data, .data]
@@ -165,13 +171,40 @@ struct ImportProfileView: View {
                         .font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted).lineLimit(1)
                 }
             }
-            Section {
-                SlugField(slug: $slug, taken: taken)
-                TextField(l10n("admin.profiles_name"), text: Binding(get: { name }, set: { name = String($0.prefix(ProfileRules.nameMax)) }))
-                    .accessibilityIdentifier("import.name")
+            if let replaced {
+                Section {
+                    NoticeView(text: l10n("admin.profiles_import_replace_done", ["backup": replaced.backup]), tone: .success)
+                        .accessibilityIdentifier("import.replaced")
+                    Button(l10n("common.close")) { done(replaced.name) }
+                        .accessibilityIdentifier("import.replaced_close")
+                }
+            }
+            if let outdated {
+                Section {
+                    NoticeView(text: l10n("admin.profiles_import_replace_unsupported", ["name": outdated]), tone: .warning)
+                    Button(l10n("common.close")) { done(outdated) }
+                }
             }
             Section {
-                if let file, ready {
+                Toggle(isOn: $replaceDefault) {
+                    VStack(alignment: .leading, spacing: Space.s1) {
+                        Text(l10n("admin.profiles_import_replace_default"))
+                        Text(l10n("admin.profiles_import_replace_default_hint"))
+                            .font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                    }
+                }
+                .disabled(stage != nil || replaced != nil)
+                .accessibilityIdentifier("import.replace_default")
+            }
+            Section {
+                if !replaceDefault { SlugField(slug: $slug, taken: taken) }
+                TextField(l10n("admin.profiles_name"), text: Binding(get: { name }, set: { name = String($0.prefix(ProfileRules.nameMax)) }))
+                    .accessibilityIdentifier("import.name")
+            } footer: {
+                if replaceDefault { Text(l10n("admin.profiles_import_replace_name_hint")) }
+            }
+            Section {
+                if let file, ready, !replaceDefault {
                     NoticeView(text: l10n("admin.profiles_import_summary", [
                         "file": file.lastPathComponent, "size": ProfileRules.size(size),
                         "name": name.trimmingCharacters(in: .whitespaces).isEmpty ? slug : name, "slug": slug,
@@ -184,9 +217,12 @@ struct ImportProfileView: View {
                 case nil: EmptyView()
                 }
                 if let failure { NoticeView(text: failure, tone: .danger).accessibilityIdentifier("import.failure") }
-                Button { asking = true } label: { LucideLabel(l10n("admin.profiles_import"), icon: .file).frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent).tint(Tone.accent)
-                    .disabled(!ready)
+                Button { asking = true } label: {
+                    LucideLabel(l10n(replaceDefault ? "admin.profiles_import_replace_confirm" : "admin.profiles_import"), icon: .file)
+                        .frame(maxWidth: .infinity)
+                }
+                    .buttonStyle(.borderedProminent).tint(replaceDefault ? Tone.danger : Tone.accent)
+                    .disabled(!ready || replaced != nil || outdated != nil)
                     .accessibilityIdentifier("import.start")
             }
         }
@@ -197,11 +233,20 @@ struct ImportProfileView: View {
         .fileImporter(isPresented: $picking, allowedContentTypes: Self.archiveTypes) { result in
             if case .success(let url) = result { take(url) }
         }
-        .alert(l10n("admin.profiles_import_confirm_title"), isPresented: $asking) {
+        .alert(l10n(replaceDefault ? "admin.profiles_import_replace_confirm_title" : "admin.profiles_import_confirm_title"), isPresented: $asking) {
             Button(l10n("common.cancel"), role: .cancel) {}
-            Button(l10n("admin.profiles_import")) { Task { await run() } }
+            if replaceDefault {
+                // The second, explicit warning (decision §116).
+                Button(l10n("admin.profiles_import_replace_confirm"), role: .destructive) { Task { await run() } }
+            } else {
+                Button(l10n("admin.profiles_import")) { Task { await run() } }
+            }
         } message: {
-            Text(l10n("admin.profiles_import_confirm_body", ["slug": slug]))
+            if replaceDefault {
+                Text(l10n("admin.profiles_import_replace_confirm_body"))
+            } else {
+                Text(l10n("admin.profiles_import_confirm_body", ["slug": slug]))
+            }
         }
     }
 
@@ -248,12 +293,20 @@ struct ImportProfileView: View {
         }
         stage = .running
         do {
-            let body = ProfileRules.importBody(attachmentID: stored.id, slug: slug, name: name)
+            let body = ProfileRules.importBody(attachmentID: stored.id, slug: slug, name: name, replaceDefault: replaceDefault)
             let accepted = try await api.call { try await AuthAPI.authImportProfile(profileImport: body, apiConfiguration: $0.inProfile(scope)) }
             let finished = try await AgentJobs.follow(accepted.jobId, profile: scope, api: api, every: .seconds(1)) { job = $0 }
             if let made = ProfileRules.importedName(finished) {
                 try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
-                done(made)
+                if let backup = ProfileRules.replacedBackup(finished) {
+                    // The sheet stays: it names the backup the old default is kept as.
+                    replaced = (backup, made)
+                } else if replaceDefault {
+                    // A hub older than the option made a new profile instead; say so.
+                    outdated = made
+                } else {
+                    done(made)
+                }
             } else {
                 failure = ProfileRules.failure(finished)
             }

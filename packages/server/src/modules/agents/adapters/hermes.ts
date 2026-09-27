@@ -36,7 +36,7 @@ import type { AgentCapability } from '../schema.js';
 import { HubError, notImplemented } from '../../../lib/errors.js';
 import { EventQueue } from './event-queue.js';
 import { HermesTuiSession, type TuiChannel } from './hermes-tui.js';
-import { parseVersion, probeHttp, runCommand, whichSync, type HostEnvironment } from './host.js';
+import { probeHttp, readVersion, whichSync, type HostEnvironment } from './host.js';
 import type {
   AgentAdapter,
   AgentEvent,
@@ -51,6 +51,8 @@ import type {
 import { OneshotUnavailable } from './types.js';
 
 export const HERMES_ADAPTER_VERSION = '1.1.0';
+/** How long `hermes --version` may take to print its version line (a cold start included). */
+export const HERMES_VERSION_TIMEOUT_MS = 15_000;
 
 /** One frame of `GET /v1/runs/{id}/events`, as Hermes emits it. */
 export interface HermesRunEvent {
@@ -88,6 +90,8 @@ export interface HermesHttpOptions {
   apiKey: string | null;
   fetchImpl?: typeof fetch;
   requestTimeoutMs?: number;
+  /** Added to "did not answer": what the hub knows about the gateway it runs. */
+  unreachableNote?: () => string | null;
 }
 
 /** Hermes's `{ "error": { "message", "code" } }` envelope, or the raw text. */
@@ -125,10 +129,16 @@ export function httpHermesTransport(options: HermesHttpOptions): HermesTransport
       return await doFetch(url, init);
     } catch (error) {
       if (error instanceof HubError) throw error;
+      let note: string | null;
+      try {
+        note = options.unreachableNote?.() ?? null;
+      } catch {
+        note = null;
+      }
       throw new HubError('agent_unavailable', {
         message: `the Hermes gateway at ${base} did not answer (${
           error instanceof Error ? error.message : String(error)
-        })`,
+        })${note ? ` — ${note}` : ''}`,
         details: { reason: 'gateway_unreachable', endpoint: base },
       });
     }
@@ -585,6 +595,13 @@ export interface HermesAdapterOptions {
   apiKey?: string | null | (() => string | null);
   /** Injected in tests: a scripted Hermes instead of HTTP. */
   transport?: (target: AgentTarget, endpoint: string) => HermesTransport;
+  /** How long `hermes --version` may take to print its version (tests shorten it). */
+  versionTimeoutMs?: number;
+  /**
+   * What the hub knows about the gateway it runs, added to "did not answer" so a person reads
+   * "still starting" or why it stopped rather than `fetch failed` alone. Null: nothing to add.
+   */
+  gatewayNote?: () => string | null;
   /**
    * Hermes's TUI gateway, when a Hermes is installed beside the hub (ADR 0013). When it
    * answers, conversations go through it — reasoning, tool results and questions; when it
@@ -605,6 +622,19 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
   const timeoutMs = options.timeoutMs ?? 2_000;
   const apiKey = (): string | null =>
     typeof options.apiKey === 'function' ? options.apiKey() : (options.apiKey ?? null);
+
+  /**
+   * `hermes --version`, read until its version line (`readVersion`): Hermes goes on to check
+   * for updates over the network after printing it, which is never waited for.
+   */
+  function hermesVersion(executablePath: string) {
+    return readVersion([executablePath, ...HERMES_ENTRY.versionArgs], {
+      timeoutMs: options.versionTimeoutMs ?? HERMES_VERSION_TIMEOUT_MS,
+      ...(host.inherited
+        ? { env: { ...host.inherited, ...(host.pathValue ? { PATH: host.pathValue } : {}) } }
+        : {}),
+    });
+  }
 
   async function gatewayState(
     endpoint: string,
@@ -632,7 +662,7 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
     async discover(): Promise<DiscoveredAgent[]> {
       const executablePath = whichSync(HERMES_ENTRY.binary, host);
       if (!executablePath) return [];
-      const result = await runCommand([executablePath, ...HERMES_ENTRY.versionArgs]);
+      const reading = await hermesVersion(executablePath);
       return [
         {
           slug: HERMES_ENTRY.id,
@@ -640,7 +670,7 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
           vendor: HERMES_ENTRY.vendor,
           command: [HERMES_ENTRY.binary],
           executablePath,
-          version: parseVersion(`${result.stdout}${result.stderr}`),
+          version: reading.version,
           capabilities: [...HERMES_ENTRY.capabilities],
           sections: [...HERMES_ENTRY.sections],
         },
@@ -676,18 +706,18 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
         };
       }
 
-      const result = await runCommand([executablePath, ...HERMES_ENTRY.versionArgs]);
+      const reading = await hermesVersion(executablePath);
       return {
         installed: true,
         source: 'user_cli',
         executablePath,
-        version: parseVersion(`${result.stdout}${result.stderr}`),
+        version: reading.version,
         runtime: {
           state: runtime.state,
           url: runtime.state === 'running' ? endpoint : null,
           error: runtime.error,
         },
-        error: result.ok ? null : result.error,
+        error: reading.error,
       };
     },
 
@@ -730,6 +760,7 @@ export function createHermesAdapter(options: HermesAdapterOptions): AgentAdapter
             endpoint,
             apiKey: apiKey(),
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+            ...(options.gatewayNote ? { unreachableNote: options.gatewayNote } : {}),
           });
       if (!options.transport && !apiKey()) {
         throw new HubError('agent_unavailable', {

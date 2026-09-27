@@ -43,6 +43,7 @@ import hub.core.android.ui.kit.NoticeBox
 import hub.core.android.ui.kit.Segment
 import hub.core.android.ui.kit.Segmented
 import hub.core.android.ui.kit.Spinner
+import hub.core.android.ui.kit.ToggleRow
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.Job
 import hub.core.client.model.Profile
@@ -152,6 +153,10 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
     var error by remember { mutableStateOf<HubError?>(null) }
     var asking by remember { mutableStateOf(false) }
     var job by remember { mutableStateOf<Job?>(null) }
+    // «Replace the default profile with this one» (decision §116), and what it ended with.
+    var replaceDefault by remember { mutableStateOf(false) }
+    var replaced by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var outdated by remember { mutableStateOf<String?>(null) }
     val unreadable = stringResource(R.string.admin_profiles_import_unreadable)
     val tooLarge = stringResource(R.string.admin_profiles_import_too_large)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -170,7 +175,9 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
         }
     }
     val busy = stage != null
-    val ready = file != null && slug.isNotEmpty() && ProfileRules.slugProblem(slug, taken) == null && !busy
+    val finished = replaced != null || outdated != null
+    val ready = file != null && !busy && !finished &&
+        (replaceDefault || (slug.isNotEmpty() && ProfileRules.slugProblem(slug, taken) == null))
     HubSheet(onDismiss = { if (!busy) onDismiss() }, title = stringResource(R.string.admin_profiles_import_title)) {
         Text(stringResource(R.string.admin_profiles_import_what), fontSize = FontTokens.sizeSm.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -181,10 +188,24 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
             )
             Text(file?.name ?: stringResource(R.string.admin_profiles_import_no_file), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1, modifier = Modifier.weight(1f))
         }
-        SlugField(slug, taken) { slug = it }
+        ToggleRow(
+            stringResource(R.string.admin_profiles_import_replace_default), replaceDefault, { replaceDefault = it },
+            subtitle = stringResource(R.string.admin_profiles_import_replace_default_hint), enabled = !busy && !finished,
+            modifier = Modifier.testTag("import.replace_default"),
+        )
+        if (!replaceDefault) SlugField(slug, taken) { slug = it }
         HubTextField(name, { name = it.take(ProfileRules.NAME_MAX) }, label = stringResource(R.string.admin_profiles_name), size = ControlSize.Md, fieldTag = "import.name")
+        if (replaceDefault) Text(stringResource(R.string.admin_profiles_import_replace_name_hint), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
+        replaced?.let { (backup, made) ->
+            NoticeBox(stringResource(R.string.admin_profiles_import_replace_done, backup), BadgeTone.Success, Modifier.testTag("import.replaced"))
+            HubButton(stringResource(R.string.close), { onImported(made) }, kind = ButtonKind.Secondary, fill = true, modifier = Modifier.fillMaxWidth())
+        }
+        outdated?.let { made ->
+            NoticeBox(stringResource(R.string.admin_profiles_import_replace_unsupported, made), BadgeTone.Warning)
+            HubButton(stringResource(R.string.close), { onImported(made) }, kind = ButtonKind.Secondary, fill = true, modifier = Modifier.fillMaxWidth())
+        }
         file?.let { f ->
-            if (ready) NoticeBox(
+            if (ready && !replaceDefault) NoticeBox(
                 stringResource(R.string.admin_profiles_import_summary, f.name, ProfileRules.size(f.length()), name.trim().ifEmpty { slug }, slug),
                 BadgeTone.Info, Modifier.testTag("import.summary"),
             )
@@ -195,12 +216,19 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
         }
         failure?.let { NoticeBox(it, BadgeTone.Danger, Modifier.testTag("import.failure")) }
         ErrorNotice(error)
-        HubButton(stringResource(R.string.admin_profiles_import), { asking = true }, icon = Lucide.File, fill = true, loading = busy, enabled = ready,
-            modifier = Modifier.fillMaxWidth().testTag("import.start"))
+        HubButton(
+            stringResource(if (replaceDefault) R.string.admin_profiles_import_replace_confirm else R.string.admin_profiles_import),
+            { asking = true }, icon = Lucide.File, fill = true, loading = busy, enabled = ready,
+            modifier = Modifier.fillMaxWidth().testTag("import.start"),
+        )
     }
+    // For the default, the second and explicit warning (decision §116).
     if (asking) ConfirmDialog(
-        stringResource(R.string.admin_profiles_import_confirm_title), stringResource(R.string.admin_profiles_import_confirm_body, slug),
-        stringResource(R.string.admin_profiles_import),
+        stringResource(if (replaceDefault) R.string.admin_profiles_import_replace_confirm_title else R.string.admin_profiles_import_confirm_title),
+        if (replaceDefault) stringResource(R.string.admin_profiles_import_replace_confirm_body)
+        else stringResource(R.string.admin_profiles_import_confirm_body, slug),
+        stringResource(if (replaceDefault) R.string.admin_profiles_import_replace_confirm else R.string.admin_profiles_import),
+        danger = replaceDefault,
         onConfirm = {
             asking = false
             val chosen = file ?: return@ConfirmDialog
@@ -216,11 +244,19 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
                     return@launch
                 }
                 stage = RUNNING
-                val id = ops.import(ProfileRules.import(stored.id, slug, name)).getOrElse { e -> error = e as? HubError; stage = null; return@launch }
+                val id = ops.import(ProfileRules.import(stored.id, slug, name, replaceDefault)).getOrElse { e -> error = e as? HubError; stage = null; return@launch }
                 val done = ops.follow(id) { job = it }
                 stage = null
                 val made = ProfileRules.importedName(done)
-                if (made != null) onImported(made) else failure = ProfileRules.failure(done)
+                val backup = ProfileRules.replacedBackup(done)
+                when {
+                    made == null -> failure = ProfileRules.failure(done)
+                    // The sheet stays: it names the backup the old default is kept as.
+                    backup != null -> replaced = backup to made
+                    // A hub older than the option made a new profile instead; say so.
+                    replaceDefault -> outdated = made
+                    else -> onImported(made)
+                }
             }
         },
         onDismiss = { asking = false },

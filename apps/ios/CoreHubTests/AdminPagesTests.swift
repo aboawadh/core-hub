@@ -109,6 +109,23 @@ final class AdminPagesTests: XCTestCase {
         XCTAssertEqual(ProfileRules.hermesRefusal(refused), "Hermes: bad")
     }
 
+    func testAnImportIntoTheDefaultSendsTheOptionAndReadsTheBackupBack() {
+        let body = ProfileRules.importBody(attachmentID: "att1", slug: "team", name: " Old ", replaceDefault: true)
+        XCTAssertEqual(body.replaceDefault, true)
+        XCTAssertEqual(body.name, "Old")
+        // The hub does not use the slug then (decision §116), but it is still sent, and valid.
+        XCTAssertEqual(ProfileRules.importBody(attachmentID: "att1", slug: "", name: "", replaceDefault: true).slug, "imported")
+        XCTAssertNil(ProfileRules.importBody(attachmentID: "att1", slug: "team", name: "Team").replaceDefault)
+        let replaced = job(.succeeded, result: [
+            "slug": .string("default"), "name": .string("Old"), "replaced_default": .bool(true),
+            "backup": .dictionary(["slug": .string("default-backup-2"), "name": .string("default-backup-2")]),
+        ])
+        XCTAssertEqual(ProfileRules.replacedBackup(replaced), "default-backup-2")
+        // An ordinary import, and a hub older than the option (no `replaced_default`), have none.
+        XCTAssertNil(ProfileRules.replacedBackup(job(.succeeded, result: ["slug": .string("team"), "name": .string("Team")])))
+        XCTAssertNil(ProfileRules.replacedBackup(job(.failed, error: ModelError(error: "The import did not happen", code: .stateInvalid))))
+    }
+
     // MARK: - Push senders
 
     private let account = """

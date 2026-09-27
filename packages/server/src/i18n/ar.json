@@ -83,7 +83,13 @@
     "profile_archive_not_gzip": "الملف ليس أرشيف ⁦.tar.gz⁩.",
     "profile_archive_not_tar": "الملف مضغوط لكنه ليس أرشيف ⁦tar⁩.",
     "profile_archive_truncated": "الأرشيف مقطوع؛ ارفعه من جديد.",
-    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المركز (4 غيغابايت)."
+    "profile_archive_too_large": "الأرشيف يتفكك إلى أكبر مما يقبله المركز (4 غيغابايت).",
+    "profile_replace_not_done": "لم يحدث الاستيراد، وبروفايلك الافتراضي كما كان:",
+    "profile_replace_no_default": "لا بروفايل افتراضيًّا في هذا المركز ليُستبدل.",
+    "profile_replace_unpacking": "فكّ الأرشيف…",
+    "profile_replace_moving": "حفظ الافتراضي الحالي باسم ⁦{backup}⁩ ووضع الأرشيف مكانه…",
+    "profile_replace_done": "صار الأرشيف البروفايل الافتراضي، والسابق محفوظ باسم ⁦{backup}⁩.",
+    "profile_replace_busy": "البروفايل الافتراضي يُستبدل الآن؛ انتظر حتى ينتهي ذلك الاستيراد."
   },
   "sessions": {
     "run_interrupted": "أوقفه المستخدم.",

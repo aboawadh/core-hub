@@ -18,6 +18,7 @@
  * the job ends, whatever the outcome.
  */
 import { LEGACY, derived } from '@corehub/contracts';
+import { existsSync, statSync } from 'node:fs';
 import { copyFile, mkdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -26,12 +27,17 @@ import { t, type Language } from '../../i18n/index.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { HubError } from '../../lib/errors.js';
 import type { JobHandle } from '../audit/index.js';
-import { ArchiveError, isCredentialFile, rewriteArchive } from './profile-archive.js';
+import {
+  ArchiveError,
+  extractArchive,
+  isCredentialFile,
+  rewriteArchive,
+} from './profile-archive.js';
 import { runtimeProfileName } from './profile-mirror.js';
 import { createProfile, slugTaken } from './profiles.js';
 import { workspaces } from './schema.js';
 import type { WorkspaceRow } from './serialize.js';
-import { findWorkspace } from './workspace.js';
+import { defaultWorkspace, findWorkspace } from './workspace.js';
 
 /** How long a finished export stays downloadable (contract decision §34). */
 export const EXPORT_KEEP_MS = 24 * 60 * 60_000;
@@ -98,8 +104,50 @@ export interface ProfileTransferPorts {
     exportOf(workspaceId: string): unknown;
     importInto(workspaceId: string, actorId: string, bundle: unknown): number;
   };
-  /** Other modules set up a profile an import just added (its Hermes side, for one). */
-  added?(profile: WorkspaceRow, actorId: string): Promise<void>;
+  /**
+   * Other modules set up a profile an import just added (its Hermes side, for one); `source` is
+   * the profile it is a copy of — the old default, for the backup an import into the default
+   * makes (contract decision §116).
+   */
+  added?(profile: WorkspaceRow, actorId: string, source?: WorkspaceRow | null): Promise<void>;
+  /**
+   * Replacing the default profile with an archive (§116): only where the hub runs Hermes
+   * itself; absent or null anywhere else, and such an import is refused by name.
+   */
+  defaultProfile?: DefaultProfileReplacement | null;
+  /** Writes a workspace's name to the runtime (the default's, once it has a new one). */
+  renamed?(profile: WorkspaceRow): Promise<void>;
+}
+
+/** What an import into the default moved (`agents/hermes-default-swap.ts`). */
+export interface DefaultSwapReport {
+  moved: string[];
+  placed: string[];
+  skipped: string[];
+  /** The backup profile's folder. */
+  backup: string;
+}
+
+/**
+ * Hermes's side of an import into the default profile (§116). `replace` holds Hermes down,
+ * makes `incoming` the root home and the current default the profile `backup`, runs `commit`
+ * (the hub's rows) and puts every file back when the move or `commit` fails; `settle` runs after
+ * a commit that held, and its failures are logged, never undone.
+ */
+export interface DefaultProfileReplacement {
+  /** A folder inside Hermes's home, on its filesystem, to unpack the archive into. */
+  staging(job: string): string;
+  /** Whether Hermes has, or had, a profile of this name. */
+  taken(name: string): boolean;
+  replace(request: {
+    incoming: string;
+    backup: string;
+    job: string;
+    commit(report: DefaultSwapReport): void | Promise<void>;
+    settle?(report: DefaultSwapReport): void | Promise<void>;
+  }): Promise<DefaultSwapReport>;
+  /** Removes a staging folder and what is left in it. */
+  discard(staging: string): void;
 }
 
 /**
@@ -426,5 +474,260 @@ export async function runImport(
   } finally {
     ports.files.discard(scope, input.attachmentId);
     await rm(staging, { recursive: true, force: true });
+  }
+}
+
+// ------------------------------------------------ an archive as the default profile (§116)
+
+/** The backup's id: this, then `default-backup-2`, `-3`, … (contract decision §116). */
+export const BACKUP_SLUG = 'default-backup';
+
+/**
+ * The first backup id free both in the hub (any workspace, archived ones included — their rows
+ * keep the slug) and in Hermes (a folder, or a deletion tombstone). Never refuses: the numbers
+ * go on for as long as people import (the owner, 2026-09-27).
+ */
+export function backupSlugFor(db: ModuleDb, hermesTaken: (name: string) => boolean): string {
+  for (let n = 1; ; n += 1) {
+    const slug = n === 1 ? BACKUP_SLUG : `${BACKUP_SLUG}-${n}`;
+    if (!slugTaken(db, slug) && !hermesTaken(slug)) return slug;
+  }
+}
+
+/** Hubs (by their database) with a replacement of the default running: one at a time. */
+const replacing = new WeakSet<ModuleDb>();
+
+/**
+ * Claims the one replacement slot of this hub; `false` when another one is still running (the
+ * route answers `409` before any job exists). The job gives it back when it ends.
+ */
+export function claimDefaultReplacement(db: ModuleDb): boolean {
+  if (replacing.has(db)) return false;
+  replacing.add(db);
+  return true;
+}
+
+export function releaseDefaultReplacement(db: ModuleDb): void {
+  replacing.delete(db);
+}
+
+/** The ports of a hub that can replace its default profile; the named refusal otherwise. */
+export function requireDefaultReplacement(ports: ProfileTransferPorts): DefaultProfileReplacement {
+  if (!ports.defaultProfile) {
+    throw new HubError('state_invalid', {
+      messageKey: 'auth.profile_transfer_unmanaged',
+      details: { reason: 'hermes_not_supervised' },
+    });
+  }
+  return ports.defaultProfile;
+}
+
+export interface ReplaceDefaultRequest {
+  attachmentId: string;
+  /** The default profile's new name; its name stays when absent. */
+  name: string | null;
+}
+
+/** An audit row about the replacement, written by the route that started it. */
+export type ReplaceAudit = (
+  action: 'auth.profile_default_replaced' | 'auth.profile_default_replace_failed',
+  summary: string,
+  data: Record<string, unknown>,
+) => void;
+
+/**
+ * Whatever went wrong, the person reads first that nothing happened (the owner, 2026-09-27),
+ * then why — the hub's own sentence, or Hermes's.
+ */
+function notDone(error: unknown, language: Language): HubError {
+  const lead = t('auth.profile_replace_not_done', language);
+  if (error instanceof HubError) {
+    const why =
+      error.messageKey && error.message === error.code
+        ? t(error.messageKey, language)
+        : error.message;
+    return new HubError(error.code, {
+      message: `${lead} ${why}`,
+      ...(error.details !== undefined ? { details: error.details } : {}),
+    });
+  }
+  const why = error instanceof Error ? error.message : String(error);
+  return new HubError('internal', { message: `${lead} ${why}` });
+}
+
+/**
+ * The import into the default profile (contract decision §116). The whole archive is checked
+ * before anything changes; it is unpacked inside Hermes's home; then, with Hermes held down, the
+ * current default's home becomes the profile `default-backup[-n]` and the archive takes its
+ * place, and the hub's rows follow in one transaction: a workspace for the backup, the default's
+ * new name, and the archive's providers as the default's own. The default workspace keeps its id
+ * and `is_default`, so the shared providers and every hub row stay. Any failure before the rows
+ * are in puts every file back and rolls the rows back; the job then fails with "the import did
+ * not happen" and the reason.
+ */
+export async function runImportAsDefault(
+  context: TransferContext,
+  handle: JobHandle,
+  input: ReplaceDefaultRequest,
+  audit?: ReplaceAudit,
+): Promise<Record<string, unknown>> {
+  const { db, ports, language, scope } = context;
+  let swap: DefaultProfileReplacement;
+  try {
+    swap = requireDefaultReplacement(ports);
+  } catch (error) {
+    ports.files.discard(scope, input.attachmentId);
+    releaseDefaultReplacement(db);
+    throw notDone(error, language);
+  }
+  const staging = swap.staging(handle.id);
+  let backupSlug: string | null = null;
+  try {
+    const upload = ports.files.open(scope, input.attachmentId);
+    if (!upload) {
+      throw new HubError('not_found', {
+        message: t('auth.profile_archive_missing', language),
+        details: { resource: 'attachment', id: input.attachmentId },
+      });
+    }
+    const current = defaultWorkspace(db);
+    if (!current) throw failure('internal', 'auth.profile_replace_no_default', language);
+
+    // 1. The whole archive, before anything changes.
+    handle.progress(10, t('auth.profile_import_checking', language));
+    let report;
+    try {
+      report = await rewriteArchive(upload.path, null, {
+        maxUnpackedBytes: MAX_UNPACKED_BYTES,
+        capture: isProvidersFile(null),
+      });
+    } catch (error) {
+      fromArchive(error, language);
+    }
+    if (report.roots.length !== 1) {
+      throw failure('bad_request', 'auth.profile_archive_roots', language);
+    }
+    if (report.unsafe.length > 0 || report.unsupported.length > 0) {
+      throw failure(
+        'bad_request',
+        'auth.profile_archive_entries',
+        language,
+        [...report.unsafe, ...report.unsupported].slice(0, 3).join(', '),
+      );
+    }
+    const providersFile = Object.values(report.captured)[0] ?? null;
+    let bundle: unknown = null;
+    if (providersFile) {
+      try {
+        bundle = JSON.parse(providersFile.toString('utf8'));
+      } catch {
+        throw failure('bad_request', 'auth.profile_archive_entries', language, PROVIDERS_FILE);
+      }
+    }
+    if (handle.cancelRequested()) return {};
+
+    // 2. Unpacked inside Hermes's home (one filesystem: every move after this is a rename).
+    handle.progress(30, t('auth.profile_replace_unpacking', language));
+    try {
+      await extractArchive(upload.path, staging, {
+        drop: isProvidersFile(null),
+        maxUnpackedBytes: MAX_UNPACKED_BYTES,
+      });
+    } catch (error) {
+      fromArchive(error, language);
+    }
+    const incoming = path.join(staging, report.roots[0]!);
+    if (!existsSync(incoming) || !statSync(incoming).isDirectory()) {
+      throw failure('bad_request', 'auth.profile_archive_roots', language);
+    }
+    if (handle.cancelRequested()) return {};
+
+    // 3. The swap and the hub's rows, together or not at all.
+    backupSlug = backupSlugFor(db, (name) => swap.taken(name));
+    const backup = backupSlug;
+    handle.progress(50, t('auth.profile_replace_moving', language).replace('{backup}', backup));
+    const newName = input.name?.trim() || null;
+    let backupRow: WorkspaceRow | null = null;
+    let providers = 0;
+    const moved = await swap.replace({
+      incoming,
+      backup,
+      job: handle.id,
+      commit: () => {
+        db.transaction((tx) => {
+          backupRow = tx
+            .insert(workspaces)
+            .values({
+              ownerId: scope.userId,
+              slug: backup,
+              name: backup,
+              settings: structuredClone(current.settings),
+            })
+            .returning()
+            .get();
+          if (newName && newName !== current.name) {
+            tx.update(workspaces)
+              .set({ name: newName, updatedAt: new Date() })
+              .where(eq(workspaces.id, current.id))
+              .run();
+          }
+          // The providers the archive carried become the default's own (§37). The models
+          // module writes through the same connection, so this is inside the transaction.
+          if (bundle !== null && ports.providers) {
+            try {
+              providers = ports.providers.importInto(current.id, scope.userId, bundle);
+            } catch {
+              throw failure(
+                'bad_request',
+                'auth.profile_archive_entries',
+                language,
+                PROVIDERS_FILE,
+              );
+            }
+          }
+        });
+      },
+      // 4. What follows, with Hermes still held down: logged when it fails, never undone.
+      settle: async () => {
+        const renamed = findWorkspace(db, current.id);
+        if (renamed) await ports.renamed?.(renamed);
+        if (backupRow) await ports.added?.(backupRow, scope.userId, current);
+      },
+    });
+    const made = backupRow as WorkspaceRow | null;
+    const now = findWorkspace(db, current.id) ?? current;
+    audit?.(
+      'auth.profile_default_replaced',
+      `default profile replaced; old one kept as ${backup}`,
+      {
+        job_id: handle.id,
+        backup,
+        moved: moved.moved.length,
+        placed: moved.placed.length,
+        skipped: moved.skipped,
+        providers,
+      },
+    );
+    handle.progress(100, t('auth.profile_replace_done', language).replace('{backup}', backup));
+    return {
+      profile_id: now.id,
+      slug: now.slug,
+      name: now.name,
+      providers,
+      replaced_default: true,
+      backup: { profile_id: made?.id ?? null, slug: backup, name: made?.name ?? backup },
+      skipped: moved.skipped,
+    };
+  } catch (error) {
+    audit?.('auth.profile_default_replace_failed', 'default profile replacement did not happen', {
+      job_id: handle.id,
+      ...(backupSlug ? { backup: backupSlug } : {}),
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    throw notDone(error, language);
+  } finally {
+    swap.discard(staging);
+    ports.files.discard(scope, input.attachmentId);
+    releaseDefaultReplacement(db);
   }
 }

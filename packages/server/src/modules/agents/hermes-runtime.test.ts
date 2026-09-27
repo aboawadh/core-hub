@@ -3,7 +3,16 @@
  * environment the child gets, that a crash restarts it and that stop stops it.
  */
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -14,6 +23,7 @@ import { HermesTuiSession, type Spawned } from './adapters/hermes-tui.js';
 import { HubError } from '../../lib/errors.js';
 import {
   HermesRuntime,
+  gatewayNote,
   loadOrCreateHermesApiKey,
   type HermesRuntimeOptions,
   type SpawnedProcess,
@@ -354,6 +364,43 @@ describe('Hermes runtime: the TUI gateway and changing keys', () => {
   });
 });
 
+describe('Hermes runtime: the root held while the default profile is replaced (decision §116)', () => {
+  it('holds the root gateway down and closes the TUI gateway during the work, then starts the gateway again', async () => {
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const { started, tuiSpawn } = tuiGateways();
+    const bin = binDirWithHermes();
+    writeFileSync(path.join(bin, 'python'), '');
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: bin },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      tuiSpawn,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const tui = runtime.tuiChannel()!;
+    // A conversation in flight: the TUI gateway is closed anyway, its files are about to move.
+    await HermesTuiSession.open(tui, null);
+    const during = await runtime.withRootHeld(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return {
+        gateways: spawned.length,
+        gatewayKilled: spawned[0]!.child.killed,
+        tuiAlive: tui.alive,
+      };
+    });
+    expect(during).toEqual({ gateways: 1, gatewayKilled: ['SIGTERM'], tuiAlive: false });
+    expect(started[0]!.killed).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(spawned).toHaveLength(2); // the root gateway is back, on the files now there
+    expect(runtime.tuiChannel()).not.toBe(tui);
+    await runtime.stop();
+  });
+});
+
 describe("Hermes runtime: Hermes's settings changed (contract decision §58)", () => {
   it('retires the TUI gateway so the next message reads the new values, and leaves an external Hermes alone', async () => {
     const { logger } = capturingLogger();
@@ -484,5 +531,151 @@ describe('Hermes runtime: the profile a conversation runs in (ADR 0014 stage 3)'
     // A profile is a parameter of the session, not a process: one child for all three.
     expect(started).toHaveLength(1);
     await runtime.stop();
+  });
+});
+
+describe("Hermes runtime: on the person's own Hermes install (desktop local mode, 2026-09-27)", () => {
+  /** `$HOME/.hermes` as Hermes's current installer leaves it: install state and tool store. */
+  function personalHermes(): { home: string; root: string } {
+    const home = realpathSync(tempDir());
+    const root = path.join(home, '.hermes');
+    mkdirSync(path.join(root, 'installs', '8f4d41295e258a07'), { recursive: true });
+    writeFileSync(path.join(root, 'installs', '8f4d41295e258a07', 'facts.json'), '{}\n');
+    mkdirSync(path.join(root, 'tools'), { recursive: true });
+    return { home, root };
+  }
+
+  it('starts the gateway on the installed runtime instead of letting Hermes build a second one', async () => {
+    const { home, root } = personalHermes();
+    const dataDir = tempDir();
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const runtime = new HermesRuntime({
+      dataDir,
+      host: { pathValue: binDirWithHermes(), inherited: { HOME: home, PATH: '/usr/bin' } },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 0,
+    });
+    expect(await runtime.start()).toBe('managed');
+    const hubHome = path.join(dataDir, 'hermes');
+    expect(lstatSync(path.join(hubHome, 'installs')).isSymbolicLink()).toBe(true);
+    expect(realpathSync(path.join(hubHome, 'installs'))).toBe(path.join(root, 'installs'));
+    // Still the hub's own home; Hermes takes its Python and tools from the person's store.
+    expect(spawned[0]!.env).toMatchObject({
+      HERMES_HOME: hubHome,
+      HERMES_RUNTIME_DIR: path.join(root, 'tools'),
+    });
+    expect(runtime.cliEnv()).toMatchObject({
+      HERMES_HOME: hubHome,
+      HERMES_RUNTIME_DIR: path.join(root, 'tools'),
+    });
+    await runtime.stop();
+  });
+
+  it('keeps a HERMES_RUNTIME_DIR somebody gave the hub, and adds none for an older Hermes', async () => {
+    const { home } = personalHermes();
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const given = new HermesRuntime({
+      dataDir: tempDir(),
+      host: {
+        pathValue: binDirWithHermes(),
+        inherited: { HOME: home, HERMES_RUNTIME_DIR: '/opt/tools' },
+      },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 0,
+    });
+    await given.start();
+    expect(spawned[0]!.env.HERMES_RUNTIME_DIR).toBe('/opt/tools');
+    await given.stop();
+
+    const older = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: binDirWithHermes(), inherited: { HOME: realpathSync(tempDir()) } },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 0,
+    });
+    await older.start();
+    expect(spawned[1]!.env.HERMES_RUNTIME_DIR).toBeUndefined();
+    await older.stop();
+  });
+
+  it("says why the gateway stopped in Hermes's own words, and keeps saying it while it restarts", async () => {
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: binDirWithHermes() },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 0,
+    });
+    await runtime.start();
+    const child = spawned[0]!.child;
+    child.stderr.write('hermes: completing source-update dependencies...\n');
+    child.stderr.write('Traceback (most recent call last):\n');
+    child.stderr.write("ModuleNotFoundError: No module named 'ruamel'\n");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    child.emit('exit', 1, null);
+    const reason = "hermes gateway exited (code 1): ModuleNotFoundError: No module named 'ruamel'";
+    expect(runtime.status()).toMatchObject({ state: 'error', lastError: reason });
+    expect(runtime.gateways()[0]).toMatchObject({ profile: 'default', lastError: reason });
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    expect(spawned).toHaveLength(2);
+    expect(runtime.status()).toMatchObject({ state: 'starting', lastError: reason });
+    expect(gatewayNote(runtime.status())).toBe(
+      `Hermes is still starting: ${reason}; try again in a moment`,
+    );
+    await runtime.stop();
+  });
+
+  it('tells a gateway that is alive but silent after the warm-up apart from one that is starting', async () => {
+    const { logger } = capturingLogger();
+    const { spawned, spawnImpl } = fakeSpawner();
+    const runtime = new HermesRuntime({
+      dataDir: tempDir(),
+      host: { pathValue: binDirWithHermes() },
+      log: logger,
+      fetchImpl: unreachableFetch,
+      spawnImpl,
+      healthIntervalMs: 60_000,
+      probeTimeoutMs: 50,
+      warmUpIntervalMs: 10,
+      warmUpAttempts: 3,
+    });
+    await runtime.start();
+    expect(runtime.status()).toMatchObject({ state: 'starting', lastError: null });
+    expect(gatewayNote(runtime.status())).toBe('Hermes is still starting; try again in a moment');
+    spawned[0]!.child.stdout.write('→ Installing Python dependencies…\n');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runtime.status()).toMatchObject({
+      state: 'starting',
+      lastError:
+        'the Hermes gateway has not answered http://127.0.0.1:8642/health after 0 s — its last line: → Installing Python dependencies…',
+    });
+    await runtime.stop();
+  });
+
+  it('adds nothing to a failed turn when the hub does not run the gateway, or it is running', () => {
+    const base = {
+      endpoint: 'http://127.0.0.1:8642',
+      home: null,
+      pid: null,
+      restarts: 0,
+      startedAt: null,
+      lastError: null,
+    };
+    expect(gatewayNote({ ...base, mode: 'external', state: 'stopped' })).toBeNull();
+    expect(gatewayNote({ ...base, mode: 'managed', state: 'running' })).toBeNull();
+    expect(gatewayNote({ ...base, mode: 'managed', state: 'error', lastError: 'x' })).toBe(
+      'the Hermes gateway Core Hub runs is not running: x',
+    );
   });
 });

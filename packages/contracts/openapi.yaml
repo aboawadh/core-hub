@@ -1978,6 +1978,21 @@ paths:
         never hands it to Hermes, and adds every provider in it to the new profile as that
         profile's own (`scope: profile`), with its models and its key. `providers` is how many
         it added.
+
+        With `replace_default: true` (decision §116) the archive becomes the **default**
+        profile instead, and the current default is kept as a new profile named
+        `default-backup` (`default-backup-2`, `-3`, … when taken — never refused for a taken
+        name). The whole archive is checked before anything changes; Hermes is held down
+        while the default's home moves to `profiles/<backup>` and the archive takes its place;
+        a conversation running at that moment ends. Everything Hermes shares across profiles
+        stays at its root (the task board, the shared OAuth store, the named profiles), and
+        the default workspace keeps its id, its shared providers and keys and every hub row.
+        Any failure puts the original default back exactly as it was, and the job fails with
+        a message that says the import did not happen and why. Refused before a job exists:
+        another replacement still running (`409 conflict`). The job's `result` adds
+        `{replaced_default: true, backup: {profile_id, slug, name}, skipped}` — `profile_id`,
+        `slug` and `name` are then the default's, and `skipped` lists top-level entries of
+        the archive that were not placed because Hermes shares them across profiles.
       x-scope: global
       x-roles: [owner, admin]
       x-rt-events: [job.queued, job.progress, job.completed, job.failed]
@@ -18757,7 +18772,18 @@ components:
           description: The new profile's id in the hub and in Hermes; must not be taken.
         name:
           $ref: '#/components/schemas/ProfileName'
-          description: Display name of the new workspace; the slug when absent.
+          description: |
+            Display name of the new workspace; the slug when absent. With `replace_default`,
+            the default profile's new name when present (its name stays when absent).
+        replace_default:
+          type: boolean
+          description: |
+            Import the archive **as the default profile** (decision §116). The current
+            default's Hermes home is kept whole as a new profile `default-backup` (then
+            `default-backup-2`, `-3`, … — the first id free in the hub and in Hermes), and the
+            archive becomes Hermes's root home. The default workspace keeps its id, its shared
+            providers and keys, its members and every hub row; `slug` is not used (it is still
+            sent, as before). Absent or `false`: a new profile beside the default, as before.
     # ---------------------------------------------------------------- sessions
     SessionSource:
       type: string

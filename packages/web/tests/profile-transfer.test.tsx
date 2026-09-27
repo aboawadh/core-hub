@@ -334,3 +334,87 @@ describe('import', () => {
     expect(post?.body).toEqual({ attachment_id: FILE, slug: 'design-2', name: 'design-2' });
   });
 });
+
+describe('import as the default profile (decision §116)', () => {
+  class Upload {
+    status = 201;
+    responseText = JSON.stringify({ id: FILE, name: 'old-program.tar.gz' });
+    upload = { addEventListener: () => {} };
+    private readonly listeners = new Map<string, () => void>();
+    open() {}
+    setRequestHeader() {}
+    addEventListener(event: string, fn: () => void) {
+      this.listeners.set(event, fn);
+    }
+    send() {
+      queueMicrotask(() => this.listeners.get('load')?.());
+    }
+    abort() {}
+  }
+
+  async function chooseAndTick(dialog: HTMLElement) {
+    await userEvent.upload(
+      within(dialog).getByTestId('import-file'),
+      new File([new Uint8Array([0x1f, 0x8b])], 'old-program.tar.gz', { type: 'application/gzip' }),
+    );
+    await userEvent.click(within(dialog).getByTestId('import-replace-default'));
+    // No new profile is made, so the slug field goes away.
+    expect(within(dialog).queryByLabelText('Slug')).toBeNull();
+  }
+
+  it('warns a second time, sends nothing when the person steps back', async () => {
+    vi.stubGlobal('XMLHttpRequest', Upload);
+    const { fetchImpl, sent } = hub({});
+    mount(fetchImpl);
+    await userEvent.click(await screen.findByTestId('import-workspace'));
+    const dialog = await screen.findByTestId('import-workspace-dialog');
+    await chooseAndTick(dialog);
+    await userEvent.click(within(dialog).getByTestId('start-import'));
+    const confirm = await screen.findByTestId('confirm-dialog');
+    expect(confirm.textContent).toContain('Replace the default profile?');
+    expect(confirm.textContent).toContain(
+      'Your current default profile “Default” will be replaced',
+    );
+    expect(confirm.textContent).toContain('default-backup');
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByTestId('confirm-dialog')).toBeNull());
+    expect(sent.some((s) => s.path.endsWith('/profile-imports'))).toBe(false);
+  });
+
+  it('sends replace_default after the warning and ends naming the backup, with the way to it', async () => {
+    vi.stubGlobal('XMLHttpRequest', Upload);
+    const { fetchImpl, sent } = hub({
+      job: job({
+        kind: 'import',
+        result: {
+          profile_id: '01J8QK3ZR2W7M5N4P6T8V9X0W1',
+          slug: 'default',
+          name: 'old-program',
+          providers: 0,
+          replaced_default: true,
+          backup: { profile_id: 'w9', slug: 'default-backup-2', name: 'default-backup-2' },
+          skipped: [],
+        },
+      }),
+    });
+    mount(fetchImpl);
+    await userEvent.click(await screen.findByTestId('import-workspace'));
+    const dialog = await screen.findByTestId('import-workspace-dialog');
+    await chooseAndTick(dialog);
+    await userEvent.click(within(dialog).getByTestId('start-import'));
+    const confirm = await screen.findByTestId('confirm-dialog');
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Replace the default' }));
+
+    const done = await within(dialog).findByTestId('import-replaced');
+    expect(done.textContent).toContain(
+      'Your previous default is kept as “default-backup-2”; you can delete it any time.',
+    );
+    expect(within(done).getByTestId('open-backup').textContent).toBe('Switch to default-backup-2');
+    const post = sent.find((s) => s.path.endsWith('/profile-imports'));
+    expect(post?.body).toMatchObject({
+      attachment_id: FILE,
+      replace_default: true,
+      name: 'old-program',
+    });
+  });
+});

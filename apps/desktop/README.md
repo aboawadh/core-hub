@@ -45,6 +45,20 @@ hand.
 - `src/shared` — pure logic shared by all three, unit-tested.
 - `src/i18n` — the app's own words, Arabic and English (`pnpm i18n:check`).
 
+Local mode and the person's own Hermes (ADR 0021, `docs/changes/2026-09-27-twuijri-desktop-local-existing-hermes.md`):
+the app finds the `hermes` program Hermes's installer put on the computer and the embedded hub runs
+it with **a Hermes home of its own**, `<app data>/local-hub/hermes` — its own `config.yaml`,
+`.env` (the provider keys added in Core Hub), memory, skills and conversations. The person's
+`~/.hermes` (`%LOCALAPPDATA%\hermes` on Windows) keeps its settings, keys, sessions and any
+gateway of its own; the Core Hub account made at first run only signs in to this hub. What the
+hub's home shares with it is the installed runtime, so it is not downloaded twice: a link
+`local-hub/hermes/installs` → `~/.hermes/installs` and `HERMES_RUNTIME_DIR=~/.hermes/tools` for the
+Hermes processes the hub starts (`packages/server/src/modules/agents/hermes-shared-install.ts`).
+Running them writes only what any `hermes` run writes there: short-lived lease files under
+`installs/<key>/…/.leases` and Hermes's per-revision bookkeeping in `installs/<key>/bootstrap/`.
+`COREHUB_HERMES_SHARED_INSTALL=off` in the app's environment keeps Hermes's own behaviour (a
+runtime of its own in the hub's home, downloaded on first start).
+
 Environment for tests and portable setups: `COREHUB_DESKTOP_USER_DATA` (where settings and
 each hub's storage live), `COREHUB_DESKTOP_NO_TRAY=1`, `COREHUB_DESKTOP_WEB_DIR`,
 `COREHUB_DESKTOP_DEVTOOLS=1`, `COREHUB_DESKTOP_NO_AUTO_UPDATE=1`,

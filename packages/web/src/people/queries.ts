@@ -242,6 +242,12 @@ export interface ProfileImportResult {
   name: string;
   /** Providers the archive carried, now the imported profile's own (decision §37). */
   providers?: number;
+  /** The archive became the default profile (decision §116); the fields above are the default's. */
+  replaced_default?: boolean;
+  /** The profile the previous default is kept as (`default-backup`, `-2`, …). */
+  backup?: { profile_id: string | null; slug: string; name: string };
+  /** Top-level entries of the archive left out because Hermes shares them across profiles. */
+  skipped?: string[];
 }
 
 export function useExportWorkspace() {
@@ -261,8 +267,13 @@ export function useExportWorkspace() {
 export function useImportWorkspace() {
   const { client } = useAuth();
   return useMutation({
-    mutationFn: async (body: { attachment_id: string; slug: string; name?: string }) =>
-      (await client.request('post', '/profile-imports', { body })).data.job_id,
+    mutationFn: async (body: {
+      attachment_id: string;
+      slug: string;
+      name?: string;
+      /** The archive becomes the default profile; the old one is kept as a backup (§116). */
+      replace_default?: boolean;
+    }) => (await client.request('post', '/profile-imports', { body })).data.job_id,
   });
 }
 
