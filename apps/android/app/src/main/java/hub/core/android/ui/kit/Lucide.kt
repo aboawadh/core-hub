@@ -50,6 +50,7 @@ object Lucide {
     val EyeOff = R.drawable.lucide_eye_off
     val File = R.drawable.lucide_file
     val FileCog = R.drawable.lucide_file_cog
+    val FileDiff = R.drawable.lucide_file_diff
     val FileSearch = R.drawable.lucide_file_search
     val FileText = R.drawable.lucide_file_text
     val Film = R.drawable.lucide_film

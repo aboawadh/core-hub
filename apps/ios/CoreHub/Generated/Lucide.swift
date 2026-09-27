@@ -41,6 +41,7 @@ enum Lucide: String, CaseIterable {
     case eyeOff = "eye-off"
     case file = "file"
     case fileCog = "file-cog"
+    case fileDiff = "file-diff"
     case fileText = "file-text"
     case film = "film"
     case folder = "folder"

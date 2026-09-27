@@ -310,13 +310,14 @@ extension ChatModel {
         }
     }
 
-    func compress() async {
+    /// `focus`: what the summary should keep in view (the context sheet, apps batch 6); empty is the whole chat.
+    func compress(focus: String = "") async {
         guard let app, !compressing else { return }
         compressing = true
         notice = l10n("chat_controls.compressing")
         defer { compressing = false }
         do {
-            let result = try await ChatActions.compress(app, id: sessionID, profile: profile)
+            let result = try await ChatActions.compress(app, id: sessionID, profile: profile, focus: focus)
             if let context = result.context { state.context = context }
             let line = ChatControls.compressionText(ChatControls.compression(result))
             notice = l10n(line.key, line.params)

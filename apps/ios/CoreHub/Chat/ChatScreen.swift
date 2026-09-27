@@ -28,6 +28,8 @@ struct ChatScreen: View {
     @State private var replyTo: Message?
     @State private var renaming: RenameTarget?
     @State private var deleting: String?
+    /// The chat's insight (apps batch 6): the context ring, runs, subagents, changed files and files.
+    @State private var insight: ChatInsightModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,8 +53,14 @@ struct ChatScreen: View {
         .navigationTitle(fixedTitle ?? model.state.title ?? l10n("sessions.untitled"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let insight {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ChatInsightBar(insight: insight, use: contextUse)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if let insight { ChatInsightMenu(insight: insight) }
                     chatMenu
                 } label: {
                     LucideIcon(.ellipsis, size: 20)
@@ -68,7 +76,17 @@ struct ChatScreen: View {
             leave?()
         }
         .sheet(item: $exported) { file in ActivitySheet(items: [file.url]) }
+        .sheet(item: Binding(get: { insight?.sheet }, set: { insight?.sheet = $0 })) { which in
+            if let insight {
+                ChatInsightSheet(
+                    which: which, chat: model, insight: insight, use: contextUse,
+                    canCompress: agent?.capabilities.contains(.compress) ?? false
+                )
+            }
+        }
         .onAppear {
+            if insight == nil { insight = ChatInsightModel(app: app, sessionID: model.sessionID, profile: model.profile) }
+            insight?.start()
             if tray == nil { tray = AttachmentTray(app: app) }
             if controls == nil { controls = ChatControlsModel(app: app) }
             model.start()
@@ -76,6 +94,7 @@ struct ChatScreen: View {
         }
         .onDisappear {
             model.stop()
+            insight?.stop()
             if LocalNotices.shared.openSessionID == model.sessionID { LocalNotices.shared.openSessionID = nil }
         }
         .accessibilityIdentifier("screen.chat")
@@ -212,6 +231,16 @@ struct ChatScreen: View {
     private var agent: Agent? {
         guard let id = model.state.agentID else { return nil }
         return app.agentDirectory.agents(model.profile).first { $0.id == id } ?? app.agents.first { $0.id == id }
+    }
+
+    /// How full the chat's window is, when known: the agent's report, else the catalogue's window for
+    /// the chat's model and the last counted turn (ChatInsight.use).
+    private var contextUse: ChatInsight.Use? {
+        ChatInsight.use(
+            reported: model.state.context,
+            window: controls?.models.first { $0.value == model.state.model }?.window,
+            runs: Array(model.state.runs.values)
+        )
     }
 
     private var isGlobalAgent: Bool { fixedTitle != nil || model.state.source == .globalAgent }
