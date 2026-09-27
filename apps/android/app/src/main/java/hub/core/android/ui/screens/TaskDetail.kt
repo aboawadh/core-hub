@@ -244,6 +244,8 @@ class TaskOps(private val apis: () -> HubApis?) {
     suspend fun assign(profile: String, id: String, request: TaskAssign): Result<TaskAssigned> = call { it.tasks.tasksAssignTask(profile, id, request) }
     suspend fun unassign(profile: String, id: String) = call { it.tasks.tasksUnassignTask(profile, id) }
     suspend fun stop(profile: String, id: String) = call { it.tasks.tasksStopTask(profile, id) }
+    /** Removes the task's worktree (a job; git keeps the branch). */
+    suspend fun removeWorktree(profile: String, id: String) = call { it.tasks.tasksDeleteWorktree(profile, id) }
 
     // Tasks II (batch 5): the checklist, comments, and the profile's projects.
     suspend fun addLine(profile: String, id: String, title: String) = call { it.tasks.tasksCreateSubtask(profile, id, SubtaskWrite(title = title)) }
@@ -398,6 +400,11 @@ fun TaskDetailSheet(
                             if (moves.isNotEmpty()) act { ops.reorderLines(facts.profile, facts.id, moves) }
                         },
                         onSaveList = { kind, items -> act { ops.update(facts.profile, facts.id, CheckLines.patch(kind, items)) } },
+                        onRemoveWorktree = {
+                            act { ops.removeWorktree(facts.profile, facts.id) }
+                            // The hub removes it in a job: the details are read again once it had time to run.
+                            scope.launch { kotlinx.coroutines.delay(2_000); load() }
+                        },
                     )
                 },
                 comments = {
@@ -504,7 +511,9 @@ private fun TaskLists(
     onDeleteLine: (Subtask) -> Unit,
     onReorder: (List<String>) -> Unit,
     onSaveList: (CheckLines.Kind, List<hub.core.client.model.TaskCheckItem>) -> Unit,
+    onRemoveWorktree: () -> Unit = {},
 ) {
+    detail?.worktree?.let { WorktreePart(it, facts.status == TaskStatus.RUNNING, busy, onRemoveWorktree) }
     if (facts.hermes) {
         detail?.hermes?.let { HermesHistoryPart(it) }
         return
