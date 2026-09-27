@@ -556,6 +556,22 @@ its approval.
   chat's menu offers «Name it automatically» (`title: null`, the hub renames it) — since the explicit
   nulls of §114 (`docs/changes/2026-09-27-twuijri-client-explicit-null.md`). Android: JVM tests against a stand-in hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Chat insight on both phones** (since 2026-09-27, `docs/changes/2026-09-27-twuijri-apps-chat-insight.md`,
+  apps night batch 6): a small **context ring** in the chat's top bar when the window is known (the
+  agent's report, else the catalogue's `context_window` and the last counted turn; never a made-up
+  number), which opens the **context sheet**: how full, where the figure came from, what fills it
+  (`sessions.getContextBreakdown`, read only while the sheet is open) and **Compress with an optional
+  focus** (`sessions.compress` `focus`, agents with `compress`, between replies). A count of
+  **running subagents** appears in the top bar only while some run. The chat's «…» gains Context,
+  **Runs** (`sessions.listRuns`: status, model, when, how long, tokens in/out and cost — a list the web
+  does not have, proposed — owner to confirm), **Subagents** (`listSubagents` live from `subagent.*`:
+  the running ones as a tree, the finished folded; Stop, Steer and the end of a subagent's transcript
+  where the agent allows it), **Changed files** (`listChanges`, and the running reply's so far from
+  `getRunChanges` every 4 s; a file opens its **unified diff** from `getRunChangeDiff` — monospace,
+  numbered, scrolled sideways — and «Open» shows the file now through the phone's file viewer) and
+  **Files** (`sessions.listFiles`, each opening as a message's file does). Not on the phones: the
+  web's Trajectory tab and background-tasks sheet. Android: JVM tests against a stand-in hub and
+  Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
 - **Tasks on the phones, part I (both apps)** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-apps-tasks-1.md`): a tap on a board card opens **the task on its
   own** (iOS sheet, Android sheet): title, status, priority, project, who has it (agent or person),
