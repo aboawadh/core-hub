@@ -94,7 +94,16 @@ node --test scripts/migrations-guard.test.mjs
                                            ℹ tests 28  ℹ pass 28  ℹ fail 0
 pnpm scripts:test                          ℹ tests 67  ℹ pass 67  ℹ fail 0
 ```
-CI: تُضاف نتيجته بعد التشغيل.
+CI على طلب الدمج #183 (run 36309163512): كل الفحوص خضراء، ومنها في job `checks`:
+```
+ℹ tests 67
+ℹ pass 67
+ℹ fail 0
+contracts:compat  compared packages/contracts/openapi.yaml and 95 event schemas with v1.1.3
+contracts:compat  OK — no breaking change against v1.1.3
+migrations:guard  33 migration(s) in v1.1.3, 0 new
+migrations:guard  OK — no breaking change against v1.1.3
+```
 
 ## المخاطر والرجوع
 - إيجابيات كاذبة: الحارس محافظ (مثلًا أي `pattern` جديد في طلب، أو طلب صار يرفض الحقول غير المعلنة).
