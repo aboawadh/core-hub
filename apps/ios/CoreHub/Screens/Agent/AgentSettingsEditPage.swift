@@ -1,17 +1,40 @@
-// An agent's Settings on the phone (B14): the fields edited in place, with the Presets of contract
-// decision §100 at the top. Every call carries the profile the page edits.
+// An agent's Settings on the phone (B14, apps batch 9): the fields edited in place — lists one item per
+// line and JSON included — with the web's cards: signing a coding agent in to its own account, the
+// Presets of contract decision §100, context compression (§57), and what Hermes wrote and waits for
+// review (§58). Every call carries the profile the page edits.
 import CoreHubClient
 import SwiftUI
 
-/// A settings field's value, shown and typed.
+/// A settings field's value, shown and typed (every kind the adapter declares; web AgentSettingsScreen).
 enum SettingValues {
-    /// `list` and `json` are read here and edited on the web.
-    static func editable(_ field: SettingsField) -> Bool { field.kind != .list && field.kind != .json }
+    /// A list or JSON is typed over several lines, in a sheet.
+    static func multiline(_ field: SettingsField) -> Bool { field.kind == .list || field.kind == .json }
 
     static func text(_ value: JSONValue?) -> String? {
         guard let value else { return nil }
         if case .null = value { return nil }
         return JSONText.scalar(value)
+    }
+
+    /// What the field reads as in its row: a list's items, JSON as `{…}`.
+    static func shown(_ field: SettingsField) -> String? {
+        switch field.kind {
+        case .json:
+            guard let value = field.value, value != .null else { return nil }
+            if case .array = value { return "[…]" }
+            return "{…}"
+        default: return text(field.value)
+        }
+    }
+
+    /// The text the editor starts with: a list one item per line, JSON pretty, a secret empty.
+    static func typedText(_ field: SettingsField) -> String {
+        switch field.kind {
+        case .secret: return ""
+        case .list: return SettingsCardRules.listText(field.value)
+        case .json: return SettingsCardRules.jsonText(field.value)
+        default: return text(field.value) ?? ""
+        }
     }
 
     /// What was typed as the field's value, or nil when it is not one; empty puts the default back.
@@ -32,6 +55,10 @@ enum SettingValues {
             return nil
         case .choice:
             return field.options.contains { $0.value == t } ? .string(t) : nil
+        case .list:
+            return SettingsCardRules.listValue(typed)
+        case .json:
+            return SettingsCardRules.jsonValue(typed)
         default:
             return .string(typed)
         }
@@ -44,13 +71,22 @@ enum SettingValues {
     }
 }
 
+/// A list or JSON field being edited in its sheet.
+private struct LongEdit: Identifiable {
+    let section: String
+    let field: SettingsField
+    var id: String { section + "." + field.key }
+}
+
 struct AgentSettingsEditPage: View {
     let agent: Agent
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
     @State private var error: String?
     @State private var editing: (section: String, field: SettingsField)?
+    @State private var long: LongEdit?
     @State private var typed = ""
+    @State private var saved: SettingsCardRules.Saved?
 
     var body: some View {
         AsyncContent(key: app.currentProfile) {
@@ -58,8 +94,11 @@ struct AgentSettingsEditPage: View {
             return try await app.api.call { try await AgentsAPI.agentsGetSettings(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
         } content: { settings, reload in
             List {
+                if agent.install.signIn == true && agent.install.source == .managed { AgentSignInSection(agent: agent) }
                 AgentPresetsSection(agent: agent, applied: reload)
+                if agent.capabilities.contains(.compress) { CompressionSection() }
                 if let error { NoticeView(text: error, tone: .danger) }
+                if let saved { NoticeView(text: savedText(saved), tone: .success).accessibilityIdentifier("setting.saved") }
                 ForEach(settings.sections, id: \.key) { section in
                     Section {
                         ForEach(section.fields, id: \.key) { field in
@@ -68,11 +107,23 @@ struct AgentSettingsEditPage: View {
                     } header: {
                         Text(text(section.title))
                     } footer: {
-                        if let note = section.note { Text(text(note)) }
+                        if let note = section.note {
+                            Text(text(note))
+                        } else if section.applies == .nextMessage {
+                            Text(l10n("agents2.settings.applies_next_message"))
+                        } else if section.restartRequired {
+                            Text(l10n("agents2.settings.restart_required"))
+                        }
                     }
                 }
+                if agent.kind == .hermes { PendingWritesSection(agent: agent) }
             }
             .refreshable { reload() }
+            .sheet(item: $long) { edit in
+                SettingTextSheet(field: edit.field, title: text(edit.field.label)) { value in
+                    await set(section: edit.section, field: edit.field.key, value: value, reload: reload)
+                }
+            }
             .alert(editing.map { text($0.field.label) } ?? "", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
                 if let editing {
                     if editing.field.kind == .secret {
@@ -119,23 +170,23 @@ struct AgentSettingsEditPage: View {
                 label(field)
             }
         default:
-            if SettingValues.editable(field) {
-                Button {
-                    typed = field.kind == .secret ? "" : (SettingValues.text(field.value) ?? "")
+            Button {
+                if SettingValues.multiline(field) {
+                    long = LongEdit(section: section, field: field)
+                } else {
+                    typed = SettingValues.typedText(field)
                     editing = (section, field)
-                } label: {
-                    HStack {
-                        label(field)
-                        Spacer()
-                        Text(field.kind == .secret ? (SettingValues.text(field.value) == nil ? "—" : "••••") : (SettingValues.text(field.value) ?? SettingValues.text(field._default).map { "(\($0))" } ?? "—"))
-                            .foregroundStyle(Tone.textMuted)
-                            .lineLimit(1)
-                    }
                 }
-                .accessibilityIdentifier("setting.\(section).\(field.key)")
-            } else {
-                FactRow(label: text(field.label), value: SettingValues.text(field.value) ?? "—")
+            } label: {
+                HStack {
+                    label(field)
+                    Spacer()
+                    Text(field.kind == .secret ? (SettingValues.text(field.value) == nil ? "—" : "••••") : (SettingValues.shown(field) ?? SettingValues.text(field._default).map { "(\($0))" } ?? "—"))
+                        .foregroundStyle(Tone.textMuted)
+                        .lineLimit(1)
+                }
             }
+            .accessibilityIdentifier("setting.\(section).\(field.key)")
         }
     }
 
@@ -153,14 +204,25 @@ struct AgentSettingsEditPage: View {
     private func set(section: String, field: String, value: JSONValue, reload: @escaping () -> Void) async {
         let profile = app.currentProfile
         do {
-            _ = try await app.api.call {
+            let result = try await app.api.call {
                 try await AgentsAPI.agentsUpdateSettings(xHubProfile: profile, agentId: agent.id, agentSettingsPatch: AgentSettingsPatch(section: section, values: [field: value]), apiConfiguration: $0)
             }
             error = nil
+            saved = SettingsCardRules.saved(restartJobId: result.restartJobId, applies: result.section.applies)
         } catch {
             self.error = HubFailure(error).describe(l10n)
+            saved = nil
         }
         reload()
+    }
+
+    private func savedText(_ saved: SettingsCardRules.Saved) -> String {
+        switch saved {
+        case .restarting: return l10n("agents2.settings.saved_restarting")
+        case .restartNeeded: return l10n("agents2.settings.saved_restart_needed")
+        case .nextMessage: return l10n("agents2.settings.saved_next_message")
+        case .saved: return l10n("agents2.settings.saved")
+        }
     }
 }
 
