@@ -870,7 +870,15 @@ its approval.
   Hub»). Also: the **Runtime card** and «Fetch» on Models, the **updates shelf** and source (admin),
   a task's **worktree** and **hand-over** to another profile, the pairing code saying when it was
   claimed, the conversation's **trajectory**, the composer's **`/` commands**, three **starters** in an
-  empty chat, and the task board and Schedules following `/rt/tasks` and `/rt/schedules`. Unit tests
+  empty chat, and the task board and Schedules following `/rt/tasks` and `/rt/schedules`. Since the
+  follow-up (`docs/changes/2026-09-27-twuijri-ios-self-sufficient-2.md`): chats **dragged into an
+  order** kept on the phone per view (and Move up/down in a chat's menu; a chat dropped on a
+  category's heading is filed there), the **message queue** strip (a message sent while a turn runs
+  on «wait in line» waits on the phone: send now, steer, remove; sent in order as turns end), **jobs
+  heard live** on `/rt/jobs` (a followed job wakes at once, the Agents page reads again on
+  `agent.updated`), the trajectory's **timeline** (lanes, idle folded, parallel calls on their own
+  rows, a bar finds its step) and **session log** download, a **skill picker** after `/skill `, and
+  a workflow agent step's **model** from the profile's catalogue. Unit tests
   on the CI simulator; **not yet tried on the owner's phone or hub**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
