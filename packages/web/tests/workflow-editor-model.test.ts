@@ -12,6 +12,7 @@ import {
   issuesByTarget,
   joinCondition,
   nodeStates,
+  placeRefusedFields,
   reducer,
   splitCondition,
   takenEdges,
@@ -346,5 +347,51 @@ describe('workflow editor: a step added off-screen is brought into view', () => 
     const left = reveal(rtlView, true, { x: 900, y: 40 }, 800, 400);
     expect(left.tx).toBe(800 + 24 - (800 - 900 - 208));
     expect(left.ty).toBe(0);
+  });
+});
+
+describe('a refused drawing, field by field', () => {
+  it('puts the name by the name field, a step’s field on that step, and the rest in the message', () => {
+    let draft = reducer(initialState(), { type: 'add', kind: 'agent', title: 'Ask' }).draft;
+    draft = reducer(initialState(draft), { type: 'add', kind: 'notify', title: 'Tell' }).draft;
+    draft = reducer(initialState(draft), {
+      type: 'connect',
+      from: 'agent_1',
+      to: 'notify_1',
+      route: 'success',
+    }).draft;
+    const placed = placeRefusedFields(
+      [
+        { path: 'name', message: 'must NOT have fewer than 1 characters' },
+        { path: 'nodes.1.title', message: 'is too long' },
+        { path: 'edges.0', message: 'must have required property route' },
+        { path: 'nodes.7.title', message: 'no such step' },
+        { path: 'limits.max_cost', message: 'is not a price' },
+        { path: '', message: 'body is required' },
+      ],
+      draft,
+    );
+    expect(placed.name).toBe('must NOT have fewer than 1 characters');
+    expect(placed.issues).toEqual([
+      {
+        code: 'field_invalid',
+        node_id: 'notify_1',
+        edge_id: null,
+        detail: 'title',
+        message: 'nodes.1.title: is too long',
+      },
+      {
+        code: 'field_invalid',
+        node_id: null,
+        edge_id: 'e1',
+        detail: 'edges.0',
+        message: 'edges.0: must have required property route',
+      },
+    ]);
+    expect(placed.general.map((field) => field.path)).toEqual([
+      'nodes.7.title',
+      'limits.max_cost',
+      '',
+    ]);
   });
 });

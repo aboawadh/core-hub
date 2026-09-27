@@ -135,3 +135,26 @@ export function describeError(
     message: error instanceof Error ? error.message : String(error),
   });
 }
+
+/** One field a `validation_failed` names: its dotted path (`name`, `nodes.0.title`) and why. */
+export interface FieldError {
+  path: string;
+  message: string;
+}
+
+/**
+ * The fields a refused request names (`400 validation_failed`, `details.fields`), so a form
+ * can put each one next to its field; empty for any other error. `describeError` stays the
+ * general sentence for what no field shows.
+ */
+export function fieldErrorsOf(error: unknown): FieldError[] {
+  if (!(error instanceof HubApiError) || error.code !== 'validation_failed') return [];
+  const fields = (error.body as { details?: { fields?: unknown } } | undefined)?.details?.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields.flatMap((field: unknown) => {
+    const { path, message } = (field ?? {}) as { path?: unknown; message?: unknown };
+    return typeof path === 'string'
+      ? [{ path, message: typeof message === 'string' ? message : '' }]
+      : [];
+  });
+}
