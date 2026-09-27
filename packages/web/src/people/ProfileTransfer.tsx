@@ -434,7 +434,7 @@ export function ImportDialog({
       footer={
         replaced ? (
           <Button onClick={onClose} data-testid="close-import">
-            {t('common.close')}
+            {t('ui.close')}
           </Button>
         ) : (
           <>
