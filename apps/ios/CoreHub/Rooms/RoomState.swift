@@ -14,6 +14,14 @@ struct RoomState {
     var inviteCode: String?
     var leadSeatID: String?
     var archived = false
+    /// Whether and how far agents pass the turn (room settings).
+    var handoff: HandoffPolicy?
+    /// The room's rolling summary.
+    var memory: RoomMemory?
+    /// Handoff chains going on now (from the room), and the room's chains newest first
+    /// (`rooms.listHandoffs`, kept by `handoff.updated`).
+    var activeChains: [HandoffChain] = []
+    var handoffs: [HandoffChain] = []
     var seats: [Seat] = []
     var members: [Member] = []
     var messages: [Message] = []
@@ -40,6 +48,9 @@ struct RoomState {
         inviteCode = detail.inviteCode
         leadSeatID = detail.leadSeatId
         archived = detail.archivedAt != nil
+        handoff = detail.handoff
+        memory = detail.memory
+        activeChains = detail.handoffChains
         seats = detail.seats
         members = detail.members
         approvals = Dictionary(
@@ -124,13 +135,23 @@ struct RoomState {
             typing[p.member_id] = p.typing ? p.name : nil
         case "room.updated":
             guard let p = try? d.decode(RoomBox.self, from: data), ours(p.room.id) else { return }
+            // The event goes to every member alike, so it says nobody manages the room and hides
+            // its invite code: who manages it and the code stay as the room said them.
             name = p.room.name
-            canManage = p.room.canManage
             canMentionAll = p.room.canMentionAll
-            inviteCode = p.room.inviteCode
             leadSeatID = p.room.leadSeatId
             archived = p.room.archivedAt != nil
+            handoff = p.room.handoff
             seats = p.room.seats
+        case "memory.updated":
+            guard let p = try? d.decode(MemoryBox.self, from: data), ours(p.room_id) else { return }
+            memory = p.memory
+        case "handoff.updated":
+            guard let p = try? d.decode(ChainBox.self, from: data), ours(p.room_id) else { return }
+            handoffs.removeAll { $0.id == p.chain.id }
+            handoffs.insert(p.chain, at: 0)
+            activeChains.removeAll { $0.id == p.chain.id }
+            if p.chain.status == .active { activeChains.insert(p.chain, at: 0) }
         case "room.deleted":
             if let p = try? d.decode(RoomIDBox.self, from: data), ours(p.room_id) { deleted = true }
         case "approval.requested":
@@ -200,6 +221,14 @@ struct RoomState {
     }
     private struct RoomBox: Decodable { let room: Room }
     private struct RoomIDBox: Decodable { let room_id: String }
+    private struct MemoryBox: Decodable {
+        let room_id: String
+        let memory: RoomMemory
+    }
+    private struct ChainBox: Decodable {
+        let room_id: String
+        let chain: HandoffChain
+    }
     private struct ApprovalBox: Decodable { let approval: Approval }
 }
 

@@ -68,6 +68,18 @@ import hub.core.client.model.Agent
 import hub.core.client.model.Room
 import hub.core.client.model.RoomCreate
 import hub.core.client.model.RoomInvitePreview
+import hub.core.client.model.RoomPatch
+import hub.core.android.rooms.RoomActions
+import hub.core.android.rooms.RoomManage
+import hub.core.android.ui.components.ConfirmDeleteDialog
+import hub.core.android.ui.components.deleteTitle
+import hub.core.android.ui.components.rememberConfirmDelete
+import hub.core.android.ui.kit.HubMenu
+import hub.core.android.ui.kit.MenuItem
+import hub.core.android.ui.kit.Segment
+import hub.core.android.ui.kit.Segmented
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import hub.core.client.model.SeatConfig
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +96,8 @@ data class RoomsUi(
     val busy: Boolean = false,
     val preview: RoomInvitePreview? = null,
     val dialogError: HubError? = null,
+    /** The list shows archived rooms (the web's Active / Archived switch). */
+    val archived: Boolean = false,
 )
 
 /** Pure rules of making a room, tested without a hub. */
@@ -115,8 +129,9 @@ class RoomsViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun load() {
         val s = session ?: return
+        val archived = _ui.value.archived
         viewModelScope.launch {
-            hubCall { graph.apis(s).rooms.roomsList(s.profile, archived = false, limit = 100) }
+            hubCall { graph.apis(s).rooms.roomsList(s.profile, archived = archived, limit = 100) }
                 .onSuccess { page -> _ui.update { it.copy(rooms = page.items, error = null) } }
                 .onFailure { e -> _ui.update { it.copy(error = e as HubError) } }
             hubCall { graph.apis(s).agents.agentsList(s.profile) }
@@ -164,8 +179,37 @@ class RoomsViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun resetDialog() = _ui.update { it.copy(preview = null, dialogError = null, busy = false) }
+
+    fun showArchived(archived: Boolean) {
+        if (archived == _ui.value.archived) return
+        _ui.update { it.copy(archived = archived, rooms = null) }
+        load()
+    }
+
+    // A long press on a room (its manager: rename, archive, delete; anyone else: leave).
+
+    suspend fun update(room: Room, patch: RoomPatch): Result<*> {
+        val s = session ?: return Result.failure<Unit>(HubError(401, "unauthorized", null))
+        return hubCall { RoomActions(graph.apis(s)).update(room.profile, room.id, patch) }.onSuccess { load() }
+    }
+
+    fun archive(room: Room, archived: Boolean) {
+        viewModelScope.launch { update(room, RoomPatch(archived = archived)).onFailure { e -> _ui.update { it.copy(error = e as? HubError) } } }
+    }
+
+    suspend fun delete(room: Room): Result<*> {
+        val s = session ?: return Result.failure<Unit>(HubError(401, "unauthorized", null))
+        return hubCall { RoomActions(graph.apis(s)).delete(room.profile, room.id) }.onSuccess { load() }
+    }
+
+    /** Leaving is removing yourself: the room's list of people says which member you are. */
+    suspend fun leave(room: Room): Result<*> {
+        val s = session ?: return Result.failure<Unit>(HubError(401, "unauthorized", null))
+        return hubCall { RoomActions(graph.apis(s)).leave(room.profile, room.id, s.user.id) }.onSuccess { load() }
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RoomsPanel(nav: Navigator, header: @Composable () -> Unit = {}, onOpen: () -> Unit) {
     val context = LocalContext.current
@@ -175,6 +219,9 @@ fun RoomsPanel(nav: Navigator, header: @Composable () -> Unit = {}, onOpen: () -
     val t = LocalTokens.current
     var making by remember { mutableStateOf(false) }
     var joining by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<Room?>(null) }
+    var leaving by remember { mutableStateOf<Room?>(null) }
+    val deleting = rememberConfirmDelete<Room>()
     LaunchedEffect(session?.profile) { vm.load() }
     val open: (Room) -> Unit = { room -> nav.go(Route.Room(room.id, room.profile)); onOpen() }
     LazyColumn(Modifier.fillMaxSize().testTag("rooms.list"), contentPadding = PaddingValues(bottom = 8.dp)) {
@@ -193,13 +240,25 @@ fun RoomsPanel(nav: Navigator, header: @Composable () -> Unit = {}, onOpen: () -
                 )
             }
         }
+        item(key = "filter") {
+            Segmented(
+                listOf(
+                    Segment(false, stringResource(R.string.rooms_manage_active), tag = "rooms.filter.active"),
+                    Segment(true, stringResource(R.string.rooms_manage_archived), tag = "rooms.filter.archived"),
+                ),
+                ui.archived, vm::showArchived, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), size = ControlSize.Sm,
+            )
+        }
         ui.error?.let { error -> item(key = "error") { ErrorNotice(error, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) } }
         items(ui.rooms.orEmpty(), key = { it.id }) { room ->
             val selected = (nav.current as? Route.Room)?.roomId == room.id
+            val actions = RoomManage.rowActions(room.canManage, room.archivedAt != null)
+            var menu by remember(room.id) { mutableStateOf(false) }
+            Box {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp).clip(ItemShape)
                     .background(if (selected) t.surface2 else Color.Transparent, ItemShape)
-                    .clickable { open(room) }
+                    .combinedClickable(onClick = { open(room) }, onLongClick = { menu = true })
                     .padding(horizontal = 8.dp, vertical = 7.dp)
                     .testTag("room.row.${room.id}"),
                 verticalAlignment = Alignment.CenterVertically,
@@ -216,15 +275,42 @@ fun RoomsPanel(nav: Navigator, header: @Composable () -> Unit = {}, onOpen: () -
                     Text(stringResource(R.string.rooms_counts, room.seats.size, room.memberCount), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                 }
             }
+            HubMenu(menu, { menu = false }) {
+                actions.forEach { action ->
+                    MenuItem(
+                        stringResource(RoomActionLabel.text(action)), {
+                            menu = false
+                            when (action) {
+                                RoomManage.Action.RENAME -> renaming = room
+                                RoomManage.Action.ARCHIVE -> vm.archive(room, true)
+                                RoomManage.Action.UNARCHIVE -> vm.archive(room, false)
+                                RoomManage.Action.DELETE -> deleting.ask(room)
+                                RoomManage.Action.LEAVE -> leaving = room
+                                else -> open(room)
+                            }
+                        },
+                        Modifier.testTag("room.row.action.${action.name.lowercase()}"), icon = RoomActionLabel.icon(action), danger = RoomActionLabel.danger(action),
+                    )
+                }
+            }
+            }
         }
         if (ui.rooms?.isEmpty() == true) {
             item(key = "empty") {
-                Text(stringResource(R.string.rooms_empty), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
+                Text(stringResource(if (ui.archived) R.string.rooms_manage_none_archived else R.string.rooms_empty), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
             }
         }
     }
     if (making) NewRoomDialog(ui, onCancel = { making = false }) { name, agents -> vm.create(name, agents) { making = false; open(it) } }
     if (joining) JoinRoomDialog(ui, vm::preview, onCancel = { joining = false }) { code -> vm.join(code) { joining = false; open(it) } }
+    renaming?.let { room -> RoomRenameSheet(room.name, { renaming = null }) { vm.update(room, it) } }
+    ConfirmDeleteDialog(deleting, { deleteTitle(it.name) }, { vm.delete(it) })
+    leaving?.let { room ->
+        RoomQuestion(
+            stringResource(R.string.rooms_manage_leave_title), stringResource(R.string.rooms_manage_leave_body, room.name),
+            stringResource(R.string.rooms_manage_leave), { leaving = null },
+        ) { vm.leave(room) }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
