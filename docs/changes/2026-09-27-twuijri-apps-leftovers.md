@@ -90,7 +90,19 @@ $ gradlew :app:testDebugUnitTest (LeftoversTest, LeftoversShots, FilesPageTest, 
 وزر «في الخلفية» بعدّاد 2 بجانب الجرس، والورقة (محادثة ووكيل فرعي يعملان مع فتح وإيقاف، و«انتهت (1)»). الأوقات في الصور طويلة لأن
 مثال العقد بدأ في 21 سبتمبر.
 
-iOS لا يُبنى على لينكس: `gh workflow run ios.yml --ref night/apps-leftovers` — النتيجة أدناه.
+iOS لا يُبنى على لينكس:
+```
+$ gh workflow run ios.yml --ref night/apps-leftovers   (run 36290775773، الالتزام cd6f2159)
+** BUILD SUCCEEDED **
+Test Case '-[CoreHubTests.LeftoversTests testAHandedOffFileIsTakenOnceByTheComposerOfItsOwnProfile]' passed
+Test Case '-[CoreHubTests.LeftoversTests testAReadyAttachmentGoesWithTheNextMessageWithoutAnUpload]' passed
+Test Case '-[CoreHubTests.LeftoversTests testARowWithoutWordsSaysWhatItIs]' passed
+Test Case '-[CoreHubTests.LeftoversTests testAttachOffersThisProfilesRecentChatsAtMostEightWithoutTheGlobalAgents]' passed
+Test Case '-[CoreHubTests.LeftoversTests testEachItemOpensWhereItLives]' passed
+Test Case '-[CoreHubTests.LeftoversTests testEveryKindAndStatusHasItsWordsInBothLanguages]' passed
+Test Case '-[CoreHubTests.LeftoversTests testTimeIsCountedInLatinDigitsAndAQueuedItemHasNoneYet]' passed
+Executed 301 tests, with 0 failures (0 unexpected)
+```
 
 ## المخاطر والرجوع
 - لم يُجرَّب على هاتفي المالك. صفحات iOS بلا صور (اختبارات القواعد فقط في CI).
