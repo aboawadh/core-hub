@@ -684,6 +684,27 @@ its approval.
   job is followed with a progress bar and its outcome (installed version, «up to date» or the update
   found, the failure in the hub's words). Android: JVM tests against a scripted hub and a Robolectric
   picture; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Knowledge, Skills usage, hub Plugins and Webhooks on both phones** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-apps-knowledge.md`, apps night batch 10), as the web's Settings
+  pages have them; Android no longer opens these four on the web, and iOS's Skills usage is no longer
+  a "coming later" screen. **Knowledge**: the profile's journal, notes and files as one list, newest
+  first, with the kind as chips, a search (asked once typing pauses) and the next page as the list
+  ends; each row its kind, title, day, three lines of text, tags and attached files. The contract has
+  no create, upload, delete or re-index for these rows (the web has none either), so the phones have
+  none. **Skills usage**: the period (7/30/90/365 days), every profile or one, one agent or all (a
+  chosen agent that left the period stays choosable); since when the hub counts, the four totals, the
+  per-day chart as a compact list of bars with the day's skills, the top skills (uses, share, last
+  use) and the enabled skills no run loaded. **Plugins**: the hub's list with kind, version and state;
+  `plugins.list` is the only operation (no installer, switch or settings exists for hub plugins), and
+  the empty state says so. **Webhooks** (notify, §59): the list in the profile you are in (the calls
+  carry `X-Hub-Profile`, as the web's do, since the operations are `x-scope: global`), on/off,
+  **send test** followed to its outcome, the recent deliveries (followed while one waits) with
+  **redeliver** where it may, **add/edit** (address with the hub's refusal in words, private
+  addresses, events from the catalogue with a filter, every profile or these, message text, retries,
+  the signing secret kept, made new or stopped) and **delete** after a question; a new secret is shown
+  once with Copy. Hermes's incoming webhooks (§97) stay on the agent's Channels page. Android: JVM
+  tests against a scripted hub and Robolectric pictures (light English, dark Arabic); iOS: unit tests
+  on the CI simulator; **not yet tried on the owner's phones**.
 - **A turn's tool activity, all three clients** (since 2026-09-26, DECISIONS §111, proposed — owner
   to confirm; `docs/changes/2026-09-26-twuijri-tool-activity-collapse.md`): while the agent works,
   only the latest steps are in view — four on the web, two on the phones — plus any step still
