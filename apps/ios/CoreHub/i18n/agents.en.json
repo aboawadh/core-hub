@@ -47,7 +47,6 @@
       "essential_refused": "Hermes's own manual (hermes-agent) is always on: Hermes does not let it be switched off.",
       "not_library": "This skill is not one of Core Hub's own.",
       "library_off_refused": "The Core Hub library is off in this profile; switch it on first.",
-      "import_hint": "A SKILL.md file, or a zip of one skill or several.",
       "import_not_pack": "Choose a SKILL.md file or a zip archive."
     },
     "import": {
@@ -94,7 +93,6 @@
       "edit_entry": "Edit this entry",
       "remove": "Remove",
       "remove_title": "Remove this entry?",
-      "entry": "Entry",
       "add_entry_title": "New entry in {name}",
       "edit_entry_title": "An entry in {name}",
       "budget": "{count} of {limit} characters",

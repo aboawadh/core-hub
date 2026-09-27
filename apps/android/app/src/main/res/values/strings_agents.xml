@@ -12,7 +12,6 @@
     <string name="agents_skill_none">No skills</string>
     <string name="agents_skill_none_body">Skills are files in the agent\'s folder. Add one here, or import a pack.</string>
     <string name="agents_skill_category_user">Your skills</string>
-    <string name="agents_skill_enabled">Enabled</string>
     <string name="agents_skill_pinned">Pinned</string>
     <string name="agents_skill_pin">Pin</string>
     <string name="agents_skill_unpin">Unpin</string>
@@ -31,7 +30,6 @@
     <string name="agents_skill_library_none">Not installed in this profile yet: %1$s skills — images, documents, data, research, translation, slides and schedules.</string>
     <string name="agents_skill_library_off">Off in this profile. Switch it on to install Core Hub\'s skills again.</string>
     <string name="agents_skill_library_install">Install</string>
-    <string name="agents_skill_library_switch">Core Hub library in this profile</string>
     <string name="agents_skill_library_off_title">Switch the Core Hub library off?</string>
     <string name="agents_skill_library_off_body">Its skills are removed from this profile, except the ones you edited, which stay as your own. Core Hub stops installing and updating them here until you switch it back on.</string>
     <string name="agents_skill_library_off_confirm">Switch off</string>
@@ -47,7 +45,6 @@
     <string name="agents_skill_essential_refused">Hermes\'s own manual (hermes-agent) is always on: Hermes does not let it be switched off.</string>
     <string name="agents_skill_not_library">This skill is not one of Core Hub\'s own.</string>
     <string name="agents_skill_library_off_refused">The Core Hub library is off in this profile; switch it on first.</string>
-    <string name="agents_skill_import_hint">A SKILL.md file, or a zip of one skill or several.</string>
     <string name="agents_skill_import_not_pack">Choose a SKILL.md file or a zip archive.</string>
     <string name="agents_import_pack_unrecognised">A skill pack is a SKILL.md file or a zip archive</string>
     <string name="agents_import_pack_has_no_skill">The archive holds no SKILL.md</string>
@@ -90,7 +87,6 @@
     <string name="agents_memory_edit_entry">Edit this entry</string>
     <string name="agents_memory_remove">Remove</string>
     <string name="agents_memory_remove_title">Remove this entry?</string>
-    <string name="agents_memory_entry">Entry</string>
     <string name="agents_memory_add_entry_title">New entry in %1$s</string>
     <string name="agents_memory_edit_entry_title">An entry in %1$s</string>
     <string name="agents_memory_budget">%1$s of %2$s characters</string>

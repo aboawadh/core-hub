@@ -47,7 +47,6 @@
       "essential_refused": "دليل هرمز نفسه (hermes-agent) يعمل دائمًا: هرمز لا يسمح بإطفائه.",
       "not_library": "هذه المهارة ليست من مهارات Core Hub.",
       "library_off_refused": "مكتبة Core Hub مطفأة في هذا البروفايل؛ شغّلها أولًا.",
-      "import_hint": "ملف SKILL.md، أو ملف zip فيه مهارة أو أكثر.",
       "import_not_pack": "اختر ملف SKILL.md أو أرشيف zip."
     },
     "import": {
@@ -94,7 +93,6 @@
       "edit_entry": "حرّر هذا المدخل",
       "remove": "أزل",
       "remove_title": "إزالة هذا المدخل؟",
-      "entry": "المدخل",
       "add_entry_title": "مدخل جديد في {name}",
       "edit_entry_title": "مدخل في {name}",
       "budget": "{count} من {limit} حرفًا",

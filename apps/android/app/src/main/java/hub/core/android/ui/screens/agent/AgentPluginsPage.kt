@@ -100,7 +100,7 @@ private fun PluginsPage(agent: Agent, profile: String) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         HubTextField(
-                            identifier, { identifier = it }, Modifier.weight(1f), placeholder = "owner/repo · https://…", mono = true,
+                            identifier, { identifier = it }, Modifier.weight(1f), placeholder = "owner/repo · https://…", label = stringResource(R.string.agents_plugin_install_label), mono = true,
                             size = ControlSize.Md, error = if (bad) stringResource(R.string.agents_plugin_install_bad) else null, fieldTag = "plugins.identifier",
                         )
                         HubButton(

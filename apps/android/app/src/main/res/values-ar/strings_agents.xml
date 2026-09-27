@@ -12,7 +12,6 @@
     <string name="agents_skill_none">لا مهارات</string>
     <string name="agents_skill_none_body">المهارات ملفات في مجلد الوكيل. أضف واحدة هنا أو استورد حزمة.</string>
     <string name="agents_skill_category_user">مهاراتك</string>
-    <string name="agents_skill_enabled">مفعّلة</string>
     <string name="agents_skill_pinned">مثبّتة</string>
     <string name="agents_skill_pin">تثبيت</string>
     <string name="agents_skill_unpin">إلغاء التثبيت</string>
@@ -31,7 +30,6 @@
     <string name="agents_skill_library_none">لم تُثبَّت بعد في هذا البروفايل: %1$s مهارة للصور والمستندات والبيانات والبحث والترجمة والعروض والجدولة.</string>
     <string name="agents_skill_library_off">مطفأة في هذا البروفايل. شغّلها لتُثبَّت مهارات Core Hub من جديد.</string>
     <string name="agents_skill_library_install">تثبيت</string>
-    <string name="agents_skill_library_switch">مكتبة Core Hub في هذا البروفايل</string>
     <string name="agents_skill_library_off_title">إيقاف مكتبة Core Hub؟</string>
     <string name="agents_skill_library_off_body">تُحذف مهاراتها من هذا البروفايل، إلا التي عدّلتها فتبقى لك. ولا يثبّتها Core Hub ولا يحدّثها هنا حتى تشغّلها من جديد.</string>
     <string name="agents_skill_library_off_confirm">إيقاف</string>
@@ -47,7 +45,6 @@
     <string name="agents_skill_essential_refused">دليل هرمز نفسه (hermes-agent) يعمل دائمًا: هرمز لا يسمح بإطفائه.</string>
     <string name="agents_skill_not_library">هذه المهارة ليست من مهارات Core Hub.</string>
     <string name="agents_skill_library_off_refused">مكتبة Core Hub مطفأة في هذا البروفايل؛ شغّلها أولًا.</string>
-    <string name="agents_skill_import_hint">ملف SKILL.md، أو ملف zip فيه مهارة أو أكثر.</string>
     <string name="agents_skill_import_not_pack">اختر ملف SKILL.md أو أرشيف zip.</string>
     <string name="agents_import_pack_unrecognised">حزمة المهارات ملف SKILL.md أو أرشيف zip</string>
     <string name="agents_import_pack_has_no_skill">الأرشيف لا يحوي أي SKILL.md</string>
@@ -90,7 +87,6 @@
     <string name="agents_memory_edit_entry">حرّر هذا المدخل</string>
     <string name="agents_memory_remove">أزل</string>
     <string name="agents_memory_remove_title">إزالة هذا المدخل؟</string>
-    <string name="agents_memory_entry">المدخل</string>
     <string name="agents_memory_add_entry_title">مدخل جديد في %1$s</string>
     <string name="agents_memory_edit_entry_title">مدخل في %1$s</string>
     <string name="agents_memory_budget">%1$s من %2$s حرفًا</string>

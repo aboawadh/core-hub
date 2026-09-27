@@ -62,8 +62,6 @@ struct AgentCard: View {
     let reload: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
-    @State private var restarting = false
-    @State private var error: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.s3) {
@@ -117,22 +115,9 @@ struct AgentCard: View {
                     .accessibilityLabel(l10n("agents.page_of", ["page": l10n(destination.titleKey), "agent": agent.name]))
                     .accessibilityIdentifier("agent.\(agent.slug).\(destination.rawValue)")
                 }
-                if agent.runtime.state != .notApplicable {
-                    Button {
-                        Task { await restart() }
-                    } label: {
-                        HStack(spacing: Space.s1) {
-                            LucideIcon(.rotateCw, size: 14)
-                                .rotationEffect(.degrees(restarting ? 360 : 0))
-                                .animation(restarting ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: restarting)
-                            Text(l10n("agents.restart"))
-                        }
-                    }
-                    .buttonStyle(ChipButtonStyle(quiet: true))
-                    .disabled(restarting)
-                }
             }
-            if let error { NoticeView(text: error, tone: .danger) }
+            // Install, update, restart and remove, followed to their end (apps batch 8).
+            AgentCardActions(agent: agent, reload: reload)
         }
         .padding(.vertical, Space.s2)
     }
@@ -159,19 +144,6 @@ struct AgentCard: View {
     private func capabilityName(_ raw: String) -> String {
         let key = "agents.capability.\(raw)"
         return l10n.has(key) ? l10n(key) : raw
-    }
-
-    private func restart() async {
-        restarting = true
-        defer { restarting = false }
-        let profile = app.currentProfile
-        do {
-            _ = try await app.api.call { try await AgentsAPI.agentsRestart(xHubProfile: profile, agentId: agent.id, apiConfiguration: $0) }
-            error = nil
-            reload()
-        } catch {
-            self.error = HubFailure(error).describe(l10n)
-        }
     }
 }
 
