@@ -101,13 +101,28 @@ $ PLAYWRIGHT_CHANNEL=chrome playwright test e2e/zzzzzzzzzzzzzz-mcp-oauth.spec.ts
   ✓  2 … MCP OAuth: a remote server is signed in from the web, tested, and disconnected (1.5s)
   2 passed (19.1s)
 ```
-كود iOS وAndroid لم يُبنَ محليًا (لا Java ولا Xcode هنا؛ العملاء الأصليون يُولَّدون في CI) — يتحقق منه CI.
-نتيجة CI: تُضاف بعد انتهائه.
+كود iOS وAndroid لم يُبنَ محليًا (لا Java ولا Xcode هنا؛ العملاء الأصليون يُولَّدون في CI) — تحقق منه CI.
+نتيجة CI على PR #207 (الالتزام `f9845ac3`):
+```
+pass | Android build, unit tests, lint | 10m14s
+pass | Build and test on the iOS simulator | 7m1s
+pass | Generate the Swift client (CoreHubClient) | 37s
+pass | Lint, typecheck, contracts, client tests, build | 6m53s
+pass | Server unit tests (shard 1/3, 2/3, 3/3)
+pass | Web smoke journeys (Playwright against the real hub) | 9m33s
+pass | Desktop app smoke (Electron under Xvfb against the real hub) | 1m12s
+pass | Docker image builds and answers /health | 2m40s
+pass | db:generate + db:migrate (SQLite and PostgreSQL) | 1m15s
+pass | PR adds or updates a change record · PR leaves graphify-out/ to the code-map bot
+```
 
 ## المخاطر والرجوع
 - **لم يُجرَّب مع مزوّد حقيقي** (ClickUp أو غيره): كل ما سبق مقابل هرمز مُمثَّل مبني على قراءة مصدره. مزوّد يرفض
   عنوان عودة `http` غير محلي (مركز على IP داخلي بلا https) سيرفض التسجيل — الحل الوصول إلى المركز بعنوان https (نفق
   أو وكيل). مزوّد لا يسمح بالتسجيل الديناميكي يظهر خطأ هرمز كما هو.
+- تطبيق سطح المكتب يمنع فتح النوافذ من الصفحة (`setWindowOpenHandler` يرفض `about:blank`)، فلا يُفتح التبويب
+  تلقائيًا هناك: يظهر رابط «افتح صفحة تسجيل الدخول» فيفتح المتصفح الخارجي، والعودة تمر بالعنوان المحلي للتطبيق
+  (يعمل ما دام التطبيق مفتوحًا).
 - الفصل يحذف الملفات فقط؛ هرمز الذي فتح الاتصال فعلًا يبقى عليه حتى إعادة تشغيل بوابته (مذكور في الواجهة).
 - إخفاء `headers`/`oauth` تغيير سلوك على رد قائم لكنه مطابق لوصف العقد («secret-looking values read as
   `[stored]`»)، والحفظ يعيد القيمة المخزنة؛ لا عميل يفقد شيئًا.
