@@ -45,8 +45,9 @@ test('33. a ClickUp trigger starts the workflow; a test event, a filtered event 
 }) => {
   await login(page);
   await inDefault(page);
-  await page.getByRole('link', { name: 'الجدولة', exact: true }).click();
-  await page.getByRole('tab', { name: 'سير العمل' }).click();
+  // Workflows has its own entry under «الأدوات» since 2026-09-28 (DECISIONS §126).
+  await page.getByTestId('rail').getByRole('link', { name: 'سير العمل', exact: true }).click();
+  await expect(page).toHaveURL(/\/workflows$/);
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await expect(editor).toHaveAttribute('data-workflow-id', 'new');
