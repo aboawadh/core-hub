@@ -24,4 +24,5 @@
     <string name="models_default_model">النموذج الافتراضي</string>
     <string name="notify_test">إرسال إشعار تجريبي</string>
     <string name="notify_test_sent">أُرسل. انظر هذا الجوّال وأجهزتك الأخرى.</string>
+    <string name="devices_just_paired">أُقرن الآن. الجهاز في القائمة أدناه.</string>
 </resources>

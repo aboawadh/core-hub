@@ -24,4 +24,5 @@
     <string name="models_default_model">Default model</string>
     <string name="notify_test">Send a test notification</string>
     <string name="notify_test_sent">Sent. Check this phone and your other devices.</string>
+    <string name="devices_just_paired">Just paired. The device is in the list below.</string>
 </resources>
