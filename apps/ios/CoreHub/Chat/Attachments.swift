@@ -24,11 +24,17 @@ struct OutgoingMessage: Equatable {
     /// Photos sent at original quality go as files (as Telegram's «send as file»), whatever
     /// their kind: the agent gets the untouched bytes.
     var asFiles: Set<String> = []
+    /// Blocks the hub already made (a channel conversation continued here, §62): sent as they are.
+    var preset: [ContentBlock]? = nil
 
-    var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty }
+    var isEmpty: Bool {
+        if let preset { return preset.isEmpty }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty
+    }
 
     /// The blocks `sessions.createRun` takes: the text, then one block per file (web: `blocksFor`).
     var blocks: [ContentBlock] {
+        if let preset { return preset }
         var blocks: [ContentBlock] = []
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty { blocks.append(.typeTextBlock(TextBlock(type: .text, text: trimmed))) }

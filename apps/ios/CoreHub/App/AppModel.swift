@@ -431,6 +431,10 @@ final class AppModel {
         case .chat:
             guard let id = params["sessionId"] else { return .newChat }
             let profile = components.queryItems?.first { $0.name == "profile" }?.value ?? selector
+            // `?source=channel`: the id is a conversation Hermes keeps on a channel (web `channelHref`).
+            if components.queryItems?.first(where: { $0.name == "source" })?.value == "channel" {
+                return .channel(conversationID: id, profile: profile)
+            }
             return .chat(sessionID: id, profile: profile)
         case .rooms:
             guard let id = params["roomId"] else { return .newChat }

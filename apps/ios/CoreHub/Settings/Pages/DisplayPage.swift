@@ -65,9 +65,9 @@ struct PreferencesForm<Fields: View>: View {
     private func save() async {
         guard let draft else { return }
         do {
-            let saved = try await app.api.call { try await AuthAPI.authSetPreferences(preferences: draft, apiConfiguration: $0) }
+            let stored = try await app.api.call { try await AuthAPI.authSetPreferences(preferences: draft, apiConfiguration: $0) }
             // The chat draws the new choices at once (ChatLook).
-            app.preferences = saved
+            app.preferences = stored
             note = (l10n("common.saved"), .success)
             saved()
         } catch {

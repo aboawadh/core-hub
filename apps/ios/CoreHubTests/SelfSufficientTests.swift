@@ -262,4 +262,65 @@ final class SelfSufficientTests: XCTestCase {
         XCTAssertEqual(ChatLook(preferences { $0.textScale = 9 }).textScale, 1, "outside the contract's range")
         XCTAssertEqual(ChatLook(preferences { $0.busyInputMode = .next }).busyInput, .next)
     }
+
+    // MARK: - The chats list's groups and the channel conversations
+
+    private func session(_ id: String, category: String? = nil, source: SessionSource = .chat, channel: String? = nil, pinned: Bool = false) -> Session {
+        Session(id: id, profile: "work", ownerId: "me", createdAt: date, updatedAt: date, agentId: "A1", source: source, channel: channel,
+                pinned: pinned, archived: false, categoryId: category, messageCount: 1, status: .idle, notify: true)
+    }
+
+    private func category(_ id: String, _ name: String, position: Int, colour: String? = nil) -> SessionCategory {
+        SessionCategory(id: id, profile: "work", ownerId: "me", createdAt: date, updatedAt: date, name: name, color: colour, position: position, sessionCount: 0)
+    }
+
+    private func conversation(_ id: String, channel: String = "telegram", hidden: Bool? = nil, peer: String? = nil, last: ChannelMessagePreview? = nil) -> ChannelConversation {
+        ChannelConversation(id: id, profile: "work", channel: channel, peerName: peer, lastMessage: last, messageCount: 3,
+                            startedAt: date, lastMessageAt: date, hidden: hidden)
+    }
+
+    func testTheChatsListGroupsCategoriesThenChannelsThenTheRest() {
+        let categories = [category("C2", "Later", position: 1), category("C1", "Work", position: 0, colour: "#3b82f6")]
+        let sessions = [
+            session("s1", category: "C1"), session("s2", source: .channel, channel: "whatsapp"),
+            session("s3"), session("s4", pinned: true), session("s5", category: "gone"),
+        ]
+        let groups = SessionGroups.group(sessions, categories: categories, conversations: [conversation("t1")], keepEmpty: true)
+        XCTAssertEqual(groups.map(\.id), ["category:C1", "category:C2", "channel:telegram", "channel:whatsapp", "rest"])
+        XCTAssertEqual(groups[0].sessions.map(\.id), ["s1"])
+        XCTAssertEqual(groups[2].conversations.map(\.id), ["t1"])
+        XCTAssertEqual(groups[3].sessions.map(\.id), ["s2"])
+        XCTAssertEqual(groups[4].sessions.map(\.id), ["s4", "s3", "s5"], "pinned first; an unknown category is no group")
+        let searched = SessionGroups.group(sessions, categories: categories, conversations: [], keepEmpty: false)
+        XCTAssertFalse(searched.contains { $0.id == "category:C2" }, "an empty category is left out while searching")
+        XCTAssertNotNil(SessionGroups.colour("#3b82f6"))
+        XCTAssertNil(SessionGroups.colour("blue"))
+        XCTAssertEqual(SessionGroups.moved(categories[1], by: -1, in: categories), nil)
+        XCTAssertEqual(SessionGroups.moved(categories[1], by: 1, in: categories), 1)
+        XCTAssertNil(SessionGroups.moved(categories[0], by: 1, in: categories))
+    }
+
+    func testAChannelConversationIsNamedAndFoundAsAMessagingAppWould() {
+        let l10n = L10n(.en, bundle: Bundle(for: AppModel.self))
+        let named = conversation("t1", peer: "Sara", last: ChannelMessagePreview(role: .assistant, text: "Done"))
+        XCTAssertEqual(SessionGroups.title(named, l10n), "Sara")
+        XCTAssertEqual(SessionGroups.preview(named, l10n), l10n("session_groups.channels.agent_said", ["text": "Done"]))
+        XCTAssertEqual(SessionGroups.title(conversation("t2"), l10n), l10n("session_groups.channels.untitled", ["channel": l10n("session_groups.channels.telegram")]))
+        XCTAssertTrue(SessionGroups.matches(named, "sar"))
+        XCTAssertFalse(SessionGroups.matches(named, "zzz"))
+        let list = [named, conversation("t3", hidden: true)]
+        XCTAssertEqual(SessionGroups.shown(list, showHidden: false, query: "").map(\.id), ["t1"])
+        XCTAssertEqual(SessionGroups.shown(list, showHidden: true, query: "").map(\.id), ["t1", "t3"])
+    }
+
+    func testATranscriptKeepsEachMessageOnceAndContinuesWithHermesFirst() {
+        let a = ChannelMessage(id: "m1", role: .user, text: "hi", createdAt: date)
+        let b = ChannelMessage(id: "m2", role: .assistant, text: "hello", createdAt: date)
+        XCTAssertEqual(ChannelTranscript.merge(older: [a, b], latest: [b]).map(\.id), ["m1", "m2"])
+        let route = AppModel.route(for: URL(string: "corehub://open/chat/7123?source=channel&profile=work")!, selector: "default")
+        XCTAssertEqual(route, .channel(conversationID: "7123", profile: "work"))
+        let first = OutgoingMessage(text: "", preset: [.typeTextBlock(TextBlock(type: .text, text: "Read this"))])
+        XCTAssertFalse(first.isEmpty)
+        XCTAssertEqual(first.blocks.count, 1)
+    }
 }
