@@ -123,8 +123,10 @@ export function readVersion(
   const shown = argv.join(' ');
   return new Promise((resolve) => {
     let settled = false;
-    let text = '';
-    let pending = '';
+    // What was printed, stdout first as the version is read from there first (as before).
+    const out = { text: '', pending: '' };
+    const err = { text: '', pending: '' };
+    const all = () => `${out.text}${out.pending}\n${err.text}${err.pending}`;
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       // No environment given: the child inherits the hub's as it is (nothing added).
@@ -139,34 +141,37 @@ export function readVersion(
       resolve(reading);
     };
     const timer = setTimeout(() => {
+      const version = parseVersion(all());
       finish({
-        version: parseVersion(text),
-        error: parseVersion(text)
+        version,
+        error: version
           ? null
           : `${shown} did not print a version within ${Math.round(timeoutMs / 1000)} s`,
       });
     }, timeoutMs);
-    const take = (chunk: Buffer | string) => {
-      pending += String(chunk);
-      const lines = pending.split(/\r?\n/);
-      pending = lines.pop() ?? '';
-      for (const line of lines) {
-        text += `${line}\n`;
-        const version = parseVersion(line);
-        if (version) {
-          finish({ version, error: null });
-          return;
+    // A complete line on stdout with a version ends the read; stderr (warnings, a traceback)
+    // is kept for the end, so a number in a warning is never taken for the version.
+    const take =
+      (buffer: { text: string; pending: string }, early: boolean) => (chunk: Buffer | string) => {
+        buffer.pending += String(chunk);
+        const lines = buffer.pending.split(/\r?\n/);
+        buffer.pending = lines.pop() ?? '';
+        for (const line of lines) {
+          buffer.text += `${line}\n`;
+          const version = early ? parseVersion(line) : null;
+          if (version) {
+            finish({ version, error: null });
+            return;
+          }
         }
-      }
-    };
-    child.stdout?.on('data', take);
-    child.stderr?.on('data', take);
+      };
+    child.stdout?.on('data', take(out, true));
+    child.stderr?.on('data', take(err, false));
     child.once('error', (error) => finish({ version: null, error: `${shown}: ${error.message}` }));
     child.once('close', (code, signal) => {
-      text += pending;
-      const version = parseVersion(text);
+      const version = parseVersion(all());
       if (version) return finish({ version, error: null });
-      const last = text
+      const last = all()
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)

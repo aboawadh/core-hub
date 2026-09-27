@@ -85,6 +85,12 @@ describe('the Hermes card: `hermes --version` that goes on checking for updates'
     );
   });
 
+  it('never takes a number in a warning on stderr for the version', async () => {
+    const warned = `#!/bin/sh\necho 'warning: Python 3.9 support ends soon' >&2\nsleep 0.2\necho '${VERSION_LINE}'\nsleep 30\n`;
+    const probe = await adapterOver(binDir('hermes', warned)).probe(target);
+    expect(probe).toMatchObject({ version: '0.21.5+3397.gd25bbd0', error: null });
+  });
+
   it("gives Hermes's own last line when it fails", async () => {
     const reading = await readVersion([path.join(binDir('hermes', broken), 'hermes'), '--version']);
     expect(reading.version).toBeNull();
