@@ -32,7 +32,7 @@ enum SessionGroups {
     /// The groups in the order they are shown. Every category is listed even when empty — it is
     /// where a chat is moved to — unless `keepEmpty` is false (a search is typed). Channel groups
     /// exist only when something came from that channel. In each group, pinned chats first.
-    static func group(_ sessions: [Session], categories: [SessionCategory], conversations: [ChannelConversation], keepEmpty: Bool) -> [SessionGroup] {
+    static func group(_ sessions: [Session], categories: [SessionCategory], conversations: [ChannelConversation], keepEmpty: Bool, manual: [String] = []) -> [SessionGroup] {
         let known = Set(categories.map(\.id))
         var buckets: [String: [Session]] = [:]
         for session in sessions { buckets[key(session, known: known), default: []].append(session) }
@@ -40,7 +40,7 @@ enum SessionGroups {
         for category in categories.sorted(by: { ($0.position, $0.name) < ($1.position, $1.name) }) {
             let items = buckets["category:\(category.id)"] ?? []
             if items.isEmpty && !keepEmpty { continue }
-            groups.append(SessionGroup(id: "category:\(category.id)", kind: .category(category), sessions: pinnedFirst(items)))
+            groups.append(SessionGroup(id: "category:\(category.id)", kind: .category(category), sessions: pinnedFirst(items, manual)))
         }
         var byChannel: [String: [ChannelConversation]] = [:]
         for conversation in conversations { byChannel[conversation.channel, default: []].append(conversation) }
@@ -49,16 +49,16 @@ enum SessionGroups {
         for channel in channels {
             groups.append(SessionGroup(
                 id: "channel:\(channel)", kind: .channel(channel),
-                sessions: pinnedFirst(buckets["channel:\(channel)"] ?? []),
+                sessions: pinnedFirst(buckets["channel:\(channel)"] ?? [], manual),
                 conversations: (byChannel[channel] ?? []).sorted { $0.lastMessageAt > $1.lastMessageAt }
             ))
         }
-        groups.append(SessionGroup(id: "rest", kind: .rest, sessions: pinnedFirst(buckets["rest"] ?? [])))
+        groups.append(SessionGroup(id: "rest", kind: .rest, sessions: pinnedFirst(buckets["rest"] ?? [], manual)))
         return groups
     }
 
-    static func pinnedFirst(_ sessions: [Session]) -> [Session] {
-        sessions.filter(\.pinned) + sessions.filter { !$0.pinned }
+    static func pinnedFirst(_ sessions: [Session], _ manual: [String] = []) -> [Session] {
+        SessionOrder.arrange(sessions, manual: manual)
     }
 
     /// Telegram, then WhatsApp, then any other channel by name.

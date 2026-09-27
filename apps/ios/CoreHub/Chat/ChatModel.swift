@@ -23,6 +23,9 @@ final class ChatModel {
     var notice: String?
     private(set) var compressing = false
     private(set) var loadingOlder = false
+    /// Messages held back while a turn runs (MessageQueue.swift).
+    private(set) var outbox: [QueuedMessage] = []
+    @ObservationIgnored private var draining = false
 
     let sessionID: String
     /// The session's own profile: every request about it carries this, whatever the selector.
@@ -167,6 +170,7 @@ final class ChatModel {
               let event = SessionEvent.decode(envelope) else { return }
         if hydrated {
             state.apply(event, seq: envelope.seq, profile: envelope.profile)
+            if !state.isBusy && !outbox.isEmpty { Task { await drainOutbox() } }
             if case .runCompleted(let run, let message) = event, run.sessionId == sessionID,
                app?.device.spokenReplies == true {
                 Speaker.shared.speak(message.text, app: app, profile: profile)
@@ -182,16 +186,45 @@ final class ChatModel {
         await send(OutgoingMessage(text: text))
     }
 
-    /// The person's words and the files they attached, as one run (web: `blocksFor`).
+    /// The person's words and the files they attached, as one run (web: `blocksFor`). While a turn
+    /// runs and "Sending while the agent works" is «wait in line», it waits on the phone instead.
     func send(_ message: OutgoingMessage, replyTo: String? = nil) async {
         guard !message.isEmpty, let app else { return }
+        let mode = ChatLook(app.preferences).busyInput
+        if MessageQueueRules.holdsBack(mode, busy: state.isBusy) {
+            outbox.append(QueuedMessage(id: UUID().uuidString, message: message, replyTo: replyTo))
+            return
+        }
+        await post(message, replyTo: replyTo, when: mode)
+    }
+
+    /// A waiting message goes now: `next` after the live turn, or `interrupt` in its place.
+    func release(_ item: QueuedMessage, when: RunCreate.When) async {
+        guard outbox.contains(item) else { return }
+        outbox.removeAll { $0.id == item.id }
+        await post(item.message, replyTo: item.replyTo, when: when)
+    }
+
+    func removeQueued(_ item: QueuedMessage) {
+        outbox.removeAll { $0.id == item.id }
+    }
+
+    /// The turn ended: the first waiting message goes (the next turn's end sends the one after).
+    func drainOutbox() async {
+        guard !draining, !state.isBusy, let first = outbox.first else { return }
+        draining = true
+        defer { draining = false }
+        await release(first, when: .queue)
+    }
+
+    private func post(_ message: OutgoingMessage, replyTo: String?, when: RunCreate.When) async {
+        guard let app else { return }
         sending = true
         actionError = nil
         defer { sending = false }
         let profile = profile
         let sessionID = sessionID
-        // Settings → Display, "Sending while the agent works": wait in line, go next, or stop it.
-        let run = RunCreate(content: message.blocks, when: ChatLook(app.preferences).busyInput, replyToMessageId: replyTo)
+        let run = RunCreate(content: message.blocks, when: when, replyToMessageId: replyTo)
         let key = ULID.make()
         do {
             _ = try await app.api.call {

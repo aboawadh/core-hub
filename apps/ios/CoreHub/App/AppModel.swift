@@ -278,6 +278,8 @@ final class AppModel {
             await self?.handshake(all: true) ?? [:]
         }
         LocalNotices.shared.start(app: self)
+        // Jobs as they move (`/rt/jobs`): pages following one wake at once (JobsFeed.swift).
+        JobsFeed.shared.start(app: self)
         // An agent may ask where this phone is (§105): requests reach `/rt/devices`.
         LocationRequests.shared.start(app: self)
         takeShared()
@@ -379,6 +381,7 @@ final class AppModel {
 
     private func clearSession() async {
         LocalNotices.shared.stop()
+        JobsFeed.shared.stop()
         PushCenter.shared.reset()
         Speaker.shared.stop()
         realtime.stop()
