@@ -250,7 +250,11 @@ export async function signedInCredential(
   const wire = WIRES.has(body.wire as SignedInWire) ? (body.wire as SignedInWire) : null;
   const baseUrl = typeof body.base_url === 'string' ? body.base_url : '';
   if (!wire || !baseUrl || !Object.keys(headers).some((name) => /^authorization$/i.test(name))) {
-    return { ok: false, reason: 'hermes_failed', detail: 'Hermes answered without a usable sign-in' };
+    return {
+      ok: false,
+      reason: 'hermes_failed',
+      detail: 'Hermes answered without a usable sign-in',
+    };
   }
   return {
     ok: true,

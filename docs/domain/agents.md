@@ -148,7 +148,10 @@ boot. It is the hub itself, so:
   events, not rows.
 - **The model decides the provider.** The session's model, or the workspace's `chat`
   default, resolves to a `providers` row; that row's protocol picks which `models`
-  adapter streams the turn. The person configures nothing new for this agent.
+  adapter streams the turn. The person configures nothing new for this agent. A provider
+  signed in through Hermes (ChatGPT subscription, Nous Portal, xAI Grok, MiniMax) works
+  too: `models` borrows its credential from Hermes's own Python for that one turn
+  (DECISIONS §118), so a hub without Hermes's Python refuses such a turn by name.
 - **Capabilities are `streaming`, `vision`, `resume` — and nothing else.** No `tools`,
   no `approvals`, no `mcp`, no `skills`: skills and MCP over the direct path are backlog
   §2.16 and are not half-built here. Whether an *image* may be sent is the chosen model

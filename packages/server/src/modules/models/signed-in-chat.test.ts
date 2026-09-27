@@ -20,8 +20,9 @@ import {
   type TestHub,
 } from '../../../tests/unit/helpers.js';
 import { hermesPythonRunner } from '../agents/index.js';
-import type { DirectChatEvent } from '../agents/ports.js';
+import { DEFAULT_INSTRUCTIONS, responsesChat } from './adapters/index.js';
 import { modelsServiceFor } from './index.js';
+import type { DirectChatEvent } from './service.js';
 import { hermesSignInRuntime, type DashboardRequest } from './sign-in.js';
 import { scrub, signedInCredential } from './signed-in-chat.js';
 
@@ -189,7 +190,7 @@ beforeAll(async () => {
     let raw = '';
     request.on('data', (chunk: Buffer) => (raw += chunk.toString()));
     request.on('end', () => {
-      let body: Record<string, unknown> = {};
+      let body: Record<string, unknown>;
       try {
         body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
       } catch {
@@ -579,10 +580,9 @@ describe.skipIf(!PY)('a direct turn on a provider signed in through Hermes (§11
 
   it('never lets the token reach a log line or the error, even when the provider quotes it', async () => {
     const logger = capturingLogger();
-    const { hub } = await hubWith(
-      () => ({ STUB_TOKEN_NOUS: ECHOED, STUB_FRESH_NOUS: ECHOED }),
-      { logger },
-    );
+    const { hub } = await hubWith(() => ({ STUB_TOKEN_NOUS: ECHOED, STUB_FRESH_NOUS: ECHOED }), {
+      logger,
+    });
     try {
       const id = await signIn(hub, 'nous');
       const workspace = await workspaceOf(hub, 'default');
@@ -735,5 +735,90 @@ describe.skipIf(!PY)('a direct turn on a provider signed in through Hermes (§11
     } finally {
       await hub.close();
     }
+  });
+});
+
+describe('the Responses wire (§118)', () => {
+  const stream = (frames: Record<string, unknown>[]) => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchImpl = ((url: string, init?: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return Promise.resolve(
+        new Response(frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join(''), {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+      );
+    }) as typeof fetch;
+    return { fetchImpl, calls };
+  };
+  const ctx = (fetchImpl: typeof fetch) => ({
+    slug: '',
+    label: 'xAI',
+    baseUrl: 'https://api.example/v1',
+    apiKey: null,
+    requiresKey: false,
+    headers: { Authorization: 'Bearer t' },
+    settings: {},
+    fetchImpl,
+  });
+
+  it('sends images as input_image and earlier answers as output_text', async () => {
+    const { fetchImpl, calls } = stream([{ type: 'response.completed', response: {} }]);
+    const events = [];
+    for await (const event of responsesChat(
+      ctx(fetchImpl),
+      {
+        model: 'grok-4.6',
+        maxOutputTokens: 900,
+        messages: [
+          { role: 'user', text: 'first' },
+          { role: 'assistant', text: 'answer' },
+          {
+            role: 'user',
+            text: 'look',
+            images: [{ mime: 'image/png', dataBase64: 'AAAA', name: 'a.png' }],
+          },
+        ],
+      },
+      { sendMaxOutputTokens: true },
+    )) {
+      events.push(event);
+    }
+    expect(events).toEqual([{ type: 'completed' }]);
+    expect(calls[0]?.url).toBe('https://api.example/v1/responses');
+    expect(calls[0]?.body).toMatchObject({
+      instructions: DEFAULT_INSTRUCTIONS,
+      max_output_tokens: 900,
+      input: [
+        { role: 'user', content: [{ type: 'input_text', text: 'first' }] },
+        { role: 'assistant', content: [{ type: 'output_text', text: 'answer' }] },
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'look' },
+            { type: 'input_image', image_url: 'data:image/png;base64,AAAA' },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('ends on the provider’s own words when the response fails mid-stream', async () => {
+    const { fetchImpl } = stream([
+      { type: 'response.output_text.delta', delta: 'Part' },
+      { type: 'response.failed', response: { error: { message: 'The model overloaded' } } },
+    ]);
+    const events = [];
+    for await (const event of responsesChat(ctx(fetchImpl), {
+      model: 'grok-4.6',
+      messages: [{ role: 'user', text: 'hi' }],
+    })) {
+      events.push(event);
+    }
+    expect(events).toEqual([
+      { type: 'delta', text: 'Part' },
+      { type: 'failed', reason: 'http_error', detail: 'The model overloaded', status: null },
+    ]);
   });
 });

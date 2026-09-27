@@ -1,5 +1,5 @@
 # «برق» يعمل على مزوّدي الدخول عبر Hermes
-المسؤول: twuijri · الفرع: feat/direct-signed-in-providers · الحالة: in-progress
+المسؤول: twuijri · الفرع: feat/direct-signed-in-providers · الحالة: review
 
 ## المشكلة والهدف
 شخص مزوّده الوحيد Nous Portal مسجَّل الدخول عبر Hermes يحصل من الوكيل المضمَّن `direct` («برق») على:
@@ -65,7 +65,53 @@ Hermes; only the Hermes agent can use it». السبب: القرار §55 جعل
 - وثائق: `docs/contracts/DECISIONS.md` §118، `docs/STATUS.md`، `docs/domain/models.md`، `docs/domain/agents.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
-(تُملأ بعد التشغيل.)
+محليًا (كلها عبر `mj-run`)، فقط ما لمسه التغيير؛ بقية الأجنحة على CI:
+
+```
+$ pnpm lint
+$ eslint . && prettier --check .
+Checking formatting...
+All matched files use Prettier code style!
+
+$ pnpm typecheck
+typecheck exit 0
+
+$ pnpm exec vitest run src/modules/models/signed-in-chat.test.ts \
+    src/modules/models/codex-subscription.test.ts src/modules/models/fallback-signin.test.ts \
+    src/modules/models/providers-shared.test.ts src/modules/models/adapters/chat.test.ts \
+    src/modules/agents/adapters/direct.test.ts
+ Test Files  6 passed (6)
+      Tests  83 passed (83)
+
+# الاختبارات الجديدة تفشل على الكود القديم (service.ts مخبّأ بـ git stash):
+$ pnpm exec vitest run src/modules/models/signed-in-chat.test.ts
+     × streams the ChatGPT subscription through the Codex /responses, with Hermes’s headers
+     × asks Hermes once more with a forced refresh after a 401, and only once
+     × never lets the token reach a log line or the error, even when the provider quotes it
+     × streams Nous Portal on chat/completions and xAI on /responses
+     × streams MiniMax on Anthropic Messages with a Bearer, not x-api-key
+     × borrows a profile’s own sign-in from that profile’s Hermes home
+     × stops mid-stream when the turn is cancelled
+     × refuses by name when this hub cannot run Hermes’s Python
+     × refuses a provider whose sign-in was never approved, before asking Hermes
+      Tests  9 failed | 3 passed (12)
+
+# برنامج الاعتماد ضد مصدر Hermes v2026.9.14 الحقيقي، بيت بلا دخول:
+$ HERMES_HOME=<tmp> PYTHONPATH=hermes-v2026.9.14 python3 prog.py <provider> some-model high 0
+{"ok": false, "reason": "not_signed_in", "detail": "AuthError: Hermes is not logged into Nous Portal."}
+{"ok": false, "reason": "not_signed_in", "detail": "AuthError: No Codex credentials stored. Run `hermes auth` to authenticate."}
+{"ok": false, "reason": "not_signed_in", "detail": "AuthError: No xAI OAuth credentials stored. Select xAI Grok OAuth (SuperGrok / Premium+) in `hermes model`."}
+{"ok": false, "reason": "not_signed_in", "detail": "AuthError: Not logged into MiniMax OAuth. Run `hermes model` and select MiniMax (OAuth)."}
+# وأسماء دوال Hermes التي يستوردها البرنامج موجودة فيه:
+gpt-5.6-sol xhigh ('low', 'medium', 'high') True chat_completions medium
+```
+
+الاختبارات الجديدة (`signed-in-chat.test.ts`، ١٤): لكل مزوّد سلكه وعنوانه وترويساته وحقل التفكير (Codex بترويسات هوية
+Hermes ومعرّف الحساب وجهد مقصوص `xhigh → high` وتجريد `-900k`؛ xAI بجهد فقط لنموذج يقبله؛ Nous على chat/completions؛
+MiniMax على Messages بـ Bearer)، دور Codex كامل ببثّ `/responses` بشكل الأحداث الحقيقي (تفكير، نص، استهلاك مع المخزّن
+مؤقتًا)، 401 → تجديد إجباري واحد فقط، رمز يقتبسه المزوّد في خطئه يصل `[redacted]` ولا يظهر في أي سطر سجل، بيت البروفايل
+الصحيح لمزوّد بروفايل، الإلغاء أثناء البثّ، الرفض بالاسم حين لا يوجد Python الخاص بـ Hermes، ومزوّد لم يُكمل الدخول يُرفض قبل
+سؤال Hermes.
 
 ## المخاطر والرجوع
 - كل دور لمزوّد دخول يشغّل Python الخاص بـ Hermes مرة (نحو ثانية أو أقل مع استيراد `hermes_cli`) قبل الطلب.

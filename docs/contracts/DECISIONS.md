@@ -1345,7 +1345,8 @@ confirm:
   answers each poll with Hermes's state. No token passes through the hub. So the hub offers it
   only where it supervises Hermes (`409 state_invalid`, `details.reason = hermes_not_supervised`
   elsewhere), and a signed-in provider is used by Hermes alone: the `direct` agent refuses it by
-  name, and its models are the ones Hermes lists for it.
+  name, and its models are the ones Hermes lists for it. (Amended by §118: the `direct` agent now
+  borrows the sign-in from Hermes for one turn.)
 - **`ProviderSignIn`** gains `failed` (the sign-in could not finish) and `error` (why, in
   Hermes's words). `accepts_code` is false for every one of them, so `completeProviderSignIn`
   is `409 state_invalid` (`details.reason = code_not_accepted`). A sign-in the hub no longer
@@ -3689,3 +3690,52 @@ sets the limit from its input again). Tag pushes still do not upload to TestFlig
 Rejected: submitting without sign-in details (Apple rejects an app reviewers cannot use); inventing
 or storing the owner's contact details in the repository or in secrets; a new external group per
 release (the link would change every time).
+
+## 118. The direct agent runs on providers signed in through Hermes, borrowing the sign-in for one turn
+
+Owner's decision (2026-09-27): «المفروض برق يستخدم اي موديل بـ API أو بدخول» — the `direct` agent
+must run on any model the pickers offer, whether its provider holds a key or was signed in to
+through Hermes (§55). The details below are proposed — owner to confirm. Nothing in the contract
+changes: no operation, field or error code is added or removed.
+
+- **The credential stays Hermes's, and a turn borrows it.** At the start of each `direct` turn on a
+  signed-in provider (`openai-codex`, `nous`, `xai-oauth`, `minimax-oauth`) the hub runs Hermes's
+  own Python — an argument array, never composed program text — with `HERMES_HOME` set to the home
+  the provider was signed in to (the root for a shared provider or the default profile's own, else
+  `profiles/<slug>`), as the live model list (§83) and the subscription's images (§84) already do.
+  The program asks Hermes's own resolver (`hermes_cli.auth.resolve_*_runtime_credentials`, which
+  refreshes a token about to expire) and prints one line: the wire, the base URL, the model id on
+  the wire, the headers — the credential is the `Authorization` one — and the reasoning field. The
+  hub keeps that in the turn's memory only: never in the database, a file, a log line or an error
+  (any trace of the token in a provider's error text is replaced by `[redacted]`; the program's
+  output is never passed on when it fails). A 401 that arrives before any text makes the hub ask
+  Hermes once more with a forced refresh and send the request once more — never a third time.
+- **Each provider on the wire Hermes uses for it** (Hermes v2026.9.14, read and described in our
+  words): the ChatGPT subscription on the Codex backend's Responses API (`/responses`, streamed,
+  `store: false`, the system prompt as `instructions`, Hermes's identity headers and the account id
+  from the token, `reasoning: {effort, summary: auto}` clamped by Hermes's own vocabulary for the
+  model, no `max_output_tokens`, Hermes's invented `-900k` names stripped); xAI on its Responses
+  API, with an effort only for a Grok model that takes one; Nous Portal on OpenAI-compatible
+  `chat/completions` (Anthropic Messages only when Hermes's `nous_api_mode` names it for that model);
+  MiniMax on Anthropic Messages with `Authorization: Bearer`.
+- **It behaves as a key provider does:** the same streaming, reasoning, cancel, usage and estimated
+  cost from the model row's prices, and the same fallback chain (§54). The direct path has no tools
+  (backlog §2.16), so there is nothing else to match.
+- **Refused by name when it cannot work.** A hub that does not run Hermes, or has no Hermes Python,
+  answers `agent_unavailable` saying the sign-in is borrowed from Hermes's Python and what to do
+  instead (the Hermes agent, or a provider with a key); a fallback model may take the turn. A
+  provider whose sign-in was never approved is `provider_not_configured` ("sign in under Models →
+  Providers"), before Hermes is asked. Hermes holding no usable sign-in is `provider_unauthorized`
+  with Hermes's words.
+- The pickers already listed signed-in providers' models; only the turn refused them, so no client
+  changes.
+
+This amends §55's last clause ("a signed-in provider is used by Hermes alone: the `direct` agent
+refuses it by name"); everything else in §55 stands — Hermes does the sign-in, keeps and refreshes
+the credential, and the hub stores none of it.
+
+Rejected: the hub keeping the token between turns (ADR 0010, §55); the hub refreshing it itself
+(Hermes's per-provider refresh is not ours to copy); passing the stale token to Hermes as an
+argument (visible in the process list); running the whole request inside Python (streaming, cancel
+and usage would each need a second protocol, where §83/§84 already take the token only for the
+moment of use).
