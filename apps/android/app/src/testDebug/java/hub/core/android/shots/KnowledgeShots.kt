@@ -73,7 +73,7 @@ class KnowledgeShots {
             {"id":"01K5DM000000000000000000W1","name":"Ops alerts","url":"https://ops.example.com/hooks/core-hub","events":["run.failed","approval.requested"],
              "profiles":[],"enabled":true,"secret":"[stored]","include_content":false,"allow_private_network":false,"max_retries":5,
              "stats":{"delivered":42,"failed":2,"last_delivery_at":"2026-09-26T09:00:00Z","last_error":null},$stamp},
-            {"id":"01K5DM000000000000000000W2","name":"Home automation","url":"http://192.168.1.20:8123/api/webhook/hub","events":["task.created"],
+            {"id":"01K5DM000000000000000000W2","name":"Home automation","url":"http://192.168.1.20:8123/hooks/hub","events":["task.created"],
              "profiles":["work"],"enabled":false,"secret":null,"include_content":true,"allow_private_network":true,"max_retries":3,
              "stats":{"delivered":0,"failed":0,"last_delivery_at":null,"last_error":null},$stamp}]}""",
         "notify.listWebhookDeliveries" to """{"items":[
