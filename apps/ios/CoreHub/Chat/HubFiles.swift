@@ -12,22 +12,25 @@ enum HubFile: Hashable {
     case attachment(id: String, name: String, mime: String?, size: Int?)
     /// A file of the conversation's working folder (`sessions.readFile`); it may change.
     case working(sessionID: String, path: String, name: String, mime: String?, size: Int?, modified: Date?)
+    /// A file of the profile's working folder (Settings → Files, `knowledge.downloadWorkspaceFile`);
+    /// it may change.
+    case profileFile(profile: String, path: String, name: String, mime: String?, size: Int?, modified: Date?)
 
     var name: String {
         switch self {
-        case .attachment(_, let name, _, _), .working(_, _, let name, _, _, _): return name
+        case .attachment(_, let name, _, _), .working(_, _, let name, _, _, _), .profileFile(_, _, let name, _, _, _): return name
         }
     }
 
     var mime: String? {
         switch self {
-        case .attachment(_, _, let mime, _), .working(_, _, _, let mime, _, _): return mime
+        case .attachment(_, _, let mime, _), .working(_, _, _, let mime, _, _), .profileFile(_, _, _, let mime, _, _): return mime
         }
     }
 
     var size: Int? {
         switch self {
-        case .attachment(_, _, _, let size), .working(_, _, _, _, let size, _): return size
+        case .attachment(_, _, _, let size), .working(_, _, _, _, let size, _), .profileFile(_, _, _, _, let size, _): return size
         }
     }
 
@@ -41,6 +44,10 @@ enum HubFile: Hashable {
             let seed = "\(session)\u{0}\(path)\u{0}\(size.map(String.init) ?? "")\u{0}\(modified.map { String($0.timeIntervalSince1970) } ?? "")"
             let digest = Insecure.SHA1.hash(data: Data(seed.utf8)).map { String(format: "%02x", $0) }.joined()
             return "file-" + digest.prefix(24)
+        case .profileFile(let profile, let path, _, _, let size, let modified):
+            let seed = "\(profile)\u{0}\(path)\u{0}\(size.map(String.init) ?? "")\u{0}\(modified.map { String($0.timeIntervalSince1970) } ?? "")"
+            let digest = Insecure.SHA1.hash(data: Data(seed.utf8)).map { String(format: "%02x", $0) }.joined()
+            return "ws-" + digest.prefix(24)
         }
     }
 
@@ -202,6 +209,8 @@ enum HubFileFetcher {
             builder = SessionsAPI.sessionsDownloadAttachmentWithRequestBuilder(xHubProfile: profile, attachmentId: id, apiConfiguration: config)
         case .working(let session, let path, _, _, _, _):
             builder = SessionsAPI.sessionsReadFileWithRequestBuilder(xHubProfile: profile, sessionId: session, path: path, download: true, apiConfiguration: config)
+        case .profileFile(_, let path, _, _, _, _):
+            builder = KnowledgeAPI.knowledgeDownloadWorkspaceFileWithRequestBuilder(xHubProfile: profile, path: path, apiConfiguration: config)
         }
         let watcher = ProgressWatcher(progress)
         builder.onProgressReady = { watcher.watch($0) }
@@ -231,6 +240,8 @@ enum HubFileFetcher {
             ticket = try await SessionsAPI.sessionsCreateFileStream(
                 xHubProfile: profile, sessionId: session, sessionsCreateFileStreamRequest: SessionsCreateFileStreamRequest(path: path), apiConfiguration: config
             )
+        case .profileFile(_, let path, _, _, _, _):
+            ticket = try await KnowledgeAPI.knowledgeCreateWorkspaceFileStream(xHubProfile: profile, path: path, apiConfiguration: config)
         }
         guard let address = resolve(ticket.url, against: hub) else { throw HubFailure(kind: .decode, status: 200, code: nil, message: nil, operationID: nil, requestID: nil, detail: ticket.url) }
         return address
