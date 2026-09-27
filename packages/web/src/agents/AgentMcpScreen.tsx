@@ -18,7 +18,7 @@
  * profile, list its tools and disconnect; what Hermes says is shown under the row, its words
  * unchanged. The row itself still claims nothing about a connection nobody holds open.
  *
- * **A remote server can be signed in by OAuth from here** (DECISIONS §121): the chip says
+ * **A remote server can be signed in by OAuth from here** (DECISIONS §122): the chip says
  * whether this profile is signed in, and Connect runs Hermes's own browser sign-in
  * (`McpOAuthControls.tsx`).
  */
@@ -145,7 +145,7 @@ function ServerRow({
   const probe = useTestMcpServer(agentId);
   const oauth = useMcpOAuthConnect(agentId, server.name);
   const { ask, dialog } = useConfirm();
-  // Hermes said the server wants a sign-in: offer it where the failure is read (§121).
+  // Hermes said the server wants a sign-in: offer it where the failure is read (§122).
   const signInHere =
     probe.data && !probe.data.ok && offersOAuth(server) && needsOAuth(probe.data.error) ? (
       <>

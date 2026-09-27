@@ -180,9 +180,9 @@ struct WorkflowEditorPage: View {
         }
         checking = true
         defer { checking = false }
-        let write = WorkflowEditRules.write(draft, clearing: false), profile = profile
+        let body = WorkflowEditRules.check(draft), profile = profile
         do {
-            validation = try await app.api.call { try await SchedulesAPI.schedulesValidateWorkflow(xHubProfile: profile, workflowWrite: write, apiConfiguration: $0) }
+            validation = try await app.api.call { try await SchedulesAPI.schedulesValidateWorkflow(xHubProfile: profile, workflowCheck: body, apiConfiguration: $0) }
             checkError = nil
         } catch is CancellationError {
             return

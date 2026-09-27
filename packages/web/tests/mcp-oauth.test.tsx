@@ -1,5 +1,5 @@
 /**
- * Connecting a remote MCP server by OAuth from its row (DECISIONS §121): the chip says whether
+ * Connecting a remote MCP server by OAuth from its row (DECISIONS §122): the chip says whether
  * this profile is signed in, Connect opens the provider's page in the tab it opened on the
  * click and waits for Hermes, a failed test that wants a sign-in offers Connect where it is
  * read, and Disconnect forgets the sign-in after asking. The whole app is mounted on a scripted

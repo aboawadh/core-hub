@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
 /*
- * Signing a remote MCP server in by OAuth on its row (DECISIONS §121), as the web's MCP page does: the
+ * Signing a remote MCP server in by OAuth on its row (DECISIONS §122), as the web's MCP page does: the
  * server's sign-in state in this profile, and Connect / Reconnect, which has Hermes start its own browser
  * sign-in through the hub, opens the provider's page in the system browser and asks the hub every two
  * seconds until Hermes says how it went. The provider sends the browser back to the hub, not to the app.

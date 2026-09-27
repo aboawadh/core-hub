@@ -1,5 +1,5 @@
 /**
- * Signing an MCP server in by OAuth from the hub's pages (contract decision §121).
+ * Signing an MCP server in by OAuth from the hub's pages (contract decision §122).
  *
  * Hermes already does the whole sign-in for its own dashboard (MIT source
  * `hermes_cli/web_routers/mcp.py` and `tools/mcp_dashboard_oauth.py`, tag v2026.9.14, read and

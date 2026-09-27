@@ -1630,7 +1630,7 @@ export const agentsModule = defineModule({
     /**
      * The contract's `McpServer`. `connected` and `tools` are not measured — see above. A
      * remote server also says whether it is signed in by OAuth in this profile, read from the
-     * metadata of Hermes's token file, never its values (`mcp-oauth.ts`, DECISIONS §121).
+     * metadata of Hermes's token file, never its values (`mcp-oauth.ts`, DECISIONS §122).
      */
     const toMcpServer = (server: McpServer, home: string): Record<string, unknown> => ({
       name: server.name,

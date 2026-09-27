@@ -6565,7 +6565,7 @@ paths:
       description: >-
         Asks Hermes to start its browser sign-in for a remote (`http`/`sse`) server in the
         profile in `X-Hub-Profile` (Hermes's own `POST /api/mcp/servers/{name}/auth`, ADR 0015;
-        contract decision §121). Before asking, the hub writes the server's
+        contract decision §122). Before asking, the hub writes the server's
         `oauth.redirect_uri` in the profile's `config.yaml` as its own callback,
         `agents.mcpOAuthCallback`, at `hub_url` when the client sends it (the address the
         person reaches the hub on, a tunnel's included) and otherwise at the address this
@@ -6624,7 +6624,7 @@ paths:
         client registration and server metadata files under `mcp-tokens/`; Hermes has no API
         for this), and answers the server with `oauth.status = not_connected`. A Hermes that
         already holds the connection open keeps it until its gateway restarts. Other profiles
-        are untouched (contract decision §121).
+        are untouched (contract decision §122).
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -6825,7 +6825,7 @@ paths:
         only with the `state` of a sign-in it started. Answers a short page in the browser's
         language saying whether the sign-in was received, always `200`; the outcome itself is
         read by polling `agents.getMcpOAuthFlow`. The query is never logged (contract decision
-        §121).
+        §122).
       security: []
       x-scope: global
       parameters:
@@ -12075,7 +12075,10 @@ paths:
         not saved: `problems` are what saving would refuse (`409 workflow_invalid`), and
         `warnings` are worth saying but saved anyway. Each names the node or edge it is
         about, so an editor can mark it, and carries a stable `code` a client translates
-        (DECISIONS §52). Nothing is written and nothing is announced.
+        (DECISIONS §52). Nothing is written and nothing is announced. The body is a
+        `WorkflowCheck`: the drawing as saving takes it, with the name free — the check never
+        reads the name, so a drawing nobody has named yet (an empty or missing `name`) is
+        checked like any other (DECISIONS §121).
       parameters:
         - $ref: '#/components/parameters/Profile'
       requestBody:
@@ -12083,7 +12086,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/WorkflowWrite'
+              $ref: '#/components/schemas/WorkflowCheck'
             example:
               name: 'مراجعة ثم إشعار'
               nodes:
@@ -21547,7 +21550,7 @@ components:
     McpOAuthState:
       type: object
       description: >-
-        Whether a remote server is signed in by OAuth in this profile (contract decision §121),
+        Whether a remote server is signed in by OAuth in this profile (contract decision §122),
         read from the metadata of the files Hermes keeps under the profile's `mcp-tokens/` —
         never a token. Present on `http` and `sse` servers from hubs that know it; absent on
         stdio servers and from older hubs. `required` is the server's `auth: oauth`; a server
@@ -21579,7 +21582,7 @@ components:
     McpOAuthFlow:
       type: object
       description: >-
-        One OAuth sign-in to an MCP server (contract decision §121). Nothing here is a token:
+        One OAuth sign-in to an MCP server (contract decision §122). Nothing here is a token:
         `authorization_url` is the provider's page the person opens, and the tokens stay with
         Hermes in the profile's home.
       required: [id, server_name, status, authorization_url, redirect_uri, error, tools, expires_at]
@@ -24562,6 +24565,33 @@ components:
             Replaces the workflow's limits as a whole; a new workflow without it has none. A
             cost limit in a currency other than USD, or not above zero, is `409` with
             `details.reason = limit_invalid` and `details.field`.
+    WorkflowCheck:
+      type: object
+      description: >-
+        What `validateWorkflow` checks: the fields of `WorkflowWrite`, with `name` free (it may
+        be empty or left out) because the check does not read it. Saving still needs a name.
+      properties:
+        name:
+          type: string
+          description: Ignored by the check; accepted empty so an unnamed drawing can be checked.
+        description:
+          type: [string, 'null']
+        working_dir:
+          type: [string, 'null']
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEdge'
+        limits:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowLimits'
+          description: >-
+            The limits saving would store; a cost limit in a currency other than USD, or not
+            above zero, is reported the way saving reports it.
     WorkflowStepStatus:
       type: string
       enum:

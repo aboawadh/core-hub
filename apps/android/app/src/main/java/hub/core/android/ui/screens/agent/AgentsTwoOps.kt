@@ -43,7 +43,7 @@ class AgentsTwoOps(private val apis: () -> HubApis?, val profile: String, val ag
     suspend fun deleteServer(name: String) = call { it.agents.agentsDeleteMcpServer(profile, agentId, name) }
     suspend fun testServer(name: String) = call { it.agents.agentsTestMcpServer(profile, agentId, name) }
 
-    /** Hermes's browser sign-in for a remote server (DECISIONS §121); no `hub_url`: the hub takes the address this app reached it on. */
+    /** Hermes's browser sign-in for a remote server (DECISIONS §122); no `hub_url`: the hub takes the address this app reached it on. */
     suspend fun startMcpOAuth(name: String) = call { it.agents.agentsStartMcpOAuth(profile, agentId, name, McpOAuthStart()) }
     suspend fun mcpOAuthFlow(name: String, flowId: String) = call { it.agents.agentsGetMcpOAuthFlow(profile, agentId, name, flowId) }
 

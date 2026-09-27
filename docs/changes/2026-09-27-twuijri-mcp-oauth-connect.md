@@ -13,7 +13,7 @@
 «OAuth authentication required — no token found.».
 
 ## القرار والموافقات
-DECISIONS §121 (مقترح — للمالك أن يؤكد):
+DECISIONS §122 (مقترح — للمالك أن يؤكد):
 - **هرمز يسجّل الدخول، والمركز ينقل فقط.** `agents.startMcpOAuth` يبدأ تدفق هرمز في البروفايل المختار ويرجع معرّف
   المركز (ULID) مع رابط المزوّد؛ `agents.getMcpOAuthFlow` للمتابعة (`pending` ثم `approved` مع الأدوات، أو
   `failed`/`cancelled`/`expired`)؛ `agents.cancelMcpOAuthFlow` للإيقاف. لا يمر أي رمز عبر المركز ولا يُرجَع ولا
@@ -67,7 +67,7 @@ DECISIONS §121 (مقترح — للمالك أن يؤكد):
   أي رد أو أي سطر سجل)، إضافات `mcp.test.ts`، `web/tests/mcp-oauth.test.tsx`، رحلة Playwright
   `e2e/zzzzzzzzzzzzzz-mcp-oauth.spec.ts` مع مسارات هرمز المُمثَّلة في `e2e/hub.ts` («المزوّد» فيها يعيد المتصفح فورًا
   إلى عنوان العودة الذي كتبه المركز) ولقطتها `e2e/shots/agent-mcp-oauth-ar-light.png`.
-- `docs/contracts/DECISIONS.md` §121، `docs/STATUS.md` (356 عملية، سطر الوكلاء).
+- `docs/contracts/DECISIONS.md` §122، `docs/STATUS.md` (356 عملية، سطر الوكلاء).
 - لا ترحيلات، لا متغيرات بيئة جديدة، لا تغيير على بيانات قائمة.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)

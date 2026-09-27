@@ -1,5 +1,5 @@
 /**
- * The pure half of MCP OAuth (DECISIONS §121): what the token file's metadata says, what the
+ * The pure half of MCP OAuth (DECISIONS §122): what the token file's metadata says, what the
  * hub deletes, where the browser is sent back to, and how Hermes's flow reads in the contract.
  */
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';

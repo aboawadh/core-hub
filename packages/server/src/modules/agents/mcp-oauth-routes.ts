@@ -1,5 +1,5 @@
 /**
- * The MCP OAuth operations (contract decision §121): start a sign-in, read and stop it, forget
+ * The MCP OAuth operations (contract decision §122): start a sign-in, read and stop it, forget
  * it, and the public callback the provider sends the browser back to. The flow itself is
  * Hermes's (`mcp-oauth.ts`); these routes find the profile's home, write the redirect the
  * browser can reach, and keep the hub's own id for each sign-in so a client never holds

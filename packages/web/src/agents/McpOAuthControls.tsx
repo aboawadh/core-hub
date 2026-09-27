@@ -1,5 +1,5 @@
 /**
- * Signing a remote MCP server in by OAuth, on its row of the MCP page (DECISIONS §121).
+ * Signing a remote MCP server in by OAuth, on its row of the MCP page (DECISIONS §122).
  *
  * Hermes does the sign-in; this page only starts it, opens the provider's page in a new tab
  * and waits. The tab is opened on the click itself (a tab opened after a request would be

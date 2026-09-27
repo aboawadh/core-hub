@@ -2,7 +2,7 @@
 import CoreHubClient
 import XCTest
 
-/// A remote MCP server's OAuth sign-in on the row (DECISIONS §121), as the web's page offers it.
+/// A remote MCP server's OAuth sign-in on the row (DECISIONS §122), as the web's page offers it.
 /// Android's McpOAuthTest checks the same.
 final class McpOAuthRulesTests: XCTestCase {
     func testTheSignInIsOfferedOnlyWhereHermesCanSignIn() {

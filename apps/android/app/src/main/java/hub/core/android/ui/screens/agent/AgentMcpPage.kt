@@ -138,7 +138,7 @@ internal fun McpServerRow(
     onEdit: () -> Unit,
     onTest: () -> Unit,
     onDelete: () -> Unit,
-    /** The server's OAuth sign-in in this profile (DECISIONS §121), [McpOAuthRow]. */
+    /** The server's OAuth sign-in in this profile (DECISIONS §122), [McpOAuthRow]. */
     oauth: (@Composable () -> Unit)? = null,
 ) {
     val t = LocalTokens.current

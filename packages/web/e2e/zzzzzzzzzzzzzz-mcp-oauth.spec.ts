@@ -1,5 +1,5 @@
 /**
- * Connecting a remote MCP server by OAuth from the web alone (DECISIONS §121), against the real
+ * Connecting a remote MCP server by OAuth from the web alone (DECISIONS §122), against the real
  * hub with a scripted Hermes (`e2e/hub.ts`) whose "provider" signs the person in at once:
  *
  * - a server that signs in by OAuth reads «غير متصل»; its Test fails in Hermes's words and

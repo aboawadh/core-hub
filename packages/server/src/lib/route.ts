@@ -29,7 +29,7 @@ export interface RouteDefinition {
   /**
    * Fastify's log level for this route alone. `warn` keeps the request's own `info` lines —
    * which carry its URL — out of the log, for the one route whose query is a secret handed on
-   * (`agents.mcpOAuthCallback`, DECISIONS §121). Absent: the hub's level.
+   * (`agents.mcpOAuthCallback`, DECISIONS §122). Absent: the hub's level.
    */
   logLevel?: 'warn' | 'error';
   /**

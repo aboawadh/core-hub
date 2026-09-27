@@ -561,10 +561,14 @@ class SelfSufficientTest {
     @Test fun `workflows - the drawing is checked by the hub, and a run starts again from a step`() = runTest {
         val ops = WorkflowEditOps { HubApis(base, OkHttpClient()) }
         val d = WorkflowDraftRules.add(WorkflowDraft(name = "W"), WorkflowNode.Kind.AGENT, "Research")
-        val v = ops.validate("work", WorkflowDraftRules.toWrite(d)).getOrThrow()
+        val v = ops.validate("work", WorkflowDraftRules.toCheck(d)).getOrThrow()
         assertEquals("agent_missing", v.problems.single().code)
         assertFalse(WorkflowDraftRules.canSave(d, v))
-        assertEquals("agent_1", body(requests[0])["nodes"]!!.let { (it as kotlinx.serialization.json.JsonArray)[0].jsonObject["id"]!!.jsonPrimitive.content })
+        val checked = body(requests[0])
+        assertEquals("agent_1", checked["nodes"]!!.let { (it as kotlinx.serialization.json.JsonArray)[0].jsonObject["id"]!!.jsonPrimitive.content })
+        // The check leaves the name out: it never reads it, and an older hub refused an empty one.
+        assertFalse("name" in checked)
+        assertNull(WorkflowDraftRules.toCheck(d.copy(name = "")).name)
         assertEquals("R2", ops.rerun("work", "R1", "agent_1").getOrThrow().workflowRunId)
         assertEquals("agent_1", body(requests[1])["from_node_id"]!!.jsonPrimitive.content)
     }

@@ -1596,6 +1596,9 @@
       "save_blocked": "Fix the problems before saving.",
       "name_required": "Give the workflow a name before saving.",
       "check_failed": "The drawing could not be checked: {message}",
+      "check_fields": "The drawing could not be checked: fix the marked fields.",
+      "name_refused": "The name is not accepted: {message}",
+      "fields_refused": "Not saved: fix the marked fields.",
       "delete_step": "Delete step",
       "delete_edge": "Delete connection",
       "connections": "Connections from this step",
@@ -1672,6 +1675,7 @@
       "approval_required": "Ask for approval before this step runs"
     },
     "issues": {
+      "field_invalid": "The hub did not accept “{detail}” as written.",
       "node_id_missing": "A step has no id.",
       "node_id_duplicate": "Two steps share this id.",
       "edge_from_unknown": "This connection starts at a step that does not exist.",

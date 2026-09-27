@@ -155,7 +155,7 @@ describe('removing one', () => {
   });
 });
 
-describe('a remote server that signs in (DECISIONS §121)', () => {
+describe('a remote server that signs in (DECISIONS §122)', () => {
   const REMOTE = `mcp_servers:
   clickup:
     url: https://mcp.clickup.example/mcp

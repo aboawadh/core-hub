@@ -10,7 +10,7 @@ import type { McpTestResult } from './skills.js';
 /**
  * What Hermes found: the tools it listed, or why it could not connect, in its words. `action`
  * goes under a failure — the MCP page puts the OAuth sign-in there when Hermes said the server
- * wants one (DECISIONS §121).
+ * wants one (DECISIONS §122).
  */
 export function TestResult({
   name,

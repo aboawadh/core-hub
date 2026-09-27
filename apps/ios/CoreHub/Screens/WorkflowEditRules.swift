@@ -165,6 +165,20 @@ enum WorkflowEditRules {
         )
     }
 
+    /// The drawing as the hub's live check takes it (`WorkflowCheck`): what saving sends, without
+    /// the name — the check never reads it, and a hub older than the check's own body refused an
+    /// empty one, so an unnamed drawing is checked on every hub.
+    static func check(_ draft: Draft) -> WorkflowCheck {
+        let saved = write(draft, clearing: false)
+        return WorkflowCheck(
+            description: saved.description,
+            workingDir: saved.workingDir,
+            nodes: saved.nodes,
+            edges: saved.edges,
+            limits: saved.limits
+        )
+    }
+
     /// Saving waits for a name and for the hub's check to find no problem.
     static func canSave(_ draft: Draft, validation: WorkflowValidation?) -> Bool {
         !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (validation?.valid ?? true)

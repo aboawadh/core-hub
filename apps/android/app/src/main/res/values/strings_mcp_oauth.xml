@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Signing a remote MCP server in by OAuth (DECISIONS §121); iOS mcp_oauth.*.json has the same words. -->
+<!-- Signing a remote MCP server in by OAuth (DECISIONS §122); iOS mcp_oauth.*.json has the same words. -->
 <resources>
     <string name="mcp_oauth_connected">Connected</string>
     <string name="mcp_oauth_expired_status">Expired</string>

@@ -144,7 +144,7 @@ struct McpServerRow: View {
     let edit: () -> Void
     let runTest: () -> Void
     let delete: () -> Void
-    /// The server's OAuth sign-in in this profile (DECISIONS §121), `McpOAuthRow`.
+    /// The server's OAuth sign-in in this profile (DECISIONS §122), `McpOAuthRow`.
     var oauth: AnyView? = nil
     @Environment(\.l10n) private var l10n
 

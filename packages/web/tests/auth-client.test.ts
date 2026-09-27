@@ -1,6 +1,6 @@
 import { HubApiError } from '@corehub/contracts';
 import { describe, expect, it } from 'vitest';
-import { createClientBundle } from '../src/auth/client.js';
+import { createClientBundle, fieldErrorsOf } from '../src/auth/client.js';
 import { SessionStore, isSession } from '../src/auth/store.js';
 
 function memory(): Storage {
@@ -137,5 +137,31 @@ describe('auth client', () => {
       }),
     ).toBe(true);
     expect(isSession({ token: 't' })).toBe(false);
+  });
+
+  it('reads the fields a validation_failed names, and nothing from any other error', () => {
+    const refused = new HubApiError(400, 'validation_failed', 'The request did not match', {
+      error: 'The request did not match',
+      code: 'validation_failed',
+      details: {
+        fields: [
+          { source: 'body', path: 'name', message: 'must NOT have fewer than 1 characters' },
+          { source: 'body', path: 'nodes.0.title' },
+          { source: 'body', message: 'no path' },
+          null,
+        ],
+      },
+    });
+    expect(fieldErrorsOf(refused)).toEqual([
+      { path: 'name', message: 'must NOT have fewer than 1 characters' },
+      { path: 'nodes.0.title', message: '' },
+    ]);
+    expect(
+      fieldErrorsOf(new HubApiError(409, 'conflict', 'x', { details: { fields: [] } })),
+    ).toEqual([]);
+    expect(fieldErrorsOf(new HubApiError(400, 'validation_failed', 'x', { details: {} }))).toEqual(
+      [],
+    );
+    expect(fieldErrorsOf(new Error('boom'))).toEqual([]);
   });
 });

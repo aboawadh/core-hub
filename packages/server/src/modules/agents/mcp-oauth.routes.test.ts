@@ -1,5 +1,5 @@
 /**
- * MCP OAuth through the hub's own routes (DECISIONS §121), with a scripted Hermes that behaves
+ * MCP OAuth through the hub's own routes (DECISIONS §122), with a scripted Hermes that behaves
  * like Hermes's dashboard: `…/auth` starts a flow with an authorization URL, the callback
  * accepts only the flow's `state` and then writes the tokens into the profile's home, the flow
  * route reports `approved` with the tools. The last test is the promise that matters most: no

@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** A remote MCP server's OAuth sign-in on the row (DECISIONS §121), as the web's page offers it. iOS's McpOAuthRulesTests checks the same. */
+/** A remote MCP server's OAuth sign-in on the row (DECISIONS §122), as the web's page offers it. iOS's McpOAuthRulesTests checks the same. */
 class McpOAuthTest {
     private val json = Serializer.kotlinxSerializationJson
 

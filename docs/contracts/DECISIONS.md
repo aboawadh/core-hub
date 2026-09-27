@@ -3849,7 +3849,33 @@ GitHub APK and Play without losing its sign-in); keeping the self-updater in the
 r0adkll/upload-google-play (uploads the bundle but not the listing and images); "No data
 collected" on Play (the Firebase library alone sends a token and an installation id to Google).
 
-## 121. An MCP server is signed in by OAuth from the hub's pages, through Hermes, with the hub as the browser's way back
+## 121. The editor's live check takes a drawing that has no name yet (`WorkflowCheck`)
+
+Found 2026-09-28: a new workflow opened in the web editor said "The drawing could not be checked:
+The request did not match the expected shape" although its steps were drawn. The editor starts
+with an empty name and sends it to `schedules.validateWorkflow`, whose body was `WorkflowWrite`,
+where `name` has `minLength: 1`; the contract refused the body with `400 validation_failed`
+before the check ran, although the check never reads the name. The iPhone and Android editors
+sent the same empty name.
+
+The body of `validateWorkflow` is now its own schema, `WorkflowCheck`: the fields of
+`WorkflowWrite` with `name` a plain string (empty or absent is fine). This only accepts more,
+so every existing caller keeps working (`pnpm contracts:compat` passes). `createWorkflow` and
+`updateWorkflow` keep `WorkflowWrite` and still need a name (`400` for an empty one, `409
+name_required` for a blank one). The clients leave the name out of the check altogether (the
+phones) or may send it empty (the web), so a new app checks an unnamed drawing on an older hub
+too.
+
+The web editor also no longer checks the empty drawing it starts from while a saved workflow is
+loading, says "name required" by the name field instead of as an error, and puts the fields a
+refused request names (`details.fields`: `name`, `nodes.<i>.<field>`, `edges.<i>`) next to that
+field or step; what no field shows stays in the general message.
+
+Rejected: dropping `minLength` from `WorkflowWrite` (saving would accept an empty name at the
+contract and only the hub would refuse it, with a different status); leaving the contract and
+fixing only the clients (every released phone app would keep failing on a new hub).
+
+## 122. An MCP server is signed in by OAuth from the hub's pages, through Hermes, with the hub as the browser's way back
 
 Owner's goal (2026-09-27): connect ClickUp's MCP server — or any MCP server that signs in by OAuth —
 from the web alone, then Test shows its tools. The details below are proposed — owner to confirm.

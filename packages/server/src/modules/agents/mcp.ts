@@ -38,14 +38,14 @@ export interface McpServer {
   enabled: boolean;
   /** The block as stored, with credentials masked. */
   config: Record<string, unknown>;
-  /** The block says `auth: oauth`: Hermes signs in to it by OAuth (DECISIONS §121). */
+  /** The block says `auth: oauth`: Hermes signs in to it by OAuth (DECISIONS §122). */
   oauth: boolean;
 }
 
 /**
  * The blocks one level down whose values are masked by their key's name, like the block's own
  * keys: a process's `env`, a socket's `headers` (`Authorization: Bearer …`) and the `oauth`
- * settings (`client_secret`). Before DECISIONS §121 only `env` was, and a header's key came
+ * settings (`client_secret`). Before DECISIONS §122 only `env` was, and a header's key came
  * back to the client as it was written.
  */
 const NESTED = new Set(['env', 'headers', 'oauth']);
@@ -200,7 +200,7 @@ export function deleteMcpServer(home: string, name: string): void {
 
 /**
  * Point the server's OAuth callback at `uri` (`oauth.redirect_uri`, the key Hermes reads first
- * for a browser sign-in; DECISIONS §121), leaving every other key and byte alone. A
+ * for a browser sign-in; DECISIONS §122), leaving every other key and byte alone. A
  * `redirect_uri` the person wrote themselves — anything `ours` does not recognise as the hub's
  * own callback — is kept. Answers the URI that is in the file afterwards.
  */

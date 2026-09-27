@@ -958,7 +958,7 @@ function seedPairing(): void {
     },
   });
 }
-/** The MCP OAuth sign-ins the scripted Hermes has started (journey: DECISIONS §121). */
+/** The MCP OAuth sign-ins the scripted Hermes has started (journey: DECISIONS §122). */
 const mcpOAuth = new Map<
   string,
   { id: string; name: string; profile: string; state: string; status: string }
@@ -1027,7 +1027,7 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     writePairing(profile, 'approved', approved, platform);
     return answer({ ok: true });
   }
-  // MCP OAuth (journey: DECISIONS §121), as Hermes's dashboard runs it: `…/auth` names the
+  // MCP OAuth (journey: DECISIONS §122), as Hermes's dashboard runs it: `…/auth` names the
   // provider's page, and the "provider" here signs the person in at once — its page is the
   // redirect the hub wrote into the server's block, with a code and the flow's state — so the
   // tab the MCP page opens lands straight on the hub's callback, which hands it back here.

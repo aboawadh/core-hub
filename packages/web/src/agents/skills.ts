@@ -179,7 +179,7 @@ export interface McpServer {
   error: string | null;
   config: Record<string, unknown>;
   updated_at: string;
-  /** A remote server's OAuth sign-in in this profile (DECISIONS §121); absent on older hubs. */
+  /** A remote server's OAuth sign-in in this profile (DECISIONS §122); absent on older hubs. */
   oauth?: McpOAuthState;
 }
 
@@ -190,7 +190,7 @@ export interface McpOAuthState {
   expires_at?: string | null;
 }
 
-/** One OAuth sign-in to an MCP server, run by Hermes; the hub only relays it (§121). */
+/** One OAuth sign-in to an MCP server, run by Hermes; the hub only relays it (§122). */
 export interface McpOAuthFlow {
   id: string;
   server_name: string;
@@ -286,7 +286,7 @@ export function useDeleteMcpServer(agentId: string | undefined) {
 
 // ------------------------------------------------------------------- MCP OAuth
 //
-// Connecting a remote server by OAuth (DECISIONS §121): the hub asks Hermes to start, the
+// Connecting a remote server by OAuth (DECISIONS §122): the hub asks Hermes to start, the
 // person signs in on the provider's page in a new tab, and the page polls until Hermes says
 // how it went. Each profile signs in on its own; the tokens stay with Hermes.
 
