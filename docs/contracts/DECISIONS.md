@@ -3709,3 +3709,32 @@ leaves a wrapper script for that name the hub cannot find to remove); an allow-l
 (an unlisted file of the default would stay and mix with the imported one); moving the hub's own
 per-profile rows to the backup (ten modules' tables and their attachment folders — a larger and
 riskier change than this one).
+
+## 117. Anyone with the public TestFlight link can test the iPhone app; each upload is submitted for Beta App Review by itself
+
+Owner's decision (2026-09-27): send people one link instead of adding each tester by hand. The
+details below are proposed — owner to confirm. Nothing in the contract changes.
+
+Every build the *iOS signed build* workflow uploads to TestFlight (a manual run with
+`upload_testflight`) also goes to an external TestFlight group, `Public` by default (input
+`external_group`; empty skips it), whose public link is on, with at most 1000 testers (input
+`public_link_limit`) and tester feedback on. The workflow creates the group the first time, prints
+its link in the run's summary, sets the build's "What to Test" to the version and its release page,
+submits the build for Beta App Review and adds it to the group
+(`apps/ios/scripts/testflight-public.mjs`, docs/RELEASING.md → TestFlight). The internal `Owner`
+group is unchanged and still gets every build first, without review.
+
+Beta App Review needs details only the owner can give — the feedback email, the review contact and,
+because the app is useless without a hub, sign-in with a demo account and the demo hub's address in
+the review notes. The workflow never invents them: while any is missing the step fails and names
+each field and where it is in App Store Connect; the upload and the internal group are done by then.
+It fills only the two non-personal fields, the beta description and the privacy policy URL, from the
+App Store listing in `apps/ios/fastlane/metadata`.
+
+The link is public by design and appears in the public Actions log; the tester limit caps how many
+can join, and the owner can turn the link off or change the limit in App Store Connect (the next run
+sets the limit from its input again). Tag pushes still do not upload to TestFlight.
+
+Rejected: submitting without sign-in details (Apple rejects an app reviewers cannot use); inventing
+or storing the owner's contact details in the repository or in secrets; a new external group per
+release (the link would change every time).

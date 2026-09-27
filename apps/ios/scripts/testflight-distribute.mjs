@@ -172,6 +172,10 @@ export async function resolveGroups(api, appId, names) {
         id: group.id,
         name: group.attributes.name,
         internal: group.attributes.isInternalGroup === true,
+        // An internal group set to get every build ("automatic distribution") already has this
+        // one; App Store Connect refuses to add a build to it (422 "Cannot add internal group
+        // to a build"), as the 1.1.3 upload found.
+        allBuilds: group.attributes.hasAccessToAllBuilds === true,
       });
     } else {
       missing.push(name);
@@ -273,9 +277,19 @@ export async function distribute({
   }
 
   const { found, missing, available } = await resolveGroups(api, app.id, names);
-  if (found.length > 0) {
-    await addToGroups(api, build.id, found);
-    for (const g of found) {
+  const automatic = found.filter((g) => g.internal && g.allBuilds);
+  for (const g of automatic) {
+    log.notice(`TestFlight group "${g.name}" gets every build automatically, ${label} included.`);
+  }
+  if (automatic.length > 0) {
+    log.summary(
+      `- TestFlight: ${automatic.map((g) => g.name).join(', ')} get${automatic.length === 1 ? 's' : ''} ${label} automatically.`,
+    );
+  }
+  const toAdd = found.filter((g) => !(g.internal && g.allBuilds));
+  if (toAdd.length > 0) {
+    await addToGroups(api, build.id, toAdd);
+    for (const g of toAdd) {
       log.notice(`Added ${label} to TestFlight group "${g.name}".`);
       if (!g.internal) {
         log.notice(
@@ -285,8 +299,8 @@ export async function distribute({
       }
     }
     log.summary(
-      `- TestFlight: ${label} added to ${found.map((g) => g.name).join(', ')}` +
-        (found.some((g) => !g.internal) ? ' (external groups wait for Beta App Review)' : '') +
+      `- TestFlight: ${label} added to ${toAdd.map((g) => g.name).join(', ')}` +
+        (toAdd.some((g) => !g.internal) ? ' (external groups wait for Beta App Review)' : '') +
         '.',
     );
   }

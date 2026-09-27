@@ -18,7 +18,9 @@ Rules every operation follows:
   operation is `501 not_implemented`.
 - Every request carries `X-Hub-Profile` (workspace scope, ADR 0005).
 - Long work returns a job id immediately and reports progress as events.
-- Breaking changes go to `/api/v2` with an ADR; `/api/v1` is never changed incompatibly.
+- `/api/v1` is never changed incompatibly (ADR 0027): add beside, never remove, rename, newly
+  require or narrow. `pnpm contracts:compat` compares the document and the event schemas with the
+  latest release in CI. A redesign goes to `/api/v2`, served next to `/api/v1`, with an ADR.
 
 How to change the contract: edit the document first, run `pnpm contracts:lint` and
 `pnpm contracts:generate`, then implement in the server module, then update clients — in that

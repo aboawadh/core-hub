@@ -37,6 +37,11 @@ check you did not run. -->
 
 - [ ] Contract first: every new endpoint or event is in `packages/contracts` (or nothing changed there).
       العقد أولًا.
+- [ ] Compatibility (ADR 0027): nothing people already run breaks — the contract only grows,
+      migrations drop/rename/edit nothing released, the upgrade is replacing the image, old env
+      names still work, a newer app copes with an older hub and an older app with a newer hub,
+      release file names are unchanged. Any unavoidable break is approved by the owner in
+      `docs/contracts/breaking-approved.json`. لا كسر لما يعمل عند الناس.
 - [ ] Every user-facing string exists in Arabic and English. كل نص للمستخدم بالعربية والإنجليزية.
 - [ ] A change record in `docs/changes/` with real check output. سجل تغيير بنواتج فعلية.
 - [ ] Clean room: nothing copied from Hermes Studio / Ekko Studio (ADR 0004). الغرفة النظيفة.
