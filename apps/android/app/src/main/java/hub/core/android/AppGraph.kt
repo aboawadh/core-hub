@@ -94,6 +94,8 @@ class AppGraph(
     releaseSource: hub.core.android.phone.ReleaseSource? = null,
 ) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
+    /** The order the person dragged the chats into, per view (ChatOrder.kt). */
+    val chatOrder = hub.core.android.ui.screens.ChatOrderStore(context.getSharedPreferences("corehub.chatorder", Context.MODE_PRIVATE))
     val store = SessionStore(
         SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
     )
@@ -181,6 +183,7 @@ class AppGraph(
         // While the process lives, a notice the hub announces becomes a notification when no screen shows it.
         scope.launch {
             realtime.events.collect { e ->
+                hub.core.android.realtime.JobsFeed.receive(e)
                 hub.core.android.phone.Locating.requestOf(e)?.let { request -> launch { locations.heard(request) } }
                 if (e.namespace != DEVICES_NAMESPACE || e.event != "notice.created") return@collect
                 val notice = e.payload["notice"]?.let {

@@ -32,7 +32,6 @@ import hub.core.android.R
 import hub.core.android.data.HubError
 import hub.core.android.generated.FontTokens
 import hub.core.android.graph
-import hub.core.android.nav.AppPaths
 import hub.core.android.ui.components.ConfirmDelete
 import hub.core.android.ui.components.ConfirmDeleteDialog
 import hub.core.android.ui.components.ErrorNotice
@@ -96,21 +95,11 @@ object ChannelLinks {
     fun account(channel: Channel): String? = ChannelRules.account(channel.link)
 }
 
-/** Opens the agent's Channels page on the web (a QR pairing is scanned from another screen). */
-@Composable
-private fun rememberOpenWeb(agent: Agent): () -> Unit {
-    val context = LocalContext.current
-    return {
-        context.graph.store.current?.hub?.let { hub -> AppPaths.webUrl(hub, "agent_channels")?.replace(":agentId", agent.id) }
-            ?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
-    }
-}
-
 /**
  * Channels (apps batch 9, the web's page): each linked platform as a card — its switch, state and
  * account, and what it offers (its settings, WhatsApp's mode and reply header, its fields, Unlink or
  * Forget identity, Restart when the gateway does not serve it yet); linking a platform (a bot token or
- * credentials here; a QR platform is paired from a computer, and the page says so with the link);
+ * credentials here; a QR platform by the code drawn on this screen, AgentChannelPair.kt);
  * senders waiting for approval and the approved ones; and the agent's incoming webhooks.
  */
 @Composable
@@ -120,7 +109,6 @@ private fun ChannelsPage(agent: Agent, profile: String) {
     val tools = rememberToolOps(agent, profile)
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
-    val openWeb = rememberOpenWeb(agent)
     var error by remember { mutableStateOf<HubError?>(null) }
     var note by remember { mutableStateOf<ToolNote?>(null) }
     var linking by remember { mutableStateOf<ChannelPlatform?>(null) }
@@ -227,8 +215,8 @@ private fun ChannelsPage(agent: Agent, profile: String) {
             WebhooksSection(two, items)
         }
     }
-    if (picking) LinkSheet(ops, null, onDone = { picking = false; channels.reload() }, onWeb = openWeb)
-    linking?.let { spec -> LinkSheet(ops, spec, onDone = { linking = null; channels.reload() }, onWeb = openWeb) }
+    if (picking) LinkSheet(ops, null, onDone = { picking = false; channels.reload() }, onLinked = channels.reload)
+    linking?.let { spec -> LinkSheet(ops, spec, onDone = { linking = null; channels.reload() }, onLinked = channels.reload) }
     settings?.let { channel ->
         ChannelSettingsSheet(two, channel.platform, specOf(channel.platform)?.label ?: channel.label, (channels.state as? hub.core.android.ui.components.Load.Ready)?.value?.gateway, onDismiss = { settings = null })
     }
@@ -384,11 +372,11 @@ private fun actionIcon(action: ChannelRules.Action): Int = when (action) {
 
 /**
  * Link a platform: every platform the hub knows, or straight to [start]'s form. A bot token or
- * credentials link here; a platform linked by scanning a code (WhatsApp) cannot be scanned from this
- * phone's own screen: the sheet says to pair it from a computer and opens the page on the web.
+ * credentials link here; a platform linked by scanning a code (WhatsApp) draws its code here, for
+ * the phone that has that number to scan (AgentChannelPair.kt).
  */
 @Composable
-private fun LinkSheet(ops: AgentOps, start: ChannelPlatform?, onDone: () -> Unit, onWeb: () -> Unit) {
+private fun LinkSheet(ops: AgentOps, start: ChannelPlatform?, onDone: () -> Unit, onLinked: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val t = LocalTokens.current
@@ -411,10 +399,11 @@ private fun LinkSheet(ops: AgentOps, start: ChannelPlatform?, onDone: () -> Unit
                 }
             }
         } else if (!ChannelLinks.onPhone(p)) {
-            // A code shown on this screen cannot be scanned by this phone's own camera: pair from a computer.
-            NoticeBox(stringResource(R.string.agents2_ch_qr_note, p.label), BadgeTone.Info, Modifier.testTag("platform.qr_note"))
-            HubButton(stringResource(R.string.on_the_web_open), onWeb, icon = Lucide.ExternalLink, fill = true, modifier = Modifier.fillMaxWidth().testTag("platform.web"))
-            if (start == null) HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.ArrowLeft)
+            // A platform linked by scanning a code (WhatsApp): the code is drawn here (AgentChannelPair.kt).
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ChannelPairPanel(ops.profile, ops.agentId, p.platform, p.label, onLinked = onLinked)
+                if (start == null) HubButton(stringResource(R.string.back), { chosen = null }, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.ArrowLeft)
+            }
         } else {
             val typed = remember(p.platform) { mutableStateMapOf<String, String>() }
             var allowed by remember(p.platform) { mutableStateOf("") }

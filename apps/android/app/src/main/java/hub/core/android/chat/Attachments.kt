@@ -27,11 +27,17 @@ import kotlinx.coroutines.launch
  * The words and files of one message on their way to the hub. [asFiles] are photos sent at
  * original quality: they go as file blocks (Telegram's «send as file»), whatever their kind.
  */
-data class Outgoing(val text: String, val attachments: List<Attachment> = emptyList(), val asFiles: Set<String> = emptySet()) {
-    val isEmpty: Boolean get() = text.isBlank() && attachments.isEmpty()
+data class Outgoing(
+    val text: String,
+    val attachments: List<Attachment> = emptyList(),
+    val asFiles: Set<String> = emptySet(),
+    /** Blocks the hub wrote itself (a channel conversation's continuation, §62), sent as they are. */
+    val raw: List<ContentBlock>? = null,
+) {
+    val isEmpty: Boolean get() = text.isBlank() && attachments.isEmpty() && raw.isNullOrEmpty()
 
     /** The blocks `sessions.createRun` takes: the text, then one block per file (web: `blocksFor`). */
-    fun blocks(): List<ContentBlock> = buildList {
+    fun blocks(): List<ContentBlock> = raw ?: buildList {
         val trimmed = text.trim()
         if (trimmed.isNotEmpty()) add(ContentBlock(type = ContentBlock.Type.TEXT, text = trimmed))
         attachments.forEach { a ->

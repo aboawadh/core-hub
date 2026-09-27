@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -149,6 +150,8 @@ class AdminOps(private val apis: () -> HubApis?, val profile: String) {
     suspend fun testPush(d: Device) = call { it.devices.devicesTestPush(d.id) }
     suspend fun unlink(d: Device) = call { it.devices.devicesUnlink(d.id) }
     suspend fun pairing() = call { it.auth.authCreatePairing(PairingCreate()) }
+    /** The pairing as it stands: pending, claimed by a device, expired or cancelled. */
+    suspend fun pairingState(id: String) = call { it.auth.authGetPairing(id) }
     suspend fun usage(days: Int, all: Boolean) = call { it.audit.auditGetUsage(profile, days = days, profiles = if (all) AuditApi.ProfilesAuditGetUsage.ALL else null) }
 }
 
@@ -249,6 +252,21 @@ fun DevicesPage(profile: String, isAdmin: Boolean = false) {
     var renaming by remember { mutableStateOf<Device?>(null) }
     var removing by remember { mutableStateOf<Device?>(null) }
     val pushSent = stringResource(R.string.devices_push_sent)
+    val justPaired = stringResource(R.string.devices_just_paired)
+    // While the code waits, the page asks every 5 s whether a device took it (the web's poll); once it
+    // did, the code goes away, the page says so and the device appears in the list.
+    LaunchedEffect(pairing?.id) {
+        val p = pairing ?: return@LaunchedEffect
+        while (pairing?.id == p.id) {
+            kotlinx.coroutines.delay(5_000)
+            val now = ops.pairingState(p.id).getOrNull() ?: continue
+            when (now.status) {
+                hub.core.client.model.Pairing.Status.CLAIMED -> { pairing = null; note = justPaired; devices.reload() }
+                hub.core.client.model.Pairing.Status.PENDING -> Unit
+                else -> pairing = null
+            }
+        }
+    }
     LazyColumn(contentPadding = pad, verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("devices.page")) {
         item { ErrorNotice(error) }
         note?.let { item { NoticeBox(it, BadgeTone.Info) } }

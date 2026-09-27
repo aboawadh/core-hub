@@ -344,7 +344,8 @@ fun FileLinkHandler(own: List<ChatAttachment>, profile: String, content: @Compos
     val scope = rememberCoroutineScope()
     val opener = rememberOpener(profile)
     val failed = stringResource(R.string.files_link_failed)
-    val handler = remember(own, profile, session, system, failed) {
+    val inApp = hub.core.android.nav.LocalOpenInApp.current
+    val handler = remember(own, profile, session, system, failed, inApp) {
         object : UriHandler {
             override fun openUri(uri: String) {
                 val hub = context.graph.store.current?.hub.orEmpty()
@@ -361,6 +362,8 @@ fun FileLinkHandler(own: List<ChatAttachment>, profile: String, content: @Compos
             }
 
             private fun browse(uri: String) {
+                // A page of this hub (a chat, a task, a room's invite…) opens here, not in the browser.
+                if (inApp?.invoke(uri) == true) return
                 if (runCatching { system.openUri(uri) }.isFailure) Toast.makeText(context, failed, Toast.LENGTH_LONG).show()
             }
         }

@@ -257,6 +257,7 @@ class ScheduleOps(private val apis: () -> HubApis?) {
     suspend fun delete(schedule: Schedule) = call { it.schedules.schedulesDelete(schedule.profile, schedule.id) }
     suspend fun runNow(schedule: Schedule) = call { it.schedules.schedulesRunNow(schedule.profile, schedule.id) }
     suspend fun get(schedule: Schedule) = call { it.schedules.schedulesGet(schedule.profile, schedule.id) }
+    suspend fun byId(profile: String, id: String) = call { it.schedules.schedulesGet(profile, id) }
     suspend fun runs(schedule: Schedule, cursor: String?) = call {
         it.schedules.schedulesListRuns(schedule.profile, schedule.id, cursor = cursor, limit = ScheduleRules.RUNS_PAGE)
     }

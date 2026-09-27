@@ -347,10 +347,24 @@ private fun NewRoomDialog(ui: RoomsUi, onCancel: () -> Unit, onMake: (String, Li
     }
 }
 
+/** A room invite tapped in a reply (`<hub>/join/<code>`): the same Join dialog, the code filled in and previewed. */
 @Composable
-private fun JoinRoomDialog(ui: RoomsUi, onPreview: (String) -> Unit, onCancel: () -> Unit, onJoin: (String) -> Unit) {
+fun JoinFromLink(nav: Navigator) {
+    val context = LocalContext.current
+    val code by hub.core.android.nav.HubLinks.joinCode.collectAsState()
+    val pending = code ?: return
+    val vm: RoomsViewModel = viewModel { RoomsViewModel(context.graph) }
+    val ui by vm.ui.collectAsState()
+    LaunchedEffect(pending) { vm.resetDialog(); vm.preview(pending) }
+    JoinRoomDialog(ui, vm::preview, onCancel = { hub.core.android.nav.HubLinks.joinCode.value = null }, initial = pending) { c ->
+        vm.join(c) { room -> hub.core.android.nav.HubLinks.joinCode.value = null; nav.go(Route.Room(room.id, room.profile)) }
+    }
+}
+
+@Composable
+private fun JoinRoomDialog(ui: RoomsUi, onPreview: (String) -> Unit, onCancel: () -> Unit, initial: String = "", onJoin: (String) -> Unit) {
     val t = LocalTokens.current
-    var input by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf(initial) }
     val code = RoomLinks.codeOf(input)
     HubDialog(onCancel, term("join_by_code")) {
         HubTextField(

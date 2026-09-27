@@ -83,13 +83,14 @@ class HubDataOps(private val profile: String, private val apis: () -> HubDataApi
     suspend fun redeliver(id: String, delivery: String): Result<WebhookDelivery> = hubCall { apis().notify.notifyRedeliverWebhookDelivery(webhookId = id, deliveryId = delivery, xHubProfile = profile) }
 
     /** Queues the test delivery and follows its job to the end (as the web polls it). */
-    suspend fun test(id: String, pause: suspend () -> Unit = { kotlinx.coroutines.delay(700) }, tries: Int = 60): Result<NotifyWebhookRules.TestOutcome> = hubCall {
+    suspend fun test(id: String, pause: (suspend (String) -> Unit)? = null, tries: Int = 60): Result<NotifyWebhookRules.TestOutcome> = hubCall {
         val jobId = apis().notify.notifyTestWebhook(webhookId = id, xHubProfile = profile).jobId
+        val wait: suspend () -> Unit = { pause?.invoke(jobId) ?: hub.core.android.realtime.JobsFeed.wait(jobId, 700) }
         var outcome: NotifyWebhookRules.TestOutcome? = null
         var left = tries
         while (outcome == null && left-- > 0) {
             outcome = NotifyWebhookRules.outcome(apis().jobs.jobsGet(profile, jobId))
-            if (outcome == null) pause()
+            if (outcome == null) wait()
         }
         outcome ?: NotifyWebhookRules.TestOutcome(false, 0, null)
     }

@@ -13,6 +13,11 @@ sealed interface Route {
 
     data object NewChat : Route { override val destination = "new_chat" }
     data class Chat(val sessionId: String, val profile: String) : Route { override val destination = "chat" }
+    /**
+     * A conversation Hermes keeps for a channel (Telegram, WhatsApp…), read-only: the chat
+     * destination, as the web opens it (`/chat/<id>?source=channel`), with Hermes's id.
+     */
+    data class ChannelChat(val conversationId: String, val profile: String) : Route { override val destination = "chat" }
     /** One room, opened from the drawer's Rooms list (the `rooms` segment), in its own profile. */
     data class Room(val roomId: String, val profile: String) : Route { override val destination = "rooms" }
     data object Search : Route { override val destination = "search" }
@@ -43,9 +48,9 @@ object Screens {
 
     /** The Settings list, in the manifest's order, as the phone's Settings page draws it. */
     val settingsTabs = listOf("account", "users", "webhooks", "display", "notifications", "privacy", "this_device", "about")
-    val settingsManagement = listOf("models", "device_connections", "knowledge")
+    val settingsManagement = listOf("models", "device_connections", "knowledge", "linked_hubs")
     val settingsTools = listOf(
-        "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files",
+        "logs", "usage", "skills_usage", "performance", "theme", "workspaces", "updates", "plugins", "files", "terminal",
     )
 
     /** An agent's pages, in order; each shows only when the adapter declares its capability. */
@@ -66,7 +71,7 @@ object Screens {
 
     /** Destinations only an owner or admin sees (`roles: ["admin"]`). */
     val adminOnly = setOf(
-        "agent_manager", "users", "webhooks", "logs", "performance", "workspaces", "updates", "plugins", "files",
+        "agent_manager", "users", "webhooks", "linked_hubs", "logs", "performance", "workspaces", "updates", "plugins", "files",
     ) + agentLevel
 
     /** The capability an agent page needs (`agent_settings` is shown for every installed agent). */
@@ -81,6 +86,9 @@ object Screens {
      */
     fun agentPages(capabilities: Collection<String>, configurable: Boolean): List<String> =
         agentLevel.filter { if (it == "agent_settings") configurable else capabilityOf.getValue(it) in capabilities }
+
+    /** Destinations only the owner sees (`roles: ["owner"]`), and only while the hub offers them. */
+    val ownerOnly = setOf("terminal")
 
     /** A drawer or Settings entry is visible to this person. */
     fun visible(destination: String, isAdmin: Boolean): Boolean = isAdmin || destination !in adminOnly
@@ -98,7 +106,7 @@ class Navigator(start: Route = Route.NewChat) {
     /** Opens a route; a destination already on the stack is brought back rather than stacked twice. */
     fun go(route: Route) {
         if (current == route) return
-        if (route is Route.NewChat || route is Route.Chat || route is Route.Room) {
+        if (route is Route.NewChat || route is Route.Chat || route is Route.ChannelChat || route is Route.Room) {
             stack.clear()
             stack.add(route)
             return
@@ -115,7 +123,7 @@ class Navigator(start: Route = Route.NewChat) {
 
     /** The route Settings' "back to chats" row returns to: the last conversation or the draft. */
     fun backToChats() {
-        val chat = stack.lastOrNull { it is Route.Chat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
+        val chat = stack.lastOrNull { it is Route.Chat || it is Route.ChannelChat || it is Route.NewChat || it is Route.Room } ?: Route.NewChat
         stack.clear()
         stack.add(chat)
     }

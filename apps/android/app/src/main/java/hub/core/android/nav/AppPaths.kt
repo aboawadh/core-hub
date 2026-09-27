@@ -54,7 +54,10 @@ object AppPaths {
         val itemProfile = target.query["profile"] ?: profile
         return when (target.destination) {
             "new_chat" -> Route.NewChat
-            "chat" -> target.params["sessionId"]?.let { Route.Chat(it, itemProfile) } ?: Route.NewChat
+            // `?source=channel`: the id is Hermes's, a channel conversation's (the web's channelHref).
+            "chat" -> target.params["sessionId"]?.let {
+                if (target.query["source"] == "channel") Route.ChannelChat(it, itemProfile) else Route.Chat(it, itemProfile)
+            } ?: Route.NewChat
             "rooms" -> target.params["roomId"]?.let { Route.Room(it, itemProfile) } ?: Route.NewChat
             "search" -> Route.Search
             "agent_manager" -> Route.Agents

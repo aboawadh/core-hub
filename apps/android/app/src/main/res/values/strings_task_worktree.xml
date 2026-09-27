@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A task's git worktree, native since 2026-09-27; words as the web's tasks.worktree.* -->
+<resources>
+    <string name="taskwt_title">Worktree</string>
+    <string name="taskwt_branch">Branch</string>
+    <string name="taskwt_path">Folder</string>
+    <string name="taskwt_changes">Changes</string>
+    <string name="taskwt_counts">%1$s changed files · %2$s commits ahead of %3$s</string>
+    <string name="taskwt_remove">Remove worktree</string>
+    <string name="taskwt_confirm_remove">Remove this task\'s worktree?</string>
+    <string name="taskwt_confirm_remove_body">The folder is removed. The branch %1$s stays in the repository, and uncommitted changes are lost.</string>
+    <string name="taskwt_running">The task is running in this worktree. Stop it first.</string>
+    <string name="taskwt_status_creating">Being made</string>
+    <string name="taskwt_status_ready">Ready</string>
+    <string name="taskwt_status_dirty">Has changes</string>
+    <string name="taskwt_status_merged">Merged</string>
+    <string name="taskwt_status_removed">Removed</string>
+    <string name="taskwt_status_error">Git refused</string>
+</resources>

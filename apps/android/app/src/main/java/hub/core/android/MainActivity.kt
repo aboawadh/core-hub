@@ -181,7 +181,29 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         AppPaths.resolve(path)?.let { AppPaths.route(it, session!!.profile) }?.let(nav::go)
         onPathHandled()
     }
-    MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
+    // Links to this hub's own pages in a reply open here (nav/HubLinks.kt); a room invite opens Join.
+    val display by hub.core.android.ui.screens.HubDisplay.prefs.collectAsState()
+    val openInApp: (String) -> Boolean = open@{ uri ->
+        val s = graph.store.current ?: return@open false
+        // The person may have chosen the browser for links (Display → where links open).
+        if (!hub.core.android.ui.screens.HubDisplay.linksInApp(display)) return@open false
+        when (val link = hub.core.android.nav.HubLinks.target(uri, s.hub, s.profile)) {
+            is hub.core.android.nav.InAppLink.Page -> { nav.go(link.route); true }
+            is hub.core.android.nav.InAppLink.Join -> { hub.core.android.nav.HubLinks.joinCode.value = link.code; true }
+            null -> false
+        }
+    }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scale = hub.core.android.ui.screens.HubDisplay.textScale(display)
+    androidx.compose.runtime.CompositionLocalProvider(
+        hub.core.android.nav.LocalOpenInApp provides openInApp,
+        hub.core.android.ui.screens.LocalChatDisplay provides hub.core.android.ui.screens.HubDisplay.chat(display),
+        // Text size (Display): every text of the app, over the phone's own font scale.
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * scale),
+    ) {
+        MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
+    }
+    hub.core.android.ui.screens.JoinFromLink(nav)
 }
 
 /** What each route draws. Pages not built on the phone yet say so plainly. */
@@ -230,6 +252,16 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
                 ChatScreen(
                     route.sessionId, route.profile, shell.profileName(route.profile), onCreated = { _, _ -> },
                     onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                    onNewChat = { nav.go(Route.NewChat) },
+                )
+            }
+            is Route.ChannelChat -> {
+                // A Telegram or WhatsApp conversation Hermes keeps: read-only, with Continue in Core Hub.
+                hub.core.android.ui.screens.ChannelChatScreen(
+                    route.conversationId, route.profile, shell, onMenu = openDrawer,
+                    onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) },
+                    onGone = { nav.go(Route.NewChat) },
+                    subtitleProfile = if (route.profile != s.profile) shell.profileName(route.profile) else null,
                 )
             }
             is Route.Room -> {
@@ -279,8 +311,18 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             }
             is Route.GlobalAgent -> {
                 val profile = route.profile ?: s.profile
-                TopBar(term("global_agent"), onMenu = openDrawer, subtitle = shell.profileName(profile))
-                GlobalAgentScreen(profile, shell.profileName(profile))
+                GlobalAgentScreen(profile, shell.profileName(profile)) { sessionId ->
+                    TopBar(term("global_agent"), onMenu = openDrawer, subtitle = shell.profileName(profile)) {
+                        if (sessionId != null) {
+                            hub.core.android.ui.components.ChatInsightBar(sessionId, profile)
+                            hub.core.android.ui.screens.ChatMenuButton(
+                                shell, sessionId, profile, term("global_agent"),
+                                onOpenChat = { id, p -> nav.go(Route.Chat(id, p)) },
+                                onGone = { nav.go(Route.NewChat) },
+                            )
+                        }
+                    }
+                }
             }
         }
     }

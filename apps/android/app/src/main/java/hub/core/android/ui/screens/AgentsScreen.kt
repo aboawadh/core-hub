@@ -30,6 +30,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -86,7 +88,9 @@ private fun statusText(status: AgentStatus): Pair<String, Tone?> = when (status)
 fun AgentsScreen(profile: String, onOpen: (Route) -> Unit) {
     val context = LocalContext.current
     val t = LocalTokens.current
-    val agents = rememberLoad(profile) {
+    // An agent's registry entry changed (`agent.updated` on `/rt/jobs`): the cards read again.
+    val revision by hub.core.android.realtime.JobsFeed.agentsRevision.collectAsState()
+    val agents = rememberLoad(profile, revision) {
         val s = context.graph.store.current!!
         context.graph.apis(s).agents.agentsList(profile).items
     }

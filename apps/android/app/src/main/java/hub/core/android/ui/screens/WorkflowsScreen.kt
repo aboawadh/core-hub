@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -233,6 +234,15 @@ class WorkflowsModel(private val apis: () -> HubApis?, private val home: () -> S
         )
     }
 
+    /** A run opened from elsewhere (Background, Pending, a notice): its workflow's sheet, showing the run. */
+    suspend fun openRunOf(profile: String, runId: String) {
+        val run = call { it.schedules.schedulesGetWorkflowRun(profile, runId) }.getOrElse { e -> _ui.update { it.copy(error = e as HubError) }; return }
+        val workflow = _ui.value.items.firstOrNull { it.id == run.workflowId && it.profile == run.profile }
+            ?: call { it.schedules.schedulesGetWorkflow(run.profile, run.workflowId) }.getOrElse { e -> _ui.update { it.copy(error = e as HubError) }; return }
+        open(workflow)
+        _ui.update { it.copy(run = run) }
+    }
+
     suspend fun openRun(profile: String, runId: String) {
         call { it.schedules.schedulesGetWorkflowRun(profile, runId) }
             .onSuccess { run -> _ui.update { it.copy(run = run, error = null) } }
@@ -299,6 +309,7 @@ class WorkflowsViewModel(graph: AppGraph) : ViewModel() {
     fun closeRun() = model.closeRun()
     fun run(w: Workflow, input: String, limits: WorkflowLimitsOverride?) = viewModelScope.launch { model.run(w, input, limits) }
     fun openRun(profile: String, id: String) = viewModelScope.launch { model.openRun(profile, id) }
+    fun openRunOf(profile: String, id: String) = viewModelScope.launch { model.openRunOf(profile, id) }
     fun respond(approve: Boolean, reason: String?) = viewModelScope.launch { model.respond(approve, reason) }
     fun cancel() = viewModelScope.launch { model.cancel() }
 }
@@ -344,7 +355,7 @@ private fun stepColor(t: TokenColors, status: WorkflowStepStatus): Color = when 
     else -> t.textFaint
 }
 
-private fun stepIcon(kind: WorkflowNode.Kind?): Int = when (kind) {
+internal fun stepIcon(kind: WorkflowNode.Kind?): Int = when (kind) {
     WorkflowNode.Kind.APPROVAL -> Lucide.Hand
     WorkflowNode.Kind.CONDITION -> Lucide.ListFilter
     WorkflowNode.Kind.DELAY -> Lucide.Clock
@@ -368,6 +379,18 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     val ui by vm.ui.collectAsState()
     val t = LocalTokens.current
     val badges = ui.items.map { it.profile }.distinct().size > 1
+    // Making and editing a workflow on the phone (WorkflowEditor.kt).
+    val editOps = remember { WorkflowEditOps { context.graph.store.current?.let(context.graph::apis) } }
+    val session by shell.session.collectAsState()
+    var editing by remember { mutableStateOf<Workflow?>(null) }
+    var creating by remember { mutableStateOf<WorkflowDraft?>(null) }
+    var deleting by remember { mutableStateOf<Workflow?>(null) }
+    val focus by hub.core.android.nav.Focus.item.collectAsState()
+    LaunchedEffect(focus, ui.loading) {
+        if (ui.loading) return@LaunchedEffect
+        val f = hub.core.android.nav.Focus.take(hub.core.android.nav.FocusItem.Kind.WORKFLOW_RUN) ?: return@LaunchedEffect
+        vm.openRunOf(f.profile, f.id)
+    }
     Column(Modifier.fillMaxSize()) {
         if (ui.opened == null) ui.error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (ui.loading) {
@@ -379,6 +402,12 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item {
+                HubButton(
+                    stringResource(R.string.wfe_new), { creating = WorkflowDraft() }, size = ControlSize.Md, icon = Lucide.Plus,
+                    modifier = Modifier.testTag("workflows.new"),
+                )
+            }
             if (ui.items.isEmpty()) item { EmptyState(stringResource(R.string.workflows_empty), body = stringResource(R.string.workflows_empty_body), icon = Lucide.Workflow) }
             items(ui.items, key = { it.profile + "/" + it.id }) { w ->
                 HubCard(Modifier.testTag("workflow.card.${w.id}"), onClick = { vm.open(w) }, padding = 14.dp) {
@@ -406,15 +435,53 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     ui.opened?.let { w ->
         HubSheet(onDismiss = vm::close) {
             val run = ui.run
-            if (run == null) WorkflowSheet(w, ui, vm, shell)
-            else RunView(w, run, ui, vm, onOpenChat = { id -> vm.close(); onOpenChat(id, run.profile) })
+            if (run == null) {
+                val copyName = stringResource(R.string.wfe_copy_name, w.name)
+                WorkflowSheet(
+                    w, ui, vm, shell,
+                    onEdit = { vm.close(); editing = w },
+                    onDuplicate = { vm.close(); creating = WorkflowDraftRules.copyOf(w, copyName) },
+                    onDelete = { deleting = w },
+                )
+            } else RunView(w, run, ui, vm, editOps, onOpenChat = { id -> vm.close(); onOpenChat(id, run.profile) })
         }
+    }
+    editing?.let { w ->
+        WorkflowEditorSheet(w, w.profile, editOps, onDismiss = { editing = null }, onSaved = { editing = null; vm.reload() })
+    }
+    creating?.let { draft ->
+        WorkflowEditorSheet(
+            null, session?.profile ?: "default", editOps, onDismiss = { creating = null },
+            onSaved = { made -> creating = null; vm.reload(); vm.open(made) }, start = draft,
+        )
+    }
+    deleting?.let { w ->
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        hub.core.android.ui.kit.ConfirmDialog(
+            title = stringResource(R.string.wfe_confirm_delete, w.name),
+            body = null,
+            confirm = stringResource(R.string.wfe_delete),
+            onConfirm = {
+                deleting = null
+                scope.launch { editOps.delete(w).onSuccess { vm.close(); vm.reload() } }
+            },
+            onDismiss = { deleting = null },
+            danger = true,
+        )
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WorkflowSheet(w: Workflow, ui: WorkflowsUi, vm: WorkflowsViewModel, shell: ShellViewModel) {
+private fun WorkflowSheet(
+    w: Workflow,
+    ui: WorkflowsUi,
+    vm: WorkflowsViewModel,
+    shell: ShellViewModel,
+    onEdit: () -> Unit = {},
+    onDuplicate: () -> Unit = {},
+    onDelete: () -> Unit = {},
+) {
     val t = LocalTokens.current
     var input by remember(w.id) { mutableStateOf("") }
     var limits by remember(w.id) { mutableStateOf(Workflows.LimitsInput()) }
@@ -482,14 +549,19 @@ private fun WorkflowSheet(w: Workflow, ui: WorkflowsUi, vm: WorkflowsViewModel, 
                 }
             }
         }
-        Text(stringResource(R.string.workflows_edit_on_web), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+        // Its steps and connections are edited here (WorkflowEditor.kt).
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HubButton(stringResource(R.string.wfe_edit), onEdit, kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.Pencil, modifier = Modifier.testTag("workflow.edit"))
+            HubButton(stringResource(R.string.wfe_duplicate), onDuplicate, kind = ButtonKind.Ghost, size = ControlSize.Md, icon = Lucide.Copy, modifier = Modifier.testTag("workflow.duplicate"))
+            HubButton(stringResource(R.string.wfe_delete), onDelete, kind = ButtonKind.Danger, size = ControlSize.Md, icon = Lucide.Trash, modifier = Modifier.testTag("workflow.delete"))
+        }
     }
 }
 
 /** A run, read-only and live: its state, then each step with what it did; a waiting step asks here. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: WorkflowsViewModel, onOpenChat: (String) -> Unit) {
+private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: WorkflowsViewModel, editOps: WorkflowEditOps, onOpenChat: (String) -> Unit) {
     val t = LocalTokens.current
     var denying by remember(run.id) { mutableStateOf(false) }
     var reason by remember(run.id) { mutableStateOf("") }
@@ -560,6 +632,29 @@ private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: Workflow
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 LucideIcon(Lucide.Info, null, size = 14.dp, tint = t.textMuted)
                 Text(stringResource(R.string.workflows_finished), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            }
+            // A new run from one of the steps this run reached, reusing what the steps before it said.
+            val reached = Workflows.rows(w, run).filter { it.step != null }
+            if (reached.isNotEmpty()) {
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                var failed by remember(run.id) { mutableStateOf<hub.core.android.data.HubError?>(null) }
+                SectionTitle(stringResource(R.string.wfe_rerun_from_here))
+                Text(stringResource(R.string.wfe_rerun_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    reached.forEach { row ->
+                        HubButton(
+                            row.title, {
+                                scope.launch {
+                                    editOps.rerun(run.profile, run.id, row.nodeId)
+                                        .onSuccess { accepted -> vm.openRun(run.profile, accepted.workflowRunId) }
+                                        .onFailure { failed = it as hub.core.android.data.HubError }
+                                }
+                            },
+                            kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.RotateCw, modifier = Modifier.testTag("workflow.rerun.${row.nodeId}"),
+                        )
+                    }
+                }
+                ErrorNotice(failed)
             }
         }
     }

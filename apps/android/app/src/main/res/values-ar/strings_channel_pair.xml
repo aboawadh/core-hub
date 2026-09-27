@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ربط واتساب برمز QR على الجوّال (ADR 0015)، أصلي منذ 2026-09-27؛ نصوص الويب channels.login.* -->
+<resources>
+    <string name="chpair_title">ربط %1$s</string>
+    <string name="chpair_note">يربط هرمز وكيل هذا البروفايل بجوّال. امسح الرمز من واتساب في الجوّال: الإعدادات ← الأجهزة المرتبطة ← ربط جهاز.</string>
+    <string name="chpair_expires">الرمز صالح حتى %1$s.</string>
+    <string name="chpair_done">تم الربط. يردّ الوكيل عليه بعد إعادة تشغيله القادمة.</string>
+    <string name="chpair_done_as">تم الربط باسم %1$s. يردّ الوكيل عليه بعد إعادة تشغيله القادمة.</string>
+    <string name="chpair_failed">فشل الربط.</string>
+    <string name="chpair_cancelled">أُوقف الربط.</string>
+    <string name="chpair_again">ابدأ من جديد</string>
+    <string name="chpair_done_now">تم الربط. يردّ الوكيل عليه الآن؛ أوّل من يراسله ينتظر موافقتك هنا.</string>
+    <string name="chpair_done_as_now">تم الربط باسم %1$s. يردّ الوكيل عليه الآن؛ أوّل من يراسله ينتظر موافقتك هنا.</string>
+    <string name="chpair_done_self_now">تم الربط. افتح «مراسلة نفسي» في واتساب على جوّالك واكتب للوكيل.</string>
+    <string name="chpair_done_as_self_now">تم الربط باسم %1$s. افتح «مراسلة نفسي» في واتساب على جوّالك واكتب للوكيل.</string>
+    <string name="chpair_personal_warning">تنبيه: إن كان هذا رقمك الشخصي فكلّ من يراسله يتلقّى ردّ الاقتران من الوكيل. اختر «أنا (مراسلة نفسي)» بدلًا من ذلك.</string>
+    <string name="chpair_continue">متابعة</string>
+    <string name="chpair_qr">رمز الربط</string>
+    <string name="chpair_other_phone">امسحه بواتساب من الجوّال الذي عليه هذا الرقم. وإن كان واتساب على هذا الجوّال نفسه فافتح هذه الصفحة على جوّال أو جهاز لوحي آخر مسجّل في هذا المركز وامسحه منه.</string>
+</resources>

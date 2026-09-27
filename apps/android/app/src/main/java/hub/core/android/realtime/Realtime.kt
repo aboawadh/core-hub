@@ -33,6 +33,8 @@ const val DEVICES_NAMESPACE = "/rt/devices"
 const val TASKS_NAMESPACE = "/rt/tasks"
 const val SCHEDULES_NAMESPACE = "/rt/schedules"
 const val ROOMS_NAMESPACE = "/rt/rooms"
+/** Every job of the profiles joined, and `agent.updated` (JobsFeed.kt); nothing to subscribe to. */
+const val JOBS_NAMESPACE = "/rt/jobs"
 
 /** One realtime message: the envelope of packages/contracts/events/README.md. */
 data class Envelope(
@@ -130,7 +132,7 @@ class Realtime(private val http: OkHttpClient) {
         if (identity == connectedAs && !force) return
         close()
         connectedAs = identity
-        for (namespace in listOf(SESSIONS_NAMESPACE, DEVICES_NAMESPACE, TASKS_NAMESPACE, SCHEDULES_NAMESPACE, ROOMS_NAMESPACE)) {
+        for (namespace in listOf(SESSIONS_NAMESPACE, DEVICES_NAMESPACE, TASKS_NAMESPACE, SCHEDULES_NAMESPACE, ROOMS_NAMESPACE, JOBS_NAMESPACE)) {
             sockets[namespace] = open(session, namespace)
         }
     }

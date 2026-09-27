@@ -81,6 +81,8 @@ internal fun ProvidersTab(ops: ModelOps, loader: Loader<List<Provider>>, isAdmin
     LoadView(loader) { providers ->
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("models.providers")) {
             item { ErrorNotice(error) }
+            // Did the runtime take what was configured (ModelsRuntimeCard.kt)?
+            item(key = "runtime") { RuntimeCard(ops.profile, isAdmin, providers) }
             note?.let { (text, tone) -> item { NoticeBox(text, tone) } }
             if (isAdmin) item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

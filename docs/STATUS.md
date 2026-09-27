@@ -684,6 +684,32 @@ its approval.
   Hermes's hide-ids switch for admins as on the web. The contract has no delete for a notice and no
   list of browser sign-ins, so neither is offered. Android: JVM tests against a scripted hub and
   Robolectric pictures; iOS: unit tests on the CI simulator; **not yet tried on the owner's phones**.
+- **Every section of the Android app works on its own** (since 2026-09-27,
+  `docs/changes/2026-09-27-twuijri-android-self-sufficient.md`): nothing in the app opens the web for
+  a hub page any more, and no control is a dead end. Native now: Settings → **Updates** (the hub's
+  shelf of app builds, its source, token and channels), **Linked hubs** (invite, use an invite,
+  approve, rename, switch off, limit, ask a shared agent, log, unlink, which agents to share) and the
+  owner's **Terminal** (a line at a time with the keys a phone lacks; shown only when `GET /terminal`
+  answers 200) — both added to `surfaceRoutes.android`; **WhatsApp pairing by QR** drawn on the phone;
+  a **hub link or room invite in a reply** opens in the app; the chats list's **categories** (make,
+  rename, colour, order, delete, move a chat) and the **Telegram/WhatsApp conversations** Hermes keeps
+  (read-only transcript with pictures and older pages, hide/show, delete for admins, **Continue in Core
+  Hub**); a chat's **trajectory**; **workflows made, edited, duplicated and deleted** (steps as a list,
+  each with its form and connections; checked by the hub as they change) and **run again from a step**;
+  the **Runtime** checks on Models and **Fetch** in Add provider; a task's **worktree**; **Send a test
+  notification**; **Open** leads to the task, schedule or workflow run itself; the agent page makes
+  and edits **jobs**; a knowledge entry reads in full; Device connections sees when a code is taken;
+  the global agent's conversation has its menu; and the **Display preferences are applied** (text size,
+  reasoning, tool calls, compact, send while busy, where links open). The contract is unchanged.
+  JVM tests against a scripted hub and Robolectric renders; **not yet tried on a phone or a real hub**.
+  Follow-up the same day (`docs/changes/2026-09-27-twuijri-android-self-sufficient-2.md`, as iOS's #202):
+  chats **dragged into order** (kept on the phone per view; Move up/down; dropped on a category to file
+  it), the **message queue** above the composer with «wait in line» (Send now, Steer, Remove; sent in
+  order as turns end), the composer's **`/` commands** with the **skill picker** after `/skill `,
+  **`/rt/jobs` heard for the session** (job pages wake on events, polling as fallback; Agents reads again
+  on `agent.updated`), the **trajectory timeline** with the web's rules (idle folded, parallel calls on
+  their own rows, reading direction, a bar opens its step) and the Session log as the hub sends it, and a
+  **model picker** for workflow agent steps.
 - **Explicit `null` from the phone clients** (since 2026-09-27, DECISIONS §114, proposed — owner to
   confirm; `docs/changes/2026-09-27-twuijri-client-explicit-null.md`): the generated Kotlin and Swift
   clients always send a required property that may be null (`null` when unset), and send an optional

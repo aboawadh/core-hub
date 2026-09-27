@@ -1,5 +1,8 @@
 package hub.core.android.ui.screens
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -59,6 +62,7 @@ private fun KnowledgePage(profile: String) {
         ops.knowledge(kind, query, cursor).getOrThrow()
     }
     val labels = knowledgeKindLabels()
+    var reading by remember { mutableStateOf<KnowledgeItem?>(null) }
     ListScaffold(
         list, key = { it.id },
         query = typed, onQuery = { typed = it }, searchHint = stringResource(R.string.knowledge_search),
@@ -68,7 +72,23 @@ private fun KnowledgePage(profile: String) {
             Text(stringResource(R.string.knowledge_intro), fontSize = FontTokens.sizeXs.sp, color = LocalTokens.current.textMuted)
         },
         tag = "knowledge.list",
-    ) { item -> KnowledgeRow(item, labels[item.kind.value] ?: item.kind.value) }
+    ) { item -> KnowledgeRow(item, labels[item.kind.value] ?: item.kind.value) { reading = item } }
+    // A tap reads the whole entry (the row shows three lines); the contract lists them read-only.
+    reading?.let { item ->
+        hub.core.android.ui.kit.HubSheet({ reading = null }, Modifier.testTag("knowledge.read"), title = item.title ?: stringResource(R.string.knowledge_untitled)) {
+            Text(
+                "${labels[item.kind.value] ?: item.kind.value} · ${KnowledgeRules.day(item).format(dayFormat)}",
+                fontSize = FontTokens.sizeXs.sp, color = LocalTokens.current.textMuted,
+            )
+            androidx.compose.foundation.layout.Column(
+                Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item.content?.takeIf { it.isNotBlank() }?.let { hub.core.android.ui.components.MarkdownView(it) }
+                if (item.tags.isNotEmpty()) Text(item.tags.joinToString(" · "), fontSize = FontTokens.sizeXs.sp, color = LocalTokens.current.textMuted)
+            }
+        }
+    }
 }
 
 @Composable
@@ -82,9 +102,9 @@ private val dayFormat: DateTimeFormatter get() = DateTimeFormatter.ofPattern("d 
 /** One row: the kind, the title, the day, the text (three lines) and its tags. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun KnowledgeRow(item: KnowledgeItem, kindLabel: String) {
+internal fun KnowledgeRow(item: KnowledgeItem, kindLabel: String, onOpen: (() -> Unit)? = null) {
     val t = LocalTokens.current
-    HubCard(Modifier.testTag("knowledge.item.${item.id}"), padding = 12.dp) {
+    HubCard(Modifier.testTag("knowledge.item.${item.id}"), onClick = onOpen, padding = 12.dp) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Badge(
                 kindLabel,

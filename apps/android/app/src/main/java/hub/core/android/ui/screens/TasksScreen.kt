@@ -246,6 +246,14 @@ fun TasksScreen(shell: ShellViewModel, onOpenChat: (sessionId: String, profile: 
     val ui by vm.ui.collectAsState()
     val board = ui.board
     var opened by remember { mutableStateOf<Task?>(null) }
+    // «Open» on a task run, a notice or a push leads to the task itself (nav/Focus.kt).
+    val focus by hub.core.android.nav.Focus.item.collectAsState()
+    LaunchedEffect(focus, board != null) {
+        val b = board ?: return@LaunchedEffect
+        if (focus?.kind != hub.core.android.nav.FocusItem.Kind.TASK) return@LaunchedEffect
+        val f = hub.core.android.nav.Focus.take(hub.core.android.nav.FocusItem.Kind.TASK) ?: return@LaunchedEffect
+        Board.columns(b).flatMap { it.second }.firstOrNull { it.id == f.id }?.let { opened = it }
+    }
     Column(Modifier.fillMaxSize()) {
         ui.error?.let { ErrorNotice(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         if (board == null) {

@@ -179,6 +179,9 @@ internal fun ScheduleNoteView(note: ScheduleNote?, modifier: Modifier = Modifier
 fun SchedulesScreen(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     // Schedules and workflows share the page, as on the web: one segmented switch above them.
     var half by rememberSaveable { mutableStateOf(SchedulesHalf.SCHEDULES) }
+    // A workflow run to open (Background, Pending, a notice): the Workflows half shows it (nav/Focus.kt).
+    val focus by hub.core.android.nav.Focus.item.collectAsState()
+    LaunchedEffect(focus) { if (focus?.kind == hub.core.android.nav.FocusItem.Kind.WORKFLOW_RUN) half = SchedulesHalf.WORKFLOWS }
     Column(Modifier.fillMaxSize()) {
         Segmented(
             listOf(
@@ -210,6 +213,11 @@ private fun SchedulesList(shell: ShellViewModel, onOpenChat: (String, String) ->
     var editing by remember { mutableStateOf<Schedule?>(null) }
     var creating by remember { mutableStateOf(false) }
     val confirm = rememberConfirmDelete<Schedule>()
+    val focus by hub.core.android.nav.Focus.item.collectAsState()
+    LaunchedEffect(focus) {
+        val f = hub.core.android.nav.Focus.take(hub.core.android.nav.FocusItem.Kind.SCHEDULE) ?: return@LaunchedEffect
+        vm.ops.byId(f.profile, f.id).onSuccess { opened = it }
+    }
     val many = profiles.size > 1 || vm.list.items.map { it.profile }.distinct().size > 1
     val pause = stringResource(R.string.schedules_pause)
     val resume = stringResource(R.string.schedules_resume)

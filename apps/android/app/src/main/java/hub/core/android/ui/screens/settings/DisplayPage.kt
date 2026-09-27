@@ -100,7 +100,7 @@ private fun HubPreferences() {
     val ops = remember { OwnSettingsOps { graph.apis(graph.store.current!!) } }
     var saved by remember { mutableStateOf<Preferences?>(null) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    LaunchedEffect(Unit) { ops.preferences().onSuccess { saved = it }.onFailure { error = it as HubError } }
+    LaunchedEffect(Unit) { ops.preferences().onSuccess { saved = it; HubDisplay.set(it) }.onFailure { error = it as HubError } }
 
     fun save(change: (Preferences) -> Preferences) {
         val before = saved ?: return
@@ -109,7 +109,7 @@ private fun HubPreferences() {
         saved = next
         scope.launch {
             ops.savePreferences(next)
-                .onSuccess { saved = it; error = null }
+                .onSuccess { saved = it; error = null; HubDisplay.set(it) }
                 .onFailure { saved = before; error = it as HubError }
         }
     }

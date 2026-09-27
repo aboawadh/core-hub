@@ -86,6 +86,7 @@ object Lucide {
     val Mic = R.drawable.lucide_mic
     val Moon = R.drawable.lucide_moon
     val Music = R.drawable.lucide_music
+    val Network = R.drawable.lucide_network
     val OctagonX = R.drawable.lucide_octagon_x
     val Palette = R.drawable.lucide_palette
     val Paperclip = R.drawable.lucide_paperclip
@@ -105,9 +106,11 @@ object Lucide {
     val RotateCcw = R.drawable.lucide_rotate_ccw
     val RotateCcwClock = R.drawable.lucide_rotate_ccw_clock
     val RotateCw = R.drawable.lucide_rotate_cw
+    val Route = R.drawable.lucide_route
     val ScanQrCode = R.drawable.lucide_scan_qr_code
     val ScrollText = R.drawable.lucide_scroll_text
     val Search = R.drawable.lucide_search
+    val Send = R.drawable.lucide_send
     val Server = R.drawable.lucide_server
     val Settings = R.drawable.lucide_settings
     val Share = R.drawable.lucide_share
@@ -119,8 +122,10 @@ object Lucide {
     val Smartphone = R.drawable.lucide_smartphone
     val Sparkles = R.drawable.lucide_sparkles
     val SquarePen = R.drawable.lucide_square_pen
+    val SquareTerminal = R.drawable.lucide_square_terminal
     val Sun = R.drawable.lucide_sun
     val SunMoon = R.drawable.lucide_sun_moon
+    val Tag = R.drawable.lucide_tag
     val Terminal = R.drawable.lucide_terminal
     val Trash = R.drawable.lucide_trash
     val TriangleAlert = R.drawable.lucide_triangle_alert

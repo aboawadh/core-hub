@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإعدادات ← التحديثات: رفّ إصدارات التطبيقات في الهب (أصلية منذ 2026-09-27). -->
+<resources>
+    <string name="upd_intro">إصدارات تطبيقات الجوال وسطح المكتب التي يقدّمها هذا المركز، ومن أين يجلبها. الويب يخدمه المركز نفسه ويتغيّر بتغيّره.</string>
+    <string name="upd_source">المصدر والقناة</string>
+    <string name="upd_default_channel">القناة الافتراضية</string>
+    <string name="upd_channel_stable">مستقرة</string>
+    <string name="upd_channel_test">اختبارية</string>
+    <string name="upd_from_source">اجلب الإصدارات من مستودع</string>
+    <string name="upd_from_source_hint">يقرأ المركز إصدارات GitHub بنفسه بدل رفعها يدويًا.</string>
+    <string name="upd_repo">المستودع</string>
+    <string name="upd_repo_hint">بصيغة owner/repo.</string>
+    <string name="upd_token">الرمز</string>
+    <string name="upd_token_hint">لمستودع خاص. يُكتب ولا يُعرض.</string>
+    <string name="upd_token_stored">محفوظ. اكتب رمزًا جديدًا لتبديله.</string>
+    <string name="upd_auto_publish">نشر تلقائي للقناة الاختبارية</string>
+    <string name="upd_auto_publish_hint">كل إصدار جديد في المصدر يُنشر اختباريًّا وحده.</string>
+    <string name="upd_save">حفظ</string>
+    <string name="upd_shelf">الإصدارات</string>
+    <string name="upd_empty">لا إصدارات</string>
+    <string name="upd_empty_body">ما يُنشر هنا تجده تطبيقات الجوال وسطح المكتب. ولا شيء على الرفّ بعد.</string>
+    <string name="upd_mandatory">إلزامي</string>
+    <string name="upd_platform_android">أندرويد</string>
+    <string name="upd_platform_ios">آيفون</string>
+    <string name="upd_platform_macos">ماك</string>
+    <string name="upd_platform_windows">ويندوز</string>
+    <string name="upd_platform_linux">لينكس</string>
+    <string name="upd_delete">حذف</string>
+    <string name="upd_delete_title">حذف %1$s من الرفّ؟</string>
+    <string name="upd_delete_body">يختفي من قائمة التحديثات. ما نُزِّل على جهاز يبقى يعمل.</string>
+</resources>

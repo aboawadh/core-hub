@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أوامر / في مربع الكتابة، ومنتقي المهارات، وطابور الرسائل (منذ 2026-09-27)؛ نصوص الويب slash.* وqueue.* -->
+<resources>
+    <string name="slash_title">الأوامر</string>
+    <string name="slash_skills_title">المهارات — اختر مهارة تُستعمل في هذه الرسالة</string>
+    <string name="slash_needs_argument">يحتاج %1$s إلى كلام بعده.</string>
+    <string name="slash_model_unknown">لا يوجد نموذج اسمه «%1$s» في هذا البروفايل.</string>
+    <string name="slash_cleared">مُسحت الشاشة؛ الرسائل ما زالت في المحادثة.</string>
+    <string name="slash_show_cleared">أظهرها</string>
+    <string name="slash_no_match">لا أمر مطابق. أرسلها فتذهب رسالةً عادية.</string>
+    <string name="slash_describe_compress">اضغط سياق هذه المحادثة الآن (أضف كلامًا يقول ما يُحتفظ به)</string>
+    <string name="slash_describe_steer">وجّه الدور الجاري دون إيقافه</string>
+    <string name="slash_describe_skill">استعمل إحدى مهارات الوكيل في هذه الرسالة</string>
+    <string name="slash_describe_plan">اطلب من الوكيل خطة دون تنفيذ العمل</string>
+    <string name="slash_describe_goal">حدّد هدفًا دائمًا يعمل عليه الوكيل عبر الأدوار، أو اعرضه</string>
+    <string name="slash_describe_learn">حوّل العمل الأخير، أو ما تصفه، إلى مهارة</string>
+    <string name="slash_describe_new">ابدأ محادثة جديدة مع هذا الوكيل</string>
+    <string name="slash_describe_fork">انسخ هذه المحادثة إلى محادثة جديدة</string>
+    <string name="slash_describe_archive">أرشف هذه المحادثة</string>
+    <string name="slash_describe_model">غيّر النموذج (أضف اسمًا، أو اختر من القائمة)</string>
+    <string name="slash_describe_clear_screen">امسح الشاشة؛ لا يُحذف شيء</string>
+    <string name="slash_skills_none">لا مهارات مفعّلة لهذا الوكيل.</string>
+    <string name="queue_title">رسائل في الانتظار</string>
+    <string name="queue_send_now">أرسلها الآن</string>
+    <string name="queue_steer">توجيه</string>
+    <string name="queue_steer_hint">أوقف الدور الجاري وخُذ هذه بدله، في السياق نفسه.</string>
+    <string name="queue_remove">إزالة</string>
+    <string name="order_move_up">انقل للأعلى</string>
+    <string name="order_move_down">انقل للأسفل</string>
+</resources>

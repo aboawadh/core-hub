@@ -69,6 +69,12 @@ data class ChatUi(
     /** What the last compress or steer did (not an error). */
     val notice: ChatNotice? = null,
     val compressing: Boolean = false,
+    /** Messages held on the phone while a turn runs, in order (MessageQueue.kt). */
+    val queue: List<QueuedMessage> = emptyList(),
+    /** `/clear-screen`: the messages up to this `seq` are hidden until asked back (nothing is deleted). */
+    val hiddenThrough: Int? = null,
+    /** The agent's enabled skills, for the menu after `/skill ` (null until read). */
+    val skills: List<hub.core.android.chat.SlashCommands.SkillChoice>? = null,
 )
 
 /** The outcome lines of the chat's own actions, turned into words by the screen. */
@@ -77,6 +83,10 @@ sealed interface ChatNotice {
     data class Compressed(val outcome: ChatControls.Compression) : ChatNotice
     data object Steered : ChatNotice
     data object SteerQueued : ChatNotice
+    /** A `/command` that needs words after it was sent without them. */
+    data class NeedsWords(val command: String) : ChatNotice
+    /** `/model <name>` named no model of this profile. */
+    data class UnknownModel(val model: String) : ChatNotice
 }
 
 /**
@@ -112,6 +122,8 @@ class ChatViewModel(
                 graph.realtime.events.collect { envelope ->
                     val before = _ui.value.chat
                     _ui.update { it.copy(chat = ChatReducer.apply(it.chat, envelope, System.currentTimeMillis())) }
+                    if (_ui.value.chat.running) holding = false
+                    drain()
                     // This device → spoken replies: read the finished reply aloud while it is on screen.
                     if (envelope.event == "run.completed" && before.running && !_ui.value.chat.running &&
                         graph.device.choices.value.spokenReplies && graph.inForeground()
@@ -204,7 +216,6 @@ class ChatViewModel(
     /** The person's words and the files they attached, as one run (web: `blocksFor`); [replyTo] names the message answered. */
     fun send(outgoing: Outgoing, onCreated: (sessionId: String, profile: String) -> Unit = { _, _ -> }, replyTo: String? = null) {
         if (outgoing.isEmpty) return
-        val body = outgoing.text.trim()
         val api = apis ?: return
         _ui.update { it.copy(sending = true, error = null) }
         viewModelScope.launch {
@@ -220,13 +231,33 @@ class ChatViewModel(
                     .onFailure { e -> _ui.update { it.copy(sending = false, error = e as HubError) } }
                 return@launch
             }
+            // «Wait in line» while a turn runs: the message waits here, not in the hub's queue (MessageQueue.kt).
+            // A message behind others that wait goes behind them too, so the order stays the order typed.
+            if (MessageQueueRules.holdsBack(HubDisplay.prefs.value, _ui.value.chat.running || holding || _ui.value.queue.isNotEmpty())) {
+                _ui.update { it.copy(sending = false, queue = it.queue + MessageQueueRules.queued(outgoing, replyTo)) }
+                return@launch
+            }
+            // Send while the agent works follows the person's choice (Display → busy_input_mode).
+            post(outgoing, HubDisplay.busyWhen(HubDisplay.prefs.value), replyTo)
+        }
+    }
+
+    /** One message to the hub now, with [whenBusy] (`RunCreate.when`), echoed in the transcript at once. */
+    private suspend fun post(outgoing: Outgoing, whenBusy: RunCreate.When, replyTo: String?): Boolean {
+        val id = sessionId ?: return false
+        val api = apis ?: return false
+        val body = outgoing.text.trim()
+        _ui.update { it.copy(sending = true, error = null) }
+        var posted = false
+        run {
             hubCall {
                 api.sessions.sessionsCreateRun(
-                    profile, sessionId,
-                    RunCreate(content = outgoing.blocks(), replyToMessageId = replyTo),
+                    profile, id,
+                    RunCreate(content = outgoing.blocks(), `when` = whenBusy, replyToMessageId = replyTo),
                     UUID.randomUUID().toString(),
                 )
             }.onSuccess { accepted ->
+                posted = true
                 _ui.update { ui ->
                     val chat = ui.chat
                     val echo = if (chat.messages.any { it.id == accepted.messageId }) chat.messages else chat.messages + ChatMessage(
@@ -239,6 +270,64 @@ class ChatViewModel(
                     ui.copy(sending = false, chat = chat.copy(messages = echo, failure = null))
                 }
             }.onFailure { e -> _ui.update { it.copy(sending = false, error = e as HubError) } }
+        }
+        return posted
+    }
+
+    /** A released message's run has been accepted but not yet heard: nothing more goes until it is. */
+    private var holding = false
+    private var holdJob: kotlinx.coroutines.Job? = null
+
+    /** Sends one waiting message: in turn (`queue`), now after this turn (`next`), or instead of it (`interrupt`). */
+    private fun release(item: QueuedMessage, whenBusy: RunCreate.When) {
+        _ui.update { it.copy(queue = it.queue.filter { q -> q.key != item.key }) }
+        holding = true
+        viewModelScope.launch {
+            val ok = post(item.outgoing, whenBusy, item.replyTo)
+            holdJob?.cancel()
+            holdJob = viewModelScope.launch {
+                // The run's first event normally ends the hold; this is the fallback for a missed one.
+                kotlinx.coroutines.delay(if (ok) MessageQueueRules.HOLD_MS else 0)
+                holding = false
+                drain()
+            }
+        }
+    }
+
+    /** The queue empties itself in order, one message per turn, as each turn ends. */
+    private fun drain() {
+        val ui = _ui.value
+        if (!MessageQueueRules.shouldDrain(ui.chat.running, ui.sending, holding, ui.queue)) return
+        release(ui.queue.first(), RunCreate.When.QUEUE)
+    }
+
+    /** «Send now»: jumps the hub's queue and runs right after the live turn. */
+    fun sendNow(item: QueuedMessage) = release(item, RunCreate.When.NEXT)
+
+    /** «Steer»: stops the live turn and takes this instead, in the same context. */
+    fun steerWith(item: QueuedMessage) = release(item, RunCreate.When.INTERRUPT)
+
+    /** «Remove»: it was never sent, so there is nothing to cancel. */
+    fun unqueue(item: QueuedMessage) = _ui.update { it.copy(queue = it.queue.filter { q -> q.key != item.key }) }
+
+    /** Leaving the conversation drops what was never sent, as closing the web's tab does. */
+    fun dropQueue() = _ui.update { it.copy(queue = emptyList()) }
+
+    /** `/clear-screen`: hides what is on the screen now; «Show them» brings it back. */
+    fun clearScreen() = _ui.update { ui -> ui.copy(hiddenThrough = ui.chat.messages.maxOfOrNull { it.seq } ?: ui.hiddenThrough) }
+    fun showCleared() = _ui.update { it.copy(hiddenThrough = null) }
+
+    fun say(notice: ChatNotice) = _ui.update { it.copy(notice = notice) }
+
+    /** The agent's enabled skills, read once, for the menu after `/skill `. */
+    fun loadSkills(agentId: String?) {
+        val id = agentId ?: return
+        if (_ui.value.skills != null) return
+        val api = apis ?: return
+        _ui.update { it.copy(skills = null) }
+        viewModelScope.launch {
+            val list = hubCall { api.agents.agentsListSkills(profile, id).categories }.getOrNull()
+            _ui.update { it.copy(skills = list?.let(hub.core.android.chat.SlashCommands::skills) ?: emptyList()) }
         }
     }
 

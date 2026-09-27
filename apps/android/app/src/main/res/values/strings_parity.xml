@@ -17,7 +17,7 @@
     <string name="workflow_limit_step">%1$d min a step</string>
     <string name="workflow_counts">%1$d steps · %2$d runs</string>
     <string name="workflows_empty">No workflows yet</string>
-    <string name="workflows_empty_body">Workflows are drawn on the web; they run and are followed here.</string>
+    <string name="workflows_empty_body">Make one with New workflow: add its steps and connect them. They run and are followed here.</string>
     <string name="workflows_input">Input</string>
     <string name="workflows_input_hint">Optional: what this run should work on</string>
     <string name="workflows_run_limits">Limits for this run</string>
@@ -29,7 +29,6 @@
     <string name="workflows_limit_step_bad">Between 1 minute and a day.</string>
     <string name="workflows_run">Run</string>
     <string name="workflows_runs">Recent runs</string>
-    <string name="workflows_edit_on_web">Steps and links are edited on the web.</string>
     <string name="workflows_waiting_step">«%1$s» waits for your approval.</string>
     <string name="workflows_approve">Approve</string>
     <string name="workflows_deny">Deny</string>
@@ -247,6 +246,4 @@
     <string name="locate_choice_always">Always</string>
     <string name="locate_choice_never">Never</string>
     <string name="locate_hint">When an agent needs to know where you are, this phone asks you first, answers every time, or never does.</string>
-    <string name="settings_on_the_web">On the web</string>
-    <string name="settings_on_the_web_hint">Opens in the browser: it needs a computer\'s screen.</string>
 </resources>

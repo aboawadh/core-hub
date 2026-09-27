@@ -188,12 +188,14 @@ private fun AgentMessage(message: ChatMessage, profile: String) {
     val shape = AbsoluteRoundedCornerShape(topLeft = small, topRight = big, bottomRight = big, bottomLeft = big)
     Column(
         Modifier.fillMaxWidth().background(t.agentBubble, shape).border(1.dp, t.agentBubbleBorder, shape)
-            .padding(12.dp).testTag("message.agent"),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(if (hub.core.android.ui.screens.LocalChatDisplay.current.compact) 8.dp else 12.dp).testTag("message.agent"),
+        verticalArrangement = Arrangement.spacedBy(if (hub.core.android.ui.screens.LocalChatDisplay.current.compact) 4.dp else 8.dp),
     ) {
         CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides t.agentBubbleText) {
-            if (!message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
-            ToolActivityView(message.toolCalls, live = message.streaming)
+            // The person's Display preferences (HubDisplay.kt): reasoning and tool calls may be hidden.
+            val display = hub.core.android.ui.screens.LocalChatDisplay.current
+            if (display.showReasoning && !message.streaming && message.reasoning.isNotBlank()) ReasoningFold(message.reasoning, message.reasoningMs)
+            if (display.showToolCalls) ToolActivityView(message.toolCalls, live = message.streaming)
             // A link in the reply that names one of its files opens it (FileLinkHandler).
             if (message.text.isNotBlank()) FileLinkHandler(message.attachments, profile) { MarkdownView(message.text) }
             MessageFiles(message.attachments, profile)
