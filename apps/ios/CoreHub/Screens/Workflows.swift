@@ -503,6 +503,14 @@ struct WorkflowRunView: View {
                     HStack(spacing: Space.s2) {
                         StatusPill(text: l10n("workflows.run_\(run.status.rawValue)"), kind: WorkflowLogic.runKind(run.status))
                             .accessibilityIdentifier("workflow.run.status")
+                        // Where the run is (§127); a value this app does not know is shown as it is.
+                        if let phase = run.phase {
+                            StatusPill(text: l10n.has("workflow_editor.phase.\(phase)") ? l10n("workflow_editor.phase.\(phase)") : phase)
+                                .accessibilityIdentifier("workflow.run.phase")
+                        }
+                        if let task = run.taskId {
+                            StatusPill(text: l10n("workflow_editor.run_task", ["id": task]))
+                        }
                         if let started = run.startedAt {
                             Text(started.shortText(app.language)).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                         }

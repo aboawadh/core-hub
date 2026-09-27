@@ -136,6 +136,16 @@
       "message": "Message",
       "targets": "Sends to",
       "read_only": "A “Send message” step: its targets are kept as they are when you save here; change them on the web."
-    }
+    },
+    "phase": {
+      "received": "Received",
+      "analyzing": "Analyzing",
+      "needs_input": "Needs your answer",
+      "approved": "Approved",
+      "executing": "Executing",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "run_task": "Task {id}"
   }
 }

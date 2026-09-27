@@ -28,6 +28,7 @@ import {
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
 import { SendForm } from './SendForm.js';
+import { StepTest } from './StepTest.js';
 import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
 import type { Agent, Model } from '../../types.js';
@@ -243,6 +244,7 @@ export function StepPanel({
       )}
 
       <Connections draft={draft} node={node} dispatch={dispatch} />
+      <StepTest key={node.id} node={node} profile={profile ?? 'default'} />
 
       <div className="flex flex-wrap gap-2 border-t border-line pt-3">
         <Button

@@ -1779,6 +1779,30 @@
         "partial": "Sent to some targets only",
         "failed": "Not sent"
       }
+    },
+    "alert": {
+      "title": "When a run fails",
+      "inbox": "Tell me in the inbox",
+      "hint": "The workflow’s name and the run’s error. Telegram and a conversation work as in a Send message step."
+    },
+    "test": {
+      "title": "Test this step",
+      "input": "Sample input ({{input}})",
+      "trigger": "Sample event ({{trigger.…}}), as JSON",
+      "bad_json": "The sample event is not valid JSON.",
+      "execute": "Run the agent for real",
+      "run": "Try it",
+      "yes": "Yes — the green connections would follow",
+      "no": "No — the red connections would follow"
+    },
+    "phase": {
+      "received": "Received",
+      "analyzing": "Analyzing",
+      "needs_input": "Needs your answer",
+      "approved": "Approved",
+      "executing": "Executing",
+      "completed": "Completed",
+      "failed": "Failed"
     }
   },
   "audit": {

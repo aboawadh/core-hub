@@ -78,6 +78,14 @@ export interface Draft {
   working_dir: string | null;
   nodes: WfNode[];
   edges: WfEdge[];
+  /** Who is told when a run fails (§127); absent until the workflow or the person sets it. */
+  on_failure?: FailureAlert | null;
+}
+
+/** The contract's `WorkflowFailureAlert`. */
+export interface FailureAlert {
+  inbox: boolean;
+  send: Send | null;
 }
 
 export type Selection = { type: 'node'; id: string } | { type: 'edge'; id: string } | null;
@@ -102,6 +110,7 @@ export type Action =
   | { type: 'load'; draft: Draft }
   | { type: 'rename'; name: string }
   | { type: 'describe'; description: string | null }
+  | { type: 'alert'; alert: FailureAlert | null }
   | { type: 'add'; kind: NodeKind; title: string; position?: Position; agentId?: string | null }
   | { type: 'move'; id: string; position: Position }
   | { type: 'nudge'; id: string; dx: number; dy: number }
@@ -216,6 +225,8 @@ export function reducer(state: EditorState, action: Action): EditorState {
       return change({ ...draft, name: action.name });
     case 'describe':
       return change({ ...draft, description: action.description });
+    case 'alert':
+      return change({ ...draft, on_failure: action.alert });
     case 'select':
       return { ...state, selected: action.selection };
     case 'add': {
@@ -302,6 +313,7 @@ export interface WorkflowLike {
   name: string;
   description?: string | null;
   working_dir?: string | null;
+  on_failure?: unknown;
   nodes: readonly unknown[];
   edges: readonly unknown[];
 }
@@ -349,7 +361,17 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
     working_dir: workflow.working_dir ?? null,
     nodes,
     edges,
+    ...(workflow.on_failure !== undefined
+      ? { on_failure: failureAlertOf(workflow.on_failure) }
+      : {}),
   };
+}
+
+/** A saved failure alert, or `null` (§127). */
+export function failureAlertOf(value: unknown): FailureAlert | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { inbox?: unknown; send?: unknown };
+  return { inbox: raw.inbox === true, send: sendOf(raw.send) };
 }
 
 /** The drawing as the contract's `WorkflowWrite`: what `createWorkflow`/`updateWorkflow` take. */
@@ -382,6 +404,18 @@ export function toWrite(draft: Draft) {
       position: { x: node.position.x, y: node.position.y },
     })),
     edges: draft.edges.map((edge) => ({ ...edge })),
+    // Who is told when a run fails (§127): sent only once the drawing knows it.
+    ...(draft.on_failure !== undefined
+      ? {
+          on_failure:
+            draft.on_failure && (draft.on_failure.inbox || draft.on_failure.send?.targets.length)
+              ? {
+                  inbox: draft.on_failure.inbox,
+                  send: draft.on_failure.send?.targets.length ? draft.on_failure.send : null,
+                }
+              : null,
+        }
+      : {}),
   };
 }
 

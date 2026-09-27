@@ -94,4 +94,12 @@
     <string name="wfe_rules_read_only">تبقى هذه القواعد كما هي عند الحفظ هنا؛ عدّلها من الويب.</string>
     <string name="wfe_send_targets">ترسل إلى</string>
     <string name="wfe_send_read_only">خطوة «أرسل رسالة»: تبقى وجهاتها كما هي عند الحفظ هنا؛ غيّرها من الويب.</string>
+    <string name="wfe_phase_received">استُلم</string>
+    <string name="wfe_phase_analyzing">يحلّل</string>
+    <string name="wfe_phase_needs_input">ينتظر ردك</string>
+    <string name="wfe_phase_approved">وُوفق عليه</string>
+    <string name="wfe_phase_executing">ينفّذ</string>
+    <string name="wfe_phase_completed">اكتمل</string>
+    <string name="wfe_phase_failed">فشل</string>
+    <string name="wfe_run_task">المهمة %1$s</string>
 </resources>

@@ -165,6 +165,26 @@ function fakeHub(
           )
         : json(saved);
     }
+    if (path === '/workflows/test-step') {
+      const node = (body as { node: { kind: string } }).node;
+      return json(
+        node.kind === 'condition'
+          ? {
+              rendered: 'trigger.event == taskCreated',
+              answer: true,
+              output: 'true',
+              error: null,
+              executed: true,
+            }
+          : {
+              rendered: 'Prompt about sample-task',
+              answer: null,
+              output: null,
+              error: null,
+              executed: false,
+            },
+      );
+    }
     if (path === '/workflows/send-test') {
       return json({
         status: 'partial',
@@ -579,6 +599,46 @@ describe('Workflows: its own page', () => {
     ).nodes[0]!;
     expect(node).toMatchObject({ kind: 'notify', input: 'Done' });
     expect((node.send as { targets: unknown[] }).targets).toHaveLength(2);
+  });
+
+  it('a failure alert is saved with the workflow, and a step is tried with a sample (§127)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Alerted');
+    await user.click(screen.getByTestId('workflow-add-condition'));
+    await user.click(await screen.findByTestId('workflow-step-test'));
+    await user.click(screen.getByTestId('workflow-step-test-run'));
+    const tested = await screen.findByTestId('workflow-step-test-result');
+    expect(tested).toHaveTextContent('Yes — the green connections would follow');
+    const sent = seen.find((c) => c.path === '/workflows/test-step')!.body as {
+      node: { kind: string };
+      trigger: { event: string };
+      execute: boolean;
+    };
+    expect(sent).toMatchObject({ node: { kind: 'condition' }, execute: false });
+    expect(sent.trigger.event).toBe('taskStatusUpdated');
+
+    // Nothing selected: the workflow's own settings, with who is told when a run fails.
+    fireEvent.keyDown(screen.getAllByTestId('workflow-node')[0]!, { key: 'Escape' });
+    const alert = await screen.findByTestId('workflow-alert');
+    await user.click(within(alert).getByTestId('workflow-alert-inbox'));
+    await user.click(within(alert).getByTestId('workflow-alert-telegram'));
+    await user.type(within(alert).getByTestId('workflow-alert-chat'), '-100777');
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    expect(
+      (
+        seen.find((c) => c.path === '/workflows' && c.method === 'POST')!.body as Record<
+          string,
+          unknown
+        >
+      ).on_failure,
+    ).toEqual({ inbox: true, send: { targets: [{ platform: 'telegram', chat_id: '-100777' }] } });
   });
 
   it('a condition holds several rules, saved as the contract’s rules (§123)', async () => {

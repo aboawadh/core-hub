@@ -332,6 +332,19 @@ fun runState(status: WorkflowRun.Status): Pair<String, BadgeTone> = when (status
     WorkflowRun.Status.CANCELLED -> stringResource(R.string.job_cancelled) to BadgeTone.Neutral
 }
 
+/** A run's phase in words (§127); an unknown value as it is. */
+@Composable
+fun phaseLabel(phase: String): String = when (phase) {
+    "received" -> stringResource(R.string.wfe_phase_received)
+    "analyzing" -> stringResource(R.string.wfe_phase_analyzing)
+    "needs_input" -> stringResource(R.string.wfe_phase_needs_input)
+    "approved" -> stringResource(R.string.wfe_phase_approved)
+    "executing" -> stringResource(R.string.wfe_phase_executing)
+    "completed" -> stringResource(R.string.wfe_phase_completed)
+    "failed" -> stringResource(R.string.wfe_phase_failed)
+    else -> phase
+}
+
 @Composable
 private fun stepLabel(status: WorkflowStepStatus): String = stringResource(
     when (status) {
@@ -573,6 +586,9 @@ private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: Workflow
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val (label, tone) = runState(run.status)
             Badge(label, tone = tone, dot = true, modifier = Modifier.testTag("workflow.run.status"))
+            // Where the run is (§127); a value this app does not know is shown as it is.
+            run.phase?.let { Badge(phaseLabel(it), modifier = Modifier.testTag("workflow.run.phase")) }
+            run.taskId?.let { Badge(stringResource(R.string.wfe_run_task, it)) }
             run.startedAt?.let { Badge(localTime(it)) }
             run.cost?.let { Badge(stringResource(R.string.workflow_limit_cost, it.amount)) }
         }

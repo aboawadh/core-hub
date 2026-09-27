@@ -94,4 +94,12 @@
     <string name="wfe_rules_read_only">These rules are kept as they are when you save here; edit them on the web.</string>
     <string name="wfe_send_targets">Sends to</string>
     <string name="wfe_send_read_only">A “Send message” step: its targets are kept as they are when you save here; change them on the web.</string>
+    <string name="wfe_phase_received">Received</string>
+    <string name="wfe_phase_analyzing">Analyzing</string>
+    <string name="wfe_phase_needs_input">Needs your answer</string>
+    <string name="wfe_phase_approved">Approved</string>
+    <string name="wfe_phase_executing">Executing</string>
+    <string name="wfe_phase_completed">Completed</string>
+    <string name="wfe_phase_failed">Failed</string>
+    <string name="wfe_run_task">Task %1$s</string>
 </resources>

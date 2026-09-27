@@ -43,6 +43,8 @@ export interface WorkflowRunRow {
   task_id?: string | null;
   /** A condition said no and nothing followed: not one to act on. */
   filtered?: boolean;
+  /** Where the run is (§127): received, analyzing, needs_input, approved, executing, … */
+  phase?: string;
 }
 
 export type TriggerPreset = 'clickup' | 'github' | 'generic_hmac' | 'token';
@@ -445,5 +447,33 @@ export function useSendTest(profile: string) {
           ...inProfile(profile),
         })
       ).data as unknown as SendResult,
+  });
+}
+
+/** What trying one step on its own did (`WorkflowStepTestResult`, §127). */
+export interface StepTestResult {
+  rendered: string | null;
+  answer: boolean | null;
+  output: string | null;
+  error: string | null;
+  executed: boolean;
+}
+
+/** Try one step with a sample; nothing is saved and no run is made. */
+export function useStepTest(profile: string) {
+  const { client } = useAuth();
+  return useMutation({
+    mutationFn: async (body: {
+      node: ReturnType<typeof toWrite>['nodes'][number];
+      input: string | null;
+      trigger: unknown;
+      execute: boolean;
+    }) =>
+      (
+        await client.request('post', '/workflows/test-step', {
+          body: body as never,
+          ...inProfile(profile),
+        })
+      ).data as unknown as StepTestResult,
   });
 }

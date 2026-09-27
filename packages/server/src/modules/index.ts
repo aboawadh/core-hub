@@ -627,7 +627,7 @@ registerWorkflowPorts((app) => {
         const home = profileHome(root, { slug: row.slug, isDefault: row.isDefault });
         return home ? telegramToken(home) : null;
       },
-      telegramApi: process.env.COREHUB_TELEGRAM_API_BASE?.trim() || 'https://api.telegram.org',
+      telegramApi: app.hub.config.telegramApiBase ?? 'https://api.telegram.org',
       fetch: (input, init) => fetch(input, init),
       post: async (scope, input) => {
         const posts = workflowMessagesFor(app);
