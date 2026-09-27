@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -110,7 +112,7 @@ fun SubagentsSheet(insight: ChatInsightViewModel, onDismiss: () -> Unit) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { insight.refreshSubagents() }
     LaunchedEffect(ui.running) { while (ui.running > 0) { delay(1000); now = System.currentTimeMillis() } }
-    val context = LocalContext.current
+    val unknown = stringResource(R.string.error_unknown)
     val queued = stringResource(R.string.chat_insight_steer_queued)
     val rejected = stringResource(R.string.chat_insight_steer_rejected)
     HubSheet(onDismiss, Modifier.testTag("sheet.subagents"), title = if (viewing == null) stringResource(R.string.chat_insight_subagents) else null) {
@@ -138,7 +140,7 @@ fun SubagentsSheet(insight: ChatInsightViewModel, onDismiss: () -> Unit) {
             items(running, key = { it.subagent.id }) { row ->
                 SubagentCard(
                     row.subagent, row.indent, now, full,
-                    stop = { insight.interrupt(row.subagent.id) { e -> line = (e.text ?: context.getString(R.string.error_unknown)) to true } },
+                    stop = { insight.interrupt(row.subagent.id) { e -> line = (e.text ?: unknown) to true } },
                     steer = { note = ""; steering = row.subagent },
                     output = { viewing = row.subagent.id },
                 )
@@ -168,7 +170,7 @@ fun SubagentsSheet(insight: ChatInsightViewModel, onDismiss: () -> Unit) {
                     steering = null
                     insight.steer(target.id, text) { ok, error ->
                         line = when {
-                            error != null -> (error.text ?: context.getString(R.string.error_unknown)) to true
+                            error != null -> (error.text ?: unknown) to true
                             ok == true -> queued to false
                             else -> rejected to true
                         }
@@ -475,13 +477,14 @@ fun DiffBody(hunks: List<ChatInsight.DiffHunk>) {
     val t = LocalTokens.current
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         SelectionContainer {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.codeBg).horizontalScroll(rememberScrollState()).testTag("diff.body"),
-            ) {
+            BoxWithConstraints(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(t.codeBg).testTag("diff.body")) {
+            // Every line as wide as the longest (or the box), so a line's colour runs to the end.
+            val least = maxWidth
+            Column(Modifier.horizontalScroll(rememberScrollState()).widthIn(min = least).width(IntrinsicSize.Max)) {
                 hunks.forEach { hunk ->
                     Text(
                         hunk.header, fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = t.infoSoftText, softWrap = false,
-                        modifier = Modifier.background(t.infoSoft).padding(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.fillMaxWidth().background(t.infoSoft).padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                     hunk.lines.forEach { line ->
                         val bg = when (line.kind) {
@@ -489,7 +492,7 @@ fun DiffBody(hunks: List<ChatInsight.DiffHunk>) {
                             ChatInsight.DiffKind.DEL -> t.dangerSoft
                             else -> Color.Transparent
                         }
-                        Row(Modifier.background(bg).padding(end = 12.dp)) {
+                        Row(Modifier.fillMaxWidth().background(bg).padding(end = 12.dp)) {
                             Number(line.old)
                             Number(line.new)
                             Text(
@@ -504,6 +507,7 @@ fun DiffBody(hunks: List<ChatInsight.DiffHunk>) {
                         }
                     }
                 }
+            }
             }
         }
     }
