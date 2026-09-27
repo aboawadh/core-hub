@@ -22,4 +22,6 @@
     <string name="models_fetch_failed">The provider did not return a model list.</string>
     <string name="models_fetch_empty">The provider answered, but listed no models.</string>
     <string name="models_default_model">Default model</string>
+    <string name="notify_test">Send a test notification</string>
+    <string name="notify_test_sent">Sent. Check this phone and your other devices.</string>
 </resources>

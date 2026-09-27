@@ -97,6 +97,7 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
         if (settings) {
             // Whether this phone can show them at all comes first.
             item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { hub.core.android.phone.NotificationRows() } }
+            item { TestNoticeRow(ops) }
             item { NotificationSettings(profile) }
             return@LazyColumn
         }
@@ -201,6 +202,30 @@ private fun NotificationsPage(onOpen: (Route) -> Unit, profile: String) {
 }
 
 /** Where a notice leads: its conversation, the board, or Schedules. */
+/** «Send a test notification»: one notice in the person's inbox, pushed to their devices like any other. */
+@Composable
+private fun TestNoticeRow(ops: OwnSettingsOps) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var sent by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf<HubError?>(null) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        HubButton(
+            stringResource(R.string.notify_test), {
+                busy = true
+                sent = false
+                scope.launch {
+                    ops.testNotice().onSuccess { sent = true; failed = null }.onFailure { failed = it as HubError }
+                    busy = false
+                }
+            },
+            kind = ButtonKind.Secondary, size = ControlSize.Md, icon = Lucide.Bell, loading = busy, modifier = Modifier.testTag("notices.test"),
+        )
+        if (sent) hub.core.android.ui.components.Notice(stringResource(R.string.notify_test_sent), hub.core.android.ui.components.Tone.SUCCESS)
+        ErrorNotice(failed)
+    }
+}
+
 object NoticeLinks {
     fun route(resource: ResourceRef?, profile: String?): Route? = when (resource?.kind) {
         ResourceRef.Kind.SESSION -> profile?.let { Route.Chat(resource.id, it) }

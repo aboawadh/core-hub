@@ -146,6 +146,8 @@ class OwnSettingsOps(private val apis: () -> HubApis) {
         hubCall { apis().notify.notifyListNotices(unread = if (unreadOnly) true else null, cursor = cursor, limit = 50) }
     suspend fun mark(id: String, read: Boolean): Result<Notice> = hubCall { apis().notify.notifyUpdateNotice(id, NotifyUpdateNoticeRequest(read = read)) }
     suspend fun markAll(): Result<Int> = hubCall { apis().notify.notifyMarkAllRead(NotifyMarkAllReadRequest()).updated }
+    /** A test notice in the person's own inbox, delivered like any other (push included). */
+    suspend fun testNotice(): Result<Notice> = hubCall { apis().notify.notifySendTestNotice() }
 
     suspend fun tokens(): Result<List<AppToken>> = hubCall { apis().auth.authListAppTokens().items }
     suspend fun revoke(id: String): Result<Unit> = hubCall { apis().auth.authRevokeAppToken(id) }

@@ -22,4 +22,6 @@
     <string name="models_fetch_failed">لم يُرجِع المزوّد قائمة نماذج.</string>
     <string name="models_fetch_empty">أجاب المزوّد لكنه لم يذكر أي نموذج.</string>
     <string name="models_default_model">النموذج الافتراضي</string>
+    <string name="notify_test">إرسال إشعار تجريبي</string>
+    <string name="notify_test_sent">أُرسل. انظر هذا الجوّال وأجهزتك الأخرى.</string>
 </resources>
