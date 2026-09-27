@@ -55,8 +55,6 @@
     "edit_title": "Edit {a}",
     "new_file_title": "New file {a}",
     "saved_text": "Saved {a}",
-    "preparing": "Getting {a}…",
-    "saved_phone": "Saved to the phone's Downloads",
     "not_allowed": "Only the owner and admins can manage this profile's files.",
     "exists": "Something with that name is already there.",
     "too_large": "That is larger than this hub allows.",
@@ -65,7 +63,6 @@
     "root_refused": "The top folder itself cannot be changed.",
     "into_itself": "A folder cannot go inside itself.",
     "gone": "It is not there any more.",
-    "failed": "That did not work: {a}",
-    "back_to_top": "Back to the top folder"
+    "failed": "That did not work: {a}"
   }
 }

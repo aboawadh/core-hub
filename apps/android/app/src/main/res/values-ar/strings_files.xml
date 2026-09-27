@@ -56,8 +56,6 @@
     <string name="files_page_edit_title">تحرير %1$s</string>
     <string name="files_page_new_file_title">ملف جديد %1$s</string>
     <string name="files_page_saved_text">حُفظ %1$s</string>
-    <string name="files_page_preparing">جارٍ جلب %1$s…</string>
-    <string name="files_page_saved_phone">حُفظ في تنزيلات الهاتف</string>
     <string name="files_page_not_allowed">إدارة ملفات هذا البروفايل للمالك والمشرفين فقط.</string>
     <string name="files_page_exists">يوجد عنصر بهذا الاسم هناك.</string>
     <string name="files_page_too_large">هذا أكبر مما يسمح به هذا الخادم.</string>
@@ -67,5 +65,4 @@
     <string name="files_page_into_itself">لا يمكن نقل مجلد إلى داخل نفسه.</string>
     <string name="files_page_gone">لم يعد موجودًا.</string>
     <string name="files_page_failed">لم تنجح العملية: %1$s</string>
-    <string name="files_page_back_to_top">العودة إلى المجلد الأعلى</string>
 </resources>

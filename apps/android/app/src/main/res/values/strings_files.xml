@@ -56,8 +56,6 @@
     <string name="files_page_edit_title">Edit %1$s</string>
     <string name="files_page_new_file_title">New file %1$s</string>
     <string name="files_page_saved_text">Saved %1$s</string>
-    <string name="files_page_preparing">Getting %1$s…</string>
-    <string name="files_page_saved_phone">Saved to the phone\'s Downloads</string>
     <string name="files_page_not_allowed">Only the owner and admins can manage this profile\'s files.</string>
     <string name="files_page_exists">Something with that name is already there.</string>
     <string name="files_page_too_large">That is larger than this hub allows.</string>
@@ -67,5 +65,4 @@
     <string name="files_page_into_itself">A folder cannot go inside itself.</string>
     <string name="files_page_gone">It is not there any more.</string>
     <string name="files_page_failed">That did not work: %1$s</string>
-    <string name="files_page_back_to_top">Back to the top folder</string>
 </resources>

@@ -36,6 +36,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
@@ -573,8 +575,10 @@ private fun sortLabel(sort: FilesRules.Sort): String = stringResource(
 private fun Crumbs(profileName: String, folder: String, onOpen: (String) -> Unit) {
     val t = LocalTokens.current
     val trail = listOf(profileName to "") + FilesRules.crumbs(folder)
+    val crumbsLabel = stringResource(R.string.files_page_breadcrumb)
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("files.crumbs"),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("files.crumbs")
+            .semantics { contentDescription = crumbsLabel },
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         if (folder.isNotEmpty()) {
