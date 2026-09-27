@@ -223,7 +223,8 @@ class ChatViewModel(
             hubCall {
                 api.sessions.sessionsCreateRun(
                     profile, sessionId,
-                    RunCreate(content = outgoing.blocks(), replyToMessageId = replyTo),
+                    // Send while the agent works follows the person's choice (Display → busy_input_mode).
+                    RunCreate(content = outgoing.blocks(), `when` = HubDisplay.busyWhen(HubDisplay.prefs.value), replyToMessageId = replyTo),
                     UUID.randomUUID().toString(),
                 )
             }.onSuccess { accepted ->

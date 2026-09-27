@@ -157,7 +157,9 @@ fun ChatScreen(
                 else -> LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(hub.core.android.generated.LayoutTokens.turnGap.dp),
+                    verticalArrangement = Arrangement.spacedBy(
+                        if (LocalChatDisplay.current.compact) (hub.core.android.generated.LayoutTokens.turnGap / 2).dp else hub.core.android.generated.LayoutTokens.turnGap.dp,
+                    ),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     item(key = "older") {

@@ -182,15 +182,25 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         onPathHandled()
     }
     // Links to this hub's own pages in a reply open here (nav/HubLinks.kt); a room invite opens Join.
+    val display by hub.core.android.ui.screens.HubDisplay.prefs.collectAsState()
     val openInApp: (String) -> Boolean = open@{ uri ->
         val s = graph.store.current ?: return@open false
+        // The person may have chosen the browser for links (Display → where links open).
+        if (!hub.core.android.ui.screens.HubDisplay.linksInApp(display)) return@open false
         when (val link = hub.core.android.nav.HubLinks.target(uri, s.hub, s.profile)) {
             is hub.core.android.nav.InAppLink.Page -> { nav.go(link.route); true }
             is hub.core.android.nav.InAppLink.Join -> { hub.core.android.nav.HubLinks.joinCode.value = link.code; true }
             null -> false
         }
     }
-    androidx.compose.runtime.CompositionLocalProvider(hub.core.android.nav.LocalOpenInApp provides openInApp) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scale = hub.core.android.ui.screens.HubDisplay.textScale(display)
+    androidx.compose.runtime.CompositionLocalProvider(
+        hub.core.android.nav.LocalOpenInApp provides openInApp,
+        hub.core.android.ui.screens.LocalChatDisplay provides hub.core.android.ui.screens.HubDisplay.chat(display),
+        // Text size (Display): every text of the app, over the phone's own font scale.
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, density.fontScale * scale),
+    ) {
         MainShell(nav) { route, navigator, shell, openDrawer -> Destination(route, navigator, shell, openDrawer) }
     }
     hub.core.android.ui.screens.JoinFromLink(nav)

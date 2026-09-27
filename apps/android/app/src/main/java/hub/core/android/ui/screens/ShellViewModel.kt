@@ -116,6 +116,8 @@ class ShellViewModel(private val graph: AppGraph) : ViewModel() {
                 loadProfiles()
                 reloadChats()
                 refreshPending()
+                // The person's display preferences, applied app-wide (HubDisplay.kt).
+                launch { hubCall { graph.apis(s).auth.authGetPreferences() }.onSuccess(HubDisplay::set) }
             }
         }
         viewModelScope.launch {
