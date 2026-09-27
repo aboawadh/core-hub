@@ -60,6 +60,11 @@ custom domain, **Zone → Workers Routes: Edit** on that domain's zone. Workers 
    openssl rand -base64 32 | tee ~/corehub-relay-admin-token | $W secret put ADMIN_TOKEN
    ```
 
+   Or, without a terminal: run the **Push relay** workflow by hand with **set_secrets** ticked. It
+   copies `APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID` and `FCM_SERVICE_ACCOUNT_JSON` from this
+   repository's secrets, sets `APNS_BUNDLE_ID=com.twuijri.corehub` and `APNS_ENV=production`, and
+   makes `HUB_SECRET_KEY` once (kept on later runs). `ADMIN_TOKEN` stays yours to set.
+
    A secret takes effect at once; no redeploy. `HUB_SECRET_KEY` derives every hub's secret:
    changing it cuts off every registered hub. To stop one hub, block it (below).
 4. **Check it**: `curl https://<address>/v1/health` answers
