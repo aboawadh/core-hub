@@ -1,5 +1,5 @@
 # الدفعة 10: المعرفة واستخدام المهارات وإضافات المركز ووجهات الإشعار في التطبيقين
-المسؤول: twuijri · الفرع: night/apps-knowledge · الحالة: in-progress
+المسؤول: twuijri · الفرع: night/apps-knowledge · الحالة: done
 
 ## المشكلة والهدف
 في قائمة الفجوات (ليلة التطبيقات) كانت أربع صفحات إعدادات غير أصلية أو ناقصة: في الأندرويد تفتح «المعرفة» و«استخدام المهارات»
@@ -79,10 +79,14 @@ Test Case '-[CoreHubTests.HubDataRulesTests testEveryStringThePagesUseExistsInBo
 ** TEST SUCCEEDED **
 ```
 
+CI على #181 بعد الدمج (الالتزام `217f41cf`): كل الفحوص نجحت — Android build, unit tests, lint (6m16s)، Build and test on the iOS
+simulator (6m22s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke journeys، Change record، Docker،
+Desktop، Installers ×3.
+
 ## المخاطر والرجوع
 - صفحات iOS لم تُبنَ محليًا؛ تعتمد على مهمة iOS في CI.
 - ترويسة البروفايل تُضاف يدويًا لعمليات notify؛ إن أعلن العقد لاحقًا معاملًا لها تُحذف الإضافة.
 - الرجوع: `git revert` لالتزامات هذا الفرع في فرع الليلة؛ لا عقد ولا بيانات.
 
 ## التسليم والخطوة التالية
-يُدمج في `night/2026-09-27-apps` (#181). لم يُجرَّب على هاتفي المالك بعد.
+دُمج في `night/2026-09-27-apps` (#181). لم يُجرَّب على هاتفي المالك بعد.
