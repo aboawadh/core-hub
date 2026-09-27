@@ -81,6 +81,10 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1 e2e/zz
 بعد 5 دقائق، أو إذن ملغى، أو إذن جلسة أخرى ← `403 step_up_required`)، القفل بعد 5 محاولات خاطئة (`429` ويشمل تسجيل
 الدخول)، أنواع الأسرار الخمسة بالاسم ثم قيمها، صفوف التدقيق بلا قيم، ولا قيمة ولا كلمة مرور في أي سطر سجل.
 
+CI على #209 (الرأس `834f6c5f`، وفيه هذا الجزء): كل الفحوص ناجحة — Lint/typecheck/contracts/client tests/build،
+Server unit tests (3/3)، Web smoke journeys (Playwright)، Desktop app smoke، Android، iOS simulator، Swift client،
+Docker image، db:generate + db:migrate، change record، graphify-out.
+
 ## المخاطر والرجوع
 - الصفحة تكشف قيمًا لم تكن تُعاد من قبل؛ الحماية: المالك وحده، جلسة ويب، كلمة المرور في كل فتح، 5 دقائق، تدقيق
   لكل كشف. إن رأى المالك غير ذلك: إخفاء الوجهة من `navigation.json` وإزالة المسارين — لا بيانات ولا ترحيل.

@@ -73,6 +73,10 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1 e2e/zz
 (يطلب كل مصطلح في `navigation.json` في ملفي لغة التطبيق)؛ أُضيف `nav.tools` و`nav.workflows` إلى
 `apps/ios/CoreHub/i18n/{ar,en}.json` — نصوص فقط، لا يتغير في التطبيق شيء.
 
+CI على #209 (الرأس `834f6c5f`، وفيه هذا الجزء): كل الفحوص ناجحة — Lint/typecheck/contracts/client tests/build،
+Server unit tests (3/3)، Web smoke journeys (Playwright)، Desktop app smoke، Android، iOS simulator، Swift client،
+Docker image، db:generate + db:migrate، change record، graphify-out.
+
 ## المخاطر والرجوع
 - من يعتمد على تبويب «سير العمل» في الجدولة يجده في «الأدوات»، والرابط القديم يحوّل. روابط `?workflow_run=` على
   الجدولة (الإشعارات والإجراءات المعلّقة) باقية كما هي.
