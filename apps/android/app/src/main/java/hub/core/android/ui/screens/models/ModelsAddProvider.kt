@@ -109,10 +109,15 @@ internal fun AddProviderSheet(ops: ModelOps, added: List<Provider>, profileName:
     var baseUrl by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
+    val probe = rememberProbe(chosen?.id, custom)
     fun send(body: hub.core.client.model.ProviderCreate) {
         busy = true
         scope.launch {
-            ops.create(body).onSuccess { onDone(it) }.onFailure { error = it as HubError }
+            ops.create(body).onSuccess { made ->
+                // A chat model picked from Fetch becomes the default (ModelsProbe.kt).
+                ops.applyPicked(made, probe)?.onFailure { error = it as HubError }
+                onDone(made)
+            }.onFailure { error = it as HubError }
             busy = false
         }
     }
@@ -174,6 +179,7 @@ internal fun AddProviderSheet(ops: ModelOps, added: List<Provider>, profileName:
                         }
                     }
                     if (p.baseUrlRequired || p.baseUrl != null) BaseUrlField(baseUrl, { baseUrl = it }, p.baseUrlExample, answer.host)
+                    if (!p.signIn) ProbePart(ops, probe, ProbeRules.request(p.id, baseUrl, key, p.kind), chat = p.kind == ProviderKind.LLM)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         HubButton(
                             stringResource(R.string.models_add), { send(ModelRules.create(p, key, baseUrl, shared)) },
@@ -194,6 +200,7 @@ internal fun AddProviderSheet(ops: ModelOps, added: List<Provider>, profileName:
                     HubTextField(label, { label = it }, label = stringResource(R.string.models_label), size = ControlSize.Md, fieldTag = "provider.label")
                     BaseUrlField(baseUrl, { baseUrl = it }, "http://host:8000/v1", answer.host)
                     ProviderKeyField(key, { key = it }, stringResource(R.string.models_key_optional))
+                    ProbePart(ops, probe, ProbeRules.request(null, baseUrl, key, customKind), chat = customKind == ProviderKind.LLM)
                     val body = ModelRules.custom(label, customKind, baseUrl, key, shared)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         HubButton(

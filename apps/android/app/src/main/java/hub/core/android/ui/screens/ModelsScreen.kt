@@ -269,6 +269,10 @@ class ModelOps(private val apis: () -> HubApis?, val profile: String) {
     suspend fun refresh(p: Provider) = call { it.models.modelsRefreshProvider(profile, p.id) }
     suspend fun setAlias(p: Provider, model: String, alias: String) =
         call { it.models.modelsPutModel(profile, p.id, ModelRules.pathModel(model), ModelRules.alias(alias)) }
+    suspend fun probe(body: hub.core.client.model.ProviderProbe) = call { it.models.modelsProbeProvider(profile, body) }
+    /** Registers a model the provider's catalogue has not listed yet, so it can be a default now. */
+    suspend fun registerModel(p: Provider, model: String) =
+        call { it.models.modelsPutModel(profile, p.id, ModelRules.pathModel(model), hub.core.client.model.ModelPatch(custom = true)) }
     suspend fun signIn(p: Provider) = call { it.models.modelsStartProviderSignIn(profile, p.id) }
     suspend fun signInState(providerId: String, id: String) = call { it.models.modelsGetProviderSignIn(profile, providerId, id) }
     suspend fun defaults() = call { it.models.modelsGetDefaults(profile) }

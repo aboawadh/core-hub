@@ -16,4 +16,10 @@
     <string name="runtime_ready">وقت التشغيل جاهز · الفحوص %1$s/%2$s</string>
     <string name="runtime_passed">نجح %1$s من %2$s فحوص</string>
     <string name="runtime_restart_now">إعادة التشغيل الآن</string>
+    <string name="models_fetch">اجلب</string>
+    <string name="models_fetching">جارٍ سؤال المزوّد…</string>
+    <string name="models_fetched">تم جلب النماذج: %1$s.</string>
+    <string name="models_fetch_failed">لم يُرجِع المزوّد قائمة نماذج.</string>
+    <string name="models_fetch_empty">أجاب المزوّد لكنه لم يذكر أي نموذج.</string>
+    <string name="models_default_model">النموذج الافتراضي</string>
 </resources>

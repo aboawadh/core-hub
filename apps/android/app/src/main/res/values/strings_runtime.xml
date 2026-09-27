@@ -16,4 +16,10 @@
     <string name="runtime_ready">Runtime ready · %1$s/%2$s checks</string>
     <string name="runtime_passed">%1$s of %2$s checks pass</string>
     <string name="runtime_restart_now">Restart now</string>
+    <string name="models_fetch">Fetch</string>
+    <string name="models_fetching">Asking the provider…</string>
+    <string name="models_fetched">%1$s models found.</string>
+    <string name="models_fetch_failed">The provider did not return a model list.</string>
+    <string name="models_fetch_empty">The provider answered, but listed no models.</string>
+    <string name="models_default_model">Default model</string>
 </resources>
