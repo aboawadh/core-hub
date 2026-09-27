@@ -86,6 +86,10 @@ $ pnpm typecheck               → exit=0
 صور الأندرويد: `apps/android/app/build/shots/tasks/android-lists.png`، `android-lists-dark.png`،
 `android-hermes-history.png`، `android-card-selected.png`.
 
+CI على #181 بعد الدمج (رأس الفرع `7ed8f2e7`، يضم هذا العمل ودفعة الغرف): كل الفحوص نجحت — Android build, unit tests, lint
+(6m15s)، Build and test on the iOS simulator (6m6s)، Lint/typecheck/contracts/client tests/build، Server unit tests ×3، Web smoke
+journeys، db:generate + db:migrate، Docker، Desktop، Installers ×3.
+
 الاختبارات الجديدة تفشل على الشيفرة القديمة (لا توجد `SubtaskRules`/`CheckLines`/`BulkRules`/`ProjectRules`
 ولا `FormKind.date` ولا مفتاح `due` فيها).
 
