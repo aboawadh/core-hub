@@ -64,7 +64,19 @@ $ pnpm typecheck                  → EXIT 0
 (راجعتُها؛ رقم واتساب في سطر الحساب المرتبط انقلب في العربية فصار داخل عزل اتجاه). الأوراق نافذة مستقلة فلا تظهر في الصورة؛ الاختبار
 يتحقق من أنها تُفتح (بروفايل جديد، إعداد APNs).
 
-iOS: لا يُبنى على لينكس؛ نتيجة `ios.yml` على الفرع تُضاف هنا.
+iOS: لا يُبنى على لينكس. تشغيل `ios.yml` على الفرع (36289067765، قبل الدمج):
+```
+** BUILD SUCCEEDED **
+Executed 287 tests, with 0 failures (0 unexpected)
+Test Case '-[CoreHubTests.AdminPagesTests testMakingAnAdminAMemberSendsTheListWithTheRole]' passed
+Test Case '-[CoreHubTests.AdminPagesTests testAStoredSecretIsKeptWhenItsFieldStaysEmptyAndNeverFilledBackIn]' passed
+… (10 of 10 AdminPagesTests passed)
+** TEST SUCCEEDED **
+```
+
+الدمج مع فرع الليلة (بعد الدفعتين 11 و13، أداة الملفات): تعارضان نصيّان فقط في `STATUS.md` وفهرس الليلة (أُبقي الطرفان)، ولا أسماء
+مكرّرة بين الدفعتين. بعد الدمج أُعيد: `AdminPagesTest` 13، `AdminShots` 2، `StringsParityTest` 4، `NavigationParityTest` 10،
+`lintDebug` (BUILD SUCCESSFUL)، و`i18n:check` و`contracts:check-clients` (977 ملفًا) و`lint` و`typecheck` و`change-record:check` (كلها EXIT 0).
 
 ## المخاطر والرجوع
 - صفحات iOS لم تُبنَ محليًا؛ تعتمد على مهمة iOS في CI. لم تُجرَّب على هاتفي المالك.
@@ -72,4 +84,4 @@ iOS: لا يُبنى على لينكس؛ نتيجة `ios.yml` على الفرع 
 - الرجوع: `git revert` لالتزامات هذا الفرع في فرع الليلة؛ لا عقد ولا بيانات.
 
 ## التسليم والخطوة التالية
-يُدمج في `night/2026-09-27-apps` (#181) بعد نجاح iOS على الفرع.
+دُمج في `night/2026-09-27-apps` (#181)؛ نتيجة CI على الطلب تُضاف هنا. لم يُجرَّب على هاتفي المالك بعد.
