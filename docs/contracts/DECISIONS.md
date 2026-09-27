@@ -4123,3 +4123,40 @@ Rejected: putting `workflows` in `rail` (every phone parity test would fail unti
 it); a Tools destination with its own page (it would be a hub page listing four links, the
 "settings inside settings" NAVIGATION rules out); remembering the group per account (it is about the
 room on this screen, like the fold); keeping Workflows as a tab too (two entries to one place).
+
+## 127. A run's phase, a workflow's failure alert, and one step tried with a sample
+
+Owner's goal (2026-09-28): the pieces of §123 and §124 put together into a flow a person can
+follow and trust — ClickUp → filter → agent → message. The details below are proposed — owner
+to confirm.
+
+**Phase.** `WorkflowRun.phase` (optional, a plain string so a later value never breaks an older
+app) says where a run is, worked out from its status and steps when it is read — nothing is
+stored: `received` (no step yet), `analyzing` (an agent step works before any approval),
+`needs_input` (waiting for a person), `approved` (an approval said yes and nothing has started
+since), `executing` (after an approval, or a step that is not an agent's), `completed`,
+`failed`. The web shows it on the run, the phones beside the run's status (with the task a
+trigger's run is about).
+
+**Failure alert.** `Workflow.on_failure` / `WorkflowWrite.on_failure` (optional,
+`WorkflowFailureAlert`): the run owner's inbox and/or a "Send message" step's targets
+(Telegram, a conversation), told the workflow's name and the run's error when a run ends
+`failed` (a step nothing handled, a limit that ran out). Stored in the definition like
+`limits`; left out of a save it stays, `null` removes it; its targets are checked like a send
+step's. Sent once per run (the §124 memory, under the node key `__on_failure`). Absent, nothing
+changes: a failed run tells nobody beyond its own record, as before.
+
+**Test this step.** `schedules.testWorkflowStep` (`POST /workflows/test-step`) tries one node on
+its own with a sample `input`, `trigger` and earlier `steps`: a condition answers yes or no
+(rules or the single line), a template is rendered, a delay is read, an agent step runs a real
+turn only with `execute: true`, and a "Send message" step is only rendered (its own test is what
+sends). Nothing is saved and no run is made. The web has it in every step's panel with a
+ClickUp-shaped sample event filled in.
+
+**Guide.** `docs/guides/clickup-agent-flow.md` (English): the agent's ClickUp MCP server with an
+include list of read-only tools, the flow drawn step by step, the webhook registered, and what to
+watch.
+
+Rejected: a stored `phase` column (it would be a second record of what the steps already say);
+alerting on every failed run by default (an older workflow would start sending notices nobody
+asked for).
