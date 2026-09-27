@@ -21,6 +21,7 @@ import { LogsTool } from './LogsTool.js';
 import { PerformanceTool } from './PerformanceTool.js';
 import { PluginsTab } from './PluginsTab.js';
 import { PrivacyTab } from './PrivacyTab.js';
+import { SecretsTab } from './SecretsTab.js';
 import { UpdatesTab } from './UpdatesTab.js';
 import { SkillsUsagePage } from './usage/SkillsUsagePage.js';
 import { UsagePage } from './usage/UsagePage.js';
@@ -51,6 +52,8 @@ const SECTIONS: Record<string, () => ReactElement> = {
   theme: () => <ThemeTool />,
   webhooks: () => <WebhooksTab />,
   privacy: () => <PrivacyTab />,
+  // The owner's, behind the password asked again every time (DECISIONS §125).
+  secrets: () => <SecretsTab />,
   // Desktop and phones only: the web surface has no route to it (navigation.json).
   this_device: () => <ThisDeviceTab />,
   // The audit module's reports: Usage and Skills usage are their own pages (decision §50).

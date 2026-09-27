@@ -7,7 +7,7 @@ import { requireSqlite } from '../../lib/db.js';
 import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';
 import { LinkCodes, identityOf, linkWithCode, touchIdentity } from './channel-identities.js';
-import { authenticateHook } from './principal.js';
+import { authenticateHook, type Principal } from './principal.js';
 import { registerAuthRoutes } from './routes.js';
 import {
   clearSetupToken,
@@ -20,6 +20,13 @@ import {
   type SetupMeta,
 } from './setup.js';
 import { registerSocketAuth } from './sockets.js';
+import {
+  assertStepUp,
+  assertWebSession,
+  registerStepUpRoutes,
+  stepUpGrantsOf,
+  type StepUpPurpose,
+} from './step-up.js';
 import { loadOrCreateSigningKey } from './tokens.js';
 import { bootstrap, setupRequired } from './users.js';
 
@@ -71,6 +78,7 @@ export const authModule = defineModule({
     app.decorateRequest('workspace', null);
     app.addHook('onRequest', authenticateHook(ctx));
     registerAuthRoutes(app, ctx);
+    registerStepUpRoutes(app, ctx);
   },
   registerEvents(io) {
     // Namespaces exist already (app/sockets.ts); auth adds the token middleware to each.
@@ -89,6 +97,27 @@ export function setupMetaFor(io: SocketServer): SetupMeta | null {
   return ctx ? setupMeta(setupRequired(ctx.db), ctx.setupOpenUntil, ctx.now()) : null;
 }
 export type { SetupMeta } from './setup.js';
+
+/**
+ * The step-up check of the hub on this Socket.IO server (DECISIONS §125): whether a grant from
+ * `auth.stepUp` still opens `purpose` for this caller — `403 step_up_required` otherwise — and
+ * the web-session check alone. Throws `internal` when auth is not composed into the hub.
+ */
+export function stepUpFor(io: SocketServer) {
+  const ctx = contexts.get(io);
+  if (!ctx) throw new Error('auth is not composed into this hub');
+  const grants = stepUpGrantsOf(ctx);
+  return {
+    assert(principal: Principal, grant: string, purpose: StepUpPurpose): void {
+      assertStepUp(grants, principal, grant, purpose);
+    },
+    assertWebSession,
+    get live(): number {
+      return grants.size;
+    },
+  };
+}
+export { STEP_UP_TTL_MS, type StepUpPurpose } from './step-up.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
 
 /**

@@ -89,6 +89,11 @@ is judged afresh.
 - **Lockouts** (`lockouts.ts`): per IP and flow (`password`, `token`, `pairing`): five failures
   inside 15 minutes lock for 15 minutes; `429 rate_limited` with `Retry-After`; admins list and
   clear them.
+- **Step-up** (`step-up.ts`, DECISIONS §125): `POST /auth/step-up` checks the account password
+  again for one purpose (`secrets`, the owner's Settings → Secrets) and answers a five-minute grant
+  kept in memory by its SHA-256, bound to the person, the web session and the purpose; `DELETE`
+  ends it. App tokens are refused; wrong passwords count on the `password` lockout of the address.
+  Other modules check a grant with `stepUpFor(io).assert(principal, grant, purpose)`.
 - **Workspaces**: `X-Hub-Profile` carries the slug (or id). Owner and admin enter every
   workspace; a member enters exactly the ones in `workspace_members` — **none** when they have
   no rows (owner, 2026-09-24; contract decision §29). Nothing enrolls anyone implicitly: a new
@@ -102,7 +107,8 @@ is judged afresh.
   knowledge attachments (those are workspace-scoped; users are global).
 - **Audit**: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.pairing_created`,
   `auth.pairing_claimed`, `auth.token_created`, `auth.token_revoked`, `auth.user_*`,
-  `auth.password_changed`, `auth.profile_*` rows in `audit_events`.
+  `auth.password_changed`, `auth.step_up`, `auth.step_up_failed`, `auth.profile_*` rows in
+  `audit_events`.
 
 ## Temporary pieces (remove when their owner module lands)
 

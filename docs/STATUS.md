@@ -69,7 +69,12 @@ its approval.
   one expandable entry holding Agents (owners and admins), Tasks, **Workflows — now its own page
   `/workflows`** (the old `/schedules?section=workflows…` address redirects) — and Schedules; closed
   or open is remembered per device, and closed on one of its pages it is marked as the place (web and
-  desktop; the phones keep their drawer until they adopt it) — and **the Models page's Runtime card** is one line when every
+  desktop; the phones keep their drawer until they adopt it) — since 2026-09-28 (DECISIONS §125)
+  **Settings → Secrets** for the owner alone (web and desktop): the account password asked again on
+  every visit (`auth.stepUp`, a five-minute grant held in memory, sign-in lockout on wrong tries),
+  the names of the provider keys, channel variables, MCP credentials and webhook secrets grouped by
+  kind and profile, one value shown at a time for 30 seconds or copied, each reveal an audit row
+  without the value — and **the Models page's Runtime card** is one line when every
   check passes («وقت التشغيل جاهز · الفحوص 4/4») that opens the list, and opens by itself with
   the failing checks first when one fails; a long conversation pages back through older messages
   as the reader scrolls up (built 2026-09-24, e2e `zzz-chat-history` journey 24) — since 2026-09-27 (DECISIONS §102, proposed — owner to confirm) an

@@ -55,6 +55,8 @@ tags:
     description: Usage and cost, skills usage, logs and performance reports.
   - name: plugins
     description: 'Phase 4 stub: hub plugins (Docker / MCP based). One endpoint reserved.'
+  - name: secrets
+    description: Settings → Secrets — the names of the secrets the hub holds, and one value at a time. Owner only, with the password confirmed again (`auth.stepUp`, DECISIONS §125).
   - name: terminal
     description: The owner's web terminal — a shell on the hub's host, off unless `COREHUB_WEB_TERMINAL=1`. Owner only. Sessions run over `/rt/terminal`.
 security:
@@ -17782,6 +17784,232 @@ paths:
                 code: forbidden
                 details:
                   reason: terminal_disabled
+  # ================================================================== secrets (DECISIONS §125)
+  /auth/step-up:
+    post:
+      operationId: auth.stepUp
+      tags: [auth]
+      summary: Confirm the account password again, for one sensitive page (step-up)
+      description: |
+        The owner opens Settings → Secrets; the page asks for the account password every time it
+        is opened, and this checks it (DECISIONS §125). A right password answers a **grant**: an
+        opaque string good for `ttl_seconds` (300), for this purpose only, for this person and this
+        sign-in session only (the web session behind the access token; an app token — a paired
+        phone, an integration — is refused with `403`, `details.reason: web_session_required`).
+        A new grant replaces the caller's earlier one for the same purpose. The grant is kept in
+        the hub's memory, never stored and never logged; a restart forgets it.
+
+        A wrong password counts on the same per-address lockout as sign-in (five failures in 15
+        minutes lock the address for 15 minutes: `429 rate_limited` with `Retry-After`), and is
+        written to the audit log (`auth.step_up_failed`) like a successful one (`auth.step_up`) —
+        neither row holds the password. Only the owner may ask (`x-roles: [owner]`). The answer
+        carries `Cache-Control: no-store`.
+      x-scope: global
+      x-roles: [owner]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpRequest'
+            example:
+              password: '••••••••'
+              purpose: secrets
+      responses:
+        '200':
+          description: The password is right; the grant, until when, and for what.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUpGrant'
+              example:
+                grant: su_3kq9Zx7yVb2LmN4pQ8rT1wE6uI0oA5sD
+                purpose: secrets
+                expires_at: '2026-09-28T21:05:00Z'
+                ttl_seconds: 300
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            Missing or expired token (`unauthorized`, `token_expired`), or the password is wrong
+            (`unauthorized`, `details.reason: wrong_password`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'كلمة المرور غير صحيحة'
+                code: unauthorized
+                details:
+                  reason: wrong_password
+        '403':
+          description: |
+            Not the owner (`details.required_role: owner`), or not a web sign-in session
+            (`details.reason: web_session_required`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'هذا الإجراء للمالك فقط'
+                code: forbidden
+                details:
+                  required_role: owner
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      operationId: auth.endStepUp
+      tags: [auth]
+      summary: Forget the caller's step-up grants now
+      description: |
+        Called when the page that asked for the password is left, so the grant ends before its
+        time runs out. Every grant of the caller's session ends; answering `204` also when there
+        was none.
+      x-scope: global
+      x-roles: [owner]
+      x-rt-events: []
+      responses:
+        '204':
+          description: No grant of this session is left.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /secrets/list:
+    post:
+      operationId: secrets.list
+      tags: [secrets]
+      summary: The names of every secret the hub holds or knows of (owner, with a step-up grant)
+      description: |
+        Settings → Secrets (DECISIONS §125), web and desktop, for the owner only. Lists the names
+        — never the values — of the secrets the hub stores or already knows are secret, grouped by
+        `kind` and `profile`:
+
+        - `provider_key`: a model provider's API key in the hub's encrypted store (one row per
+          stored key; `label` names the providers that use it; `profile` is null for a shared key);
+        - `channel`: a messaging channel's secret variable in a Hermes profile's `.env` (the
+          variables the hub declares secret for each platform; `label` is the platform);
+        - `mcp`: a credential in an MCP server's block of a Hermes profile's `config.yaml`, the
+          ones the MCP pages show as `[stored]` (`label` is the server);
+        - `webhook_out`: an outgoing webhook's signing secret (`profile` null: a webhook is the
+          hub's);
+        - `webhook_in`: a Hermes incoming webhook route's secret (`label` is the route).
+
+        The body carries the grant from `auth.stepUp` for purpose `secrets`; a missing, expired or
+        ended grant, or one of another session, is `403` with `details.reason: step_up_required`.
+        The answer carries `Cache-Control: no-store`. Listing is written to the audit log
+        (`secrets.listed`, with the count).
+      x-scope: global
+      x-roles: [owner]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretsListRequest'
+            example:
+              grant: su_3kq9Zx7yVb2LmN4pQ8rT1wE6uI0oA5sD
+      responses:
+        '200':
+          description: Every secret's name, in a stable order (kind, profile, label, name).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretList'
+              example:
+                items:
+                  - id: 9f2c4a1b0e7d6c5b4a3f2e1d
+                    kind: provider_key
+                    profile: null
+                    label: OpenAI
+                    name: openai
+                  - id: 1a2b3c4d5e6f7a8b9c0d1e2f
+                    kind: channel
+                    profile: default
+                    label: Telegram
+                    name: TELEGRAM_BOT_TOKEN
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Not the owner (`details.required_role: owner`), not a web sign-in session
+            (`details.reason: web_session_required`), or no live grant
+            (`details.reason: step_up_required`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'أعد إدخال كلمة المرور لفتح الأسرار.'
+                code: forbidden
+                details:
+                  reason: step_up_required
+  /secrets/reveal:
+    post:
+      operationId: secrets.reveal
+      tags: [secrets]
+      summary: One secret's value (owner, with a step-up grant)
+      description: |
+        The value of one secret listed by `secrets.list`, by its `id`. Needs the same live grant.
+        Every reveal is written to the audit log (`secrets.revealed`: who, which secret — its kind,
+        profile, label and name — and when; never the value). The answer carries
+        `Cache-Control: no-store`, and the value is in no log line and no error.
+      x-scope: global
+      x-roles: [owner]
+      x-rt-events: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretRevealRequest'
+            example:
+              grant: su_3kq9Zx7yVb2LmN4pQ8rT1wE6uI0oA5sD
+              id: 1a2b3c4d5e6f7a8b9c0d1e2f
+      responses:
+        '200':
+          description: The value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretValue'
+              example:
+                id: 1a2b3c4d5e6f7a8b9c0d1e2f
+                value: '123456789:AAExampleExampleExampleExample0000'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Not the owner (`details.required_role: owner`), not a web sign-in session
+            (`details.reason: web_session_required`), or no live grant
+            (`details.reason: step_up_required`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'أعد إدخال كلمة المرور لفتح الأسرار.'
+                code: forbidden
+                details:
+                  reason: step_up_required
+        '404':
+          description: 'No secret has this id any more (`not_found`, `details.resource` is `secret`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'غير موجود'
+                code: not_found
+                details:
+                  resource: secret
+                  id: 1a2b3c4d5e6f7a8b9c0d1e2f
 webhooks:
   hubEvent:
     post:
@@ -18808,6 +19036,96 @@ components:
             - type: 'null'
         default_profile:
           $ref: '#/components/schemas/ProfileSlug'
+    StepUpRequest:
+      type: object
+      description: The account password again, for one purpose (DECISIONS §125).
+      required: [password, purpose]
+      properties:
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 1024
+        purpose:
+          $ref: '#/components/schemas/StepUpPurpose'
+    StepUpPurpose:
+      type: string
+      description: What a step-up grant opens. Adding a purpose is a contract change.
+      enum: [secrets]
+    StepUpGrant:
+      type: object
+      required: [grant, purpose, expires_at, ttl_seconds]
+      properties:
+        grant:
+          type: string
+          description: Opaque; sent back in the body of the operations the purpose opens.
+          minLength: 16
+        purpose:
+          $ref: '#/components/schemas/StepUpPurpose'
+        expires_at:
+          $ref: '#/components/schemas/Timestamp'
+        ttl_seconds:
+          type: integer
+          minimum: 1
+    SecretsListRequest:
+      type: object
+      required: [grant]
+      properties:
+        grant:
+          type: string
+          minLength: 1
+          maxLength: 256
+    SecretRevealRequest:
+      type: object
+      required: [grant, id]
+      properties:
+        grant:
+          type: string
+          minLength: 1
+          maxLength: 256
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+    SecretKind:
+      type: string
+      description: Where a secret lives (DECISIONS §125). Clients show an unknown kind as "other".
+      enum: [provider_key, channel, mcp, webhook_out, webhook_in]
+    SecretEntry:
+      type: object
+      description: One secret by name. Never its value.
+      required: [id, kind, profile, label, name]
+      properties:
+        id:
+          type: string
+          description: Opaque and stable while the secret stays where it is; `secrets.reveal` takes it.
+        kind:
+          $ref: '#/components/schemas/SecretKind'
+        profile:
+          type: [string, 'null']
+          description: The profile's slug; null for a secret of the whole hub (a shared key, an outgoing webhook).
+        label:
+          type: [string, 'null']
+          description: What it belongs to — the providers, the platform, the MCP server, the webhook.
+        name:
+          type: string
+          description: Its own name — a variable, a header, a credential family, a route.
+    SecretList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecretEntry'
+    SecretValue:
+      type: object
+      required: [id, value]
+      properties:
+        id:
+          type: string
+        value:
+          type: string
     PasswordChange:
       type: object
       required: [current_password, new_password]

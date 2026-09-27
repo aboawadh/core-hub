@@ -13,6 +13,10 @@
  * supervises Hermes (contract decision §55) — `models.startProviderSignIn`,
  * `models.getProviderSignIn`, `models.completeProviderSignIn`.
  *
+ * It also serves the owner's Settings → Secrets (`secrets.list`, `secrets.reveal`;
+ * `secrets-view.ts`, DECISIONS §125): the names of every secret the hub holds, one value at a
+ * time, behind the password asked again (`auth.stepUp`).
+ *
  * What this module gives the rest of the hub is `modelsPort()`: the credentials a coding
  * agent starts with and the default model an agent inherits, so the `agents` module never
  * asks a person for a key (ADR 0010 §Propagation).
@@ -48,6 +52,8 @@ import {
 } from '../agents/index.js';
 import { DataKeyRing } from './crypto.js';
 import { SecretStore } from './secrets.js';
+import { revealProviderKey, storedProviderKeys } from './stored-keys.js';
+import { registerSecretsRoutes } from './secrets-view.js';
 import { roleForAdapter } from './defaults.js';
 import { hermesSignInRuntime, type SignInRuntime } from './sign-in.js';
 import { codexVersionSource } from './live-models.js';
@@ -290,6 +296,20 @@ function contextOf(app: FastifyInstance): ModelsService {
   contexts.set(hub.io, service);
   return service;
 }
+
+/**
+ * The provider keys this hub stores, by name, and one key's value — for the owner's
+ * step-up-guarded Settings → Secrets alone (DECISIONS §125).
+ */
+export function providerKeysFor(app: FastifyInstance) {
+  const db = requireSqlite(app.hub.database);
+  return {
+    list: () => storedProviderKeys(db),
+    reveal: (workspaceId: string, secretId: string) =>
+      revealProviderKey(db, dataKeyRingFor(app), workspaceId, secretId),
+  };
+}
+export type { StoredProviderKey } from './stored-keys.js';
 
 export function modelsServiceFor(app: FastifyInstance): ModelsService {
   return contextOf(app);
@@ -843,6 +863,9 @@ export const modelsModule = defineModule({
         return service.transcribe(scope, actor.userId, recording);
       },
     });
+
+    // Settings → Secrets, the owner's alone behind the password asked again (DECISIONS §125).
+    registerSecretsRoutes(app, deps, () => dataKeyRingFor(app));
   },
   registerEvents(_io: SocketServer) {
     // This module does not stream (ARCHITECTURE §Realtime). A catalogue refresh is a job

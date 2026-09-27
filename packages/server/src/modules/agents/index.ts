@@ -127,6 +127,7 @@ import {
   type HermesCli,
 } from './hermes-plugins.js';
 import { hermesProfileName, profileHome } from './profile-home.js';
+import { hermesSecrets, type HermesSecret } from './secret-files.js';
 import { SkillImportError, installPack, planImport, type UploadedFile } from './skill-import.js';
 import { createNpmInstaller, managedBinDirs, type AgentInstaller } from './installer.js';
 import { AgentSignIns, type SpawnSignIn } from './agent-sign-in.js';
@@ -896,6 +897,18 @@ export function installedSkillNames(
 }
 
 /** The Hermes runtime this hub supervises or found (ADR 0008). */
+/**
+ * The secrets in the Hermes profiles' own files the hub knows are secret — channel variables,
+ * MCP credentials, incoming webhook secrets — by name, each able to read its value again; for
+ * the owner's step-up-guarded Settings → Secrets alone (DECISIONS §125). None without a Hermes
+ * home this hub can read.
+ */
+export function hermesSecretsFor(app: FastifyInstance, defaultSlug: string): HermesSecret[] {
+  const root = hermesRuntimeFor(app).status().home;
+  return root ? hermesSecrets(root, defaultSlug) : [];
+}
+export type { HermesSecret, HermesSecretKind } from './secret-files.js';
+
 export function hermesRuntimeFor(app: FastifyInstance): HermesRuntime {
   return contextOf(app).runtime;
 }

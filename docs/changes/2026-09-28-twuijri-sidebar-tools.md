@@ -38,6 +38,7 @@
   `tests/agents-top-level.test.tsx`، `tests/workflow-editor.test.tsx`؛ رحلة Playwright
   `e2e/zzzzzzzzzzzzzzz-sidebar-tools.spec.ts` (جديدة)، وتحديث `e2e/zzz-agents-top-level.spec.ts` و
   `e2e/zzzzzz-workflow-editor.spec.ts`؛ لقطات الشريط المحدّثة.
+- `apps/ios/CoreHub/i18n/{ar,en}.json` (المصطلحان فقط، لأن اختبار iOS يطلب كل مصطلح).
 - `docs/contracts/DECISIONS.md` §126، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -68,7 +69,9 @@ $ pnpm build && PLAYWRIGHT_CHANNEL=chrome npx playwright test --workers=1 e2e/zz
   6 passed (30.7s)
 ```
 اختبارات تكافؤ iOS وأندرويد لم تُشغَّل محليًا: `rail` لم يتغير، والوجهة الجديدة خارج سطحيهما، والمصطلحات الجديدة
-تُولَّد لأندرويد وقت البناء — نتيجتها على CI في #209.
+تُولَّد لأندرويد وقت البناء. أول تشغيل على CI في #209 أسقط اختبار iOS `testEveryNavigationTermIsTheManifestsWord`
+(يطلب كل مصطلح في `navigation.json` في ملفي لغة التطبيق)؛ أُضيف `nav.tools` و`nav.workflows` إلى
+`apps/ios/CoreHub/i18n/{ar,en}.json` — نصوص فقط، لا يتغير في التطبيق شيء.
 
 ## المخاطر والرجوع
 - من يعتمد على تبويب «سير العمل» في الجدولة يجده في «الأدوات»، والرابط القديم يحوّل. روابط `?workflow_run=` على
