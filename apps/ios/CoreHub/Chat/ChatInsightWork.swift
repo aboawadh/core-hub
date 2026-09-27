@@ -318,7 +318,8 @@ struct ChangesSheet: View {
                 DiffPage(sessionID: chat.sessionID, profile: chat.profile, target: target)
             }
         }
-        .onAppear {
+        // Read when the sheet opens, and again when a run of the chat ends.
+        .task(id: revision) {
             if list == nil {
                 let app = app, id = chat.sessionID, profile = chat.profile
                 list = PagedList { cursor in
@@ -326,8 +327,8 @@ struct ChangesSheet: View {
                     return ListPage(items: page.items.map(RunChangesItem.init), next: page.nextCursor)
                 }
             }
+            await list?.refresh()
         }
-        .task(id: revision) { await list?.refresh() }
         .task(id: chat.state.activeRun?.id) {
             live = nil
             guard let run = chat.state.activeRun?.id else { return }

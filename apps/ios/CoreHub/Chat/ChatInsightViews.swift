@@ -300,7 +300,7 @@ struct RunsSheet: View {
             Group {
                 if let list {
                     ListScaffold(list, key: revision, emptyIcon: .rotateCcwClock, emptyTitle: l10n("chat_insight.runs_empty"), tag: "runs") { item in
-                        RunRow(run: item.run)
+                        ChatRunRow(run: item.run)
                     }
                 }
             }
@@ -323,7 +323,7 @@ struct RunsSheet: View {
     }
 }
 
-struct RunRow: View {
+struct ChatRunRow: View {
     let run: Run
     @Environment(\.l10n) private var l10n
 

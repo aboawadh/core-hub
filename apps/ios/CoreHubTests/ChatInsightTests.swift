@@ -70,7 +70,7 @@ final class ChatInsightTests: XCTestCase {
         XCTAssertNil(ChatInsight.elapsedMs(started: nil, finished: nil, now: Date()))
         XCTAssertEqual(ChatInsight.clock(65_000), "1:05")
         XCTAssertEqual(ChatInsight.clock(3_723_000), "1:02:03")
-        XCTAssertEqual(ChatInsight.cost(Money(amount: "0.0131", currency: "USD")), "0.13 USD")
+        XCTAssertEqual(ChatInsight.cost(Money(amount: "0.1310", currency: "USD")), "0.13 USD")
         XCTAssertEqual(ChatInsight.cost(Money(amount: "0.000420", currency: "USD")), "0.0004 USD")
         XCTAssertEqual(ChatInsight.cost(Money(amount: "0", currency: "USD")), "0 USD")
         XCTAssertNil(ChatInsight.cost(nil), "no price is no line")

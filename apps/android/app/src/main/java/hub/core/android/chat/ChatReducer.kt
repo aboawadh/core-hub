@@ -87,11 +87,13 @@ data class ChatSessionInfo(
     val archived: Boolean = false,
     val globalAgent: Boolean = false,
     val workingDir: String? = null,
+    /** How full the model's window is, as the agent reported it (the context ring, apps batch 6). */
+    val context: hub.core.client.model.ContextUsage? = null,
 ) {
     companion object {
         fun of(session: Session) = ChatSessionInfo(
             session.id, session.profile, session.title, session.agentId, session.model, session.pinned, session.archived,
-            session.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, session.workingDir,
+            session.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, session.workingDir, session.context,
         )
     }
 }
@@ -137,7 +139,7 @@ object ChatReducer {
         return state.copy(
             session = ChatSessionInfo(
                 detail.id, detail.profile, detail.title, detail.agentId, detail.model, detail.pinned, detail.archived,
-                detail.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, detail.workingDir,
+                detail.source == hub.core.client.model.SessionSource.GLOBAL_AGENT, detail.workingDir, detail.context,
             ),
             messages = merged,
             approvals = detail.pendingApprovals.filter { it.status == ApprovalStatus.PENDING }.associateBy { it.id },
@@ -149,7 +151,9 @@ object ChatReducer {
     /** The session as the hub has it now (an event, or the answer to a change made here). */
     fun absorb(state: ChatState, session: Session): ChatState {
         if (state.session != null && state.session.id != session.id) return state
-        return state.copy(session = ChatSessionInfo.of(session))
+        // An update that does not carry the window keeps the one the agent reported last.
+        val info = ChatSessionInfo.of(session).let { if (it.context == null) it.copy(context = state.session?.context) else it }
+        return state.copy(session = info)
     }
 
     /** Older messages read while scrolling back; they go before what is shown. */
@@ -200,6 +204,9 @@ object ChatReducer {
             } ?: seen
             "approval.resolved" -> p.decode("approval", Approval.serializer())?.let { seen.copy(approvals = seen.approvals - it.id) } ?: seen
             "session.updated" -> p.decode("session", Session.serializer())?.let { absorb(seen, it) } ?: seen
+            "context.updated" -> p.decode("context", hub.core.client.model.ContextUsage.serializer())?.let { context ->
+                seen.copy(session = seen.session?.copy(context = context))
+            } ?: seen
             else -> seen
         }
     }

@@ -353,13 +353,14 @@ class ChatViewModel(
         }
     }
 
-    fun compress() {
+    /** [focus]: what the summary should keep in view (the context sheet, apps batch 6); empty is the whole chat. */
+    fun compress(focus: String = "") {
         val id = sessionId ?: return
         val act = actions ?: return
         if (_ui.value.compressing) return
         _ui.update { it.copy(compressing = true, notice = ChatNotice.Compressing) }
         viewModelScope.launch {
-            hubCall { act.compress(id, profile) }
+            hubCall { act.compress(id, profile, focus) }
                 .onSuccess { result -> _ui.update { it.copy(compressing = false, notice = ChatNotice.Compressed(ChatControls.compression(result))) } }
                 .onFailure { e -> _ui.update { it.copy(compressing = false, notice = null, error = e as HubError) } }
         }

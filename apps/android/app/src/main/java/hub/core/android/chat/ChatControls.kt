@@ -9,7 +9,6 @@ import hub.core.client.model.ModelKind
 import hub.core.client.model.RunSteerRequest
 import hub.core.client.model.RunSteerResult
 import hub.core.client.model.Session
-import hub.core.client.model.SessionCompressRequest
 import hub.core.client.model.SessionCompression
 import hub.core.client.model.SessionForkRequest
 import hub.core.client.model.SessionPatch
@@ -28,12 +27,18 @@ import kotlinx.serialization.json.contentOrNull
  */
 object ChatControls {
     /** One model the composer offers: [value] is the catalogue's `key` (`<provider>/<model>`), what a session stores. */
-    data class ModelOption(val value: String, val label: String, val group: String)
+    data class ModelOption(
+        val value: String,
+        val label: String,
+        val group: String,
+        /** The catalogue's `context_window`, for the context ring's estimate (apps batch 6). */
+        val window: Int? = null,
+    )
 
     /** The chat models this profile can run, as the web's composer offers them. */
     fun models(catalogue: List<Model>): List<ModelOption> =
         catalogue.filter { it.kind == ModelKind.CHAT && it.imageOnly != true && it.visible && !it.disabled }
-            .map { ModelOption(it.key, it.alias ?: it.model, it.provider) }
+            .map { ModelOption(it.key, it.alias ?: it.model, it.provider, it.contextWindow) }
 
     /** The options matching what was typed, in the label, the id or the provider; case does not matter. */
     fun filter(options: List<ModelOption>, query: String): List<ModelOption> {
@@ -164,8 +169,9 @@ class ChatActions(private val api: HubApis) {
     suspend fun fork(id: String, profile: String, message: String? = null): Session =
         api.sessions.sessionsFork(profile, id, SessionForkRequest(atMessageId = message))
 
-    suspend fun compress(id: String, profile: String): SessionCompression =
-        api.sessions.sessionsCompress(profile, id, SessionCompressRequest())
+    /** [focus] is what the summary should keep in view (apps batch 6: `ChatInsight.compressRequest`). */
+    suspend fun compress(id: String, profile: String, focus: String = ""): SessionCompression =
+        api.sessions.sessionsCompress(profile, id, ChatInsight.compressRequest(focus))
 
     suspend fun steer(id: String, profile: String, run: String, text: String): RunSteerResult =
         api.sessions.sessionsSteerRun(profile, id, run, RunSteerRequest(text))
