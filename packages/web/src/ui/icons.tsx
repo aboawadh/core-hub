@@ -185,6 +185,8 @@ export const destinationIcons: Readonly<Record<string, IconComponent>> = {
   plugins: lucide('puzzle'),
   files: IconFolder,
   terminal: lucide('square-terminal'),
+  /** Settings → Secrets, the owner's (DECISIONS §125). */
+  secrets: lucide('key-round'),
   agent_skills: IconSpark,
   agent_mcp: lucide('server'),
   agent_memory: lucide('brain'),

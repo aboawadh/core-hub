@@ -45,7 +45,8 @@
     "config_files": "ملفات الإعداد",
     "linked_hubs": "المراكز المرتبطة",
     "workflows": "سير العمل",
-    "tools": "الأدوات"
+    "tools": "الأدوات",
+    "secrets": "الأسرار"
   },
   "common": {
     "cancel": "إلغاء",

@@ -3988,6 +3988,67 @@ signed); putting the secret in the address (it would be in every proxy log); new
 `RunTrigger.kind` (an older app would meet an enum value it does not know — the run says
 `api` and carries the new optional fields).
 
+## 125. Settings → Secrets: the owner sees the names of every secret and one value at a time, with the password asked again each time
+
+Owner's request (2026-09-28): a Secrets section in Settings, on web and desktop only, visible to the
+owner alone, that asks for the account password every time it is opened, and shows the secrets the
+hub holds — masked, one revealed at a time, hidden again after about 30 seconds, copyable, each
+reveal in the audit log.
+
+**This amends the ARCHITECTURE invariant** "secrets … never returned to a client": they are still
+never returned by any other operation, and `[stored]` stays their shape everywhere else; the one
+exception is `secrets.reveal`, for the owner, behind a step-up.
+
+**Step-up (`auth.stepUp`, `POST /auth/step-up`; `auth.endStepUp`, `DELETE`).** Body `{ password,
+purpose: secrets }` (`StepUpRequest`; `StepUpPurpose` is an enum so a later purpose is a contract
+change). Owner only (`x-roles: [owner]`), and only from a web sign-in session — an app token (a
+paired phone, an integration) is `403 web_session_required`, so a leaked integration token never
+opens a secret. A right password answers `StepUpGrant { grant, purpose, expires_at, ttl_seconds:
+300 }`: an opaque `su_…` string kept **in the hub's memory only**, by its SHA-256, bound to the
+person, the sign-in session (`app_tokens` row behind the JWT) and the purpose; a new step-up ends the
+session's earlier grant; `DELETE` ends it at once (the web calls it when the page is left); the clock
+and a restart end it too. A wrong password is `401` with `details.reason: wrong_password`, counts on
+the same per-address password lockout as sign-in (five in 15 minutes lock it for 15: `429` with
+`Retry-After`, sign-in included), and both outcomes are audit rows (`auth.step_up`,
+`auth.step_up_failed`) with the purpose and never the password. Answers are `Cache-Control:
+no-store`.
+
+**The list and the value (`secrets.list`, `secrets.reveal`, tag `secrets`).** Both `POST` with the
+grant in the body (no grant in a URL, nothing a cache keeps), owner only, web session only; no live
+grant of this session is `403` with `details.reason: step_up_required`, and the page asks for the
+password again. `SecretList.items` are `SecretEntry { id, kind, profile, label, name }` — never a
+value, never a hint of one — of the kinds `SecretKind`: `provider_key` (a key in the hub's encrypted
+store, listed once for its credential family with the providers that use it; `profile` null for a
+shared key), `channel` (a platform's secret variable in a Hermes profile's `.env`, the ones
+`channel-platforms.ts` declares secret), `mcp` (a credential in an MCP server's block, the ones the
+MCP pages show as `[stored]`: `env.X`, `headers.X`, `oauth.client_secret`, a top-level key),
+`webhook_out` (an outgoing webhook's signing secret; hub-wide) and `webhook_in` (a Hermes incoming
+webhook route's own secret). The id is a digest of where the secret sits, so `secrets.reveal`
+finds it by listing again and nothing a client sends is ever a path; an id that no longer matches is
+`404`. `SecretValue { id, value }` answers one value; every list (`secrets.listed`, with the count)
+and every reveal (`secrets.revealed`: who, kind, profile, label, name, when) is an audit row without
+the value. No value is written to a log line or an error. The routes live in `models` (the owner of
+"keys (secrets)"), which reads the other stores through their modules' public surfaces
+(`hermesSecretsFor` in `agents`, `webhookSecretsFor` in `notify`); the grant check is `auth`'s
+(`stepUpFor(io)`).
+
+**Clients.** Web and desktop: Settings → Secrets (`secrets`, a settings tab after Privacy, `roles:
+[owner]`, `surfaces: [web, desktop]`; the router sends anyone else home). Locked on every visit; the
+password leaves the page the moment the hub has it; the grant lives in the page's state only (no
+query cache, no storage) and a reload forgets it; the list is grouped by kind, then profile (the
+hub-wide ones first), values masked; showing one hides any other, and it hides itself after 30
+seconds; Copy fetches a hidden value (audited) and copies it without showing it; the grant running
+out (a countdown shows it) or refused locks the page again; a hub older than the page (`404`) is
+said in words. The phones do not call these operations; their generated clients simply gain them.
+
+Proposed — owner to confirm: five minutes for a grant; 30 seconds before a value hides; the kinds
+listed (push-sender credentials, stored encrypted by `devices`, are not listed yet); a value copied
+while hidden is audited as a reveal. Rejected: a "recently signed in" window instead of the password
+each time (the owner asked for every time); a grant stored in the database or a JWT claim (it would
+outlive the page and a restart); single-use grants (every reveal would ask for the password again);
+putting the grant in a header or query (a URL is logged, a header is easy to forward); showing the
+last four characters (a part of a secret without an audit row).
+
 ## 126. The web and desktop sidebar: Search beside the fold toggle, and «Tools» around Agents, Tasks, Workflows and Schedules
 
 Owner's design, approved 2026-09-28 (web and desktop; the phones follow in their own change once he

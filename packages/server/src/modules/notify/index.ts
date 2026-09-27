@@ -353,6 +353,31 @@ function readEvents(
   return events;
 }
 
+/**
+ * The outgoing webhooks that hold a signing secret, by name, each able to read it again — for
+ * the owner's step-up-guarded Settings → Secrets alone (DECISIONS §125). Archived ones are gone.
+ */
+export function webhookSecretsFor(app: FastifyInstance): Array<{
+  id: string;
+  name: string;
+  read(): string | null;
+}> {
+  const db = requireSqlite(app.hub.database);
+  const readOne = (id: string) =>
+    db
+      .select()
+      .from(webhooks)
+      .where(and(eq(webhooks.id, id), isNull(webhooks.archivedAt)))
+      .get()?.signingSecret ?? null;
+  return db
+    .select()
+    .from(webhooks)
+    .where(isNull(webhooks.archivedAt))
+    .all()
+    .filter((row) => !!row.signingSecret)
+    .map((row) => ({ id: row.id, name: row.name, read: () => readOne(row.id) }));
+}
+
 export interface NoticeInput {
   workspace: string;
   userId: string;

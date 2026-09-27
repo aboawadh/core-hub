@@ -186,6 +186,10 @@
     "tools": {
       "en": "Tools",
       "ar": "الأدوات"
+    },
+    "secrets": {
+      "en": "Secrets",
+      "ar": "الأسرار"
     }
   },
   "destinations": [
@@ -396,6 +400,18 @@
         "kind": "settings-tab"
       },
       "roles": ["member"]
+    },
+    {
+      "id": "secrets",
+      "title": "secrets",
+      "module": "models",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tab"
+      },
+      "roles": ["owner"],
+      "surfaces": ["web", "desktop"],
+      "note": "The owner's alone, on web and desktop (owner's request 2026-09-28, DECISIONS §125): the names of every secret the hub stores or knows of — provider keys, channel tokens in the Hermes profiles' .env files, MCP credentials, webhook secrets — grouped by kind and profile, one value revealed at a time, hidden again after 30 seconds, copyable, each reveal in the audit log. The account password is asked again every time the page is opened (a step-up grant, never kept past the page). Anyone else has no entry, and the hub refuses them."
     },
     {
       "id": "this_device",
@@ -658,6 +674,7 @@
     "display",
     "notifications",
     "privacy",
+    "secrets",
     "this_device",
     "about"
   ],
@@ -764,7 +781,8 @@
       "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
       "global_agent": "/global-agent",
-      "workflows": "/workflows"
+      "workflows": "/workflows",
+      "secrets": "/settings/secrets"
     },
     "ios": {
       "new_chat": "/new",
