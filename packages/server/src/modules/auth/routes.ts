@@ -56,7 +56,16 @@ import {
   type RuntimeCompression,
 } from './profile-mirror.js';
 import { requireRole, requireUser, type Principal } from './principal.js';
-import { requireTransfer, runExport, runImport, type TransferContext } from './profile-transfer.js';
+import {
+  claimDefaultReplacement,
+  releaseDefaultReplacement,
+  requireDefaultReplacement,
+  requireTransfer,
+  runExport,
+  runImport,
+  runImportAsDefault,
+  type TransferContext,
+} from './profile-transfer.js';
 import {
   createProfile,
   deleteProfile,
@@ -292,6 +301,8 @@ const ProfileImport = z.object({
   attachment_id: Ulid,
   slug: ProfileSlug,
   name: ProfileName.optional(),
+  /** Import as the default profile, the old one kept as `default-backup[-n]` (§116). */
+  replace_default: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------- helpers
@@ -1355,6 +1366,56 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AuthContext): void
 
   route('POST', '/profile-imports', admin, async (request, reply) => {
     const body = parse(ProfileImport, request.body);
+    if (body.replace_default === true) {
+      // The archive becomes the default profile; `slug` is not used (§116).
+      const context = transferContext(request);
+      requireDefaultReplacement(context.ports);
+      if (!context.ports.files.open(context.scope, body.attachment_id)) {
+        throw new HubError('not_found', {
+          details: { resource: 'attachment', id: body.attachment_id },
+        });
+      }
+      const current = defaultWorkspace(db);
+      if (!claimDefaultReplacement(db)) {
+        throw new HubError('conflict', { messageKey: 'auth.profile_replace_busy' });
+      }
+      let job;
+      try {
+        job = jobRunnerFor(app).start(
+          {
+            ownerId: context.scope.userId,
+            workspace: context.scope.workspace,
+            kind: 'auth.import',
+            entityKind: 'attachment',
+            entityId: body.attachment_id,
+            input: { attachment_id: body.attachment_id, replace_default: true },
+            message: t('jobs.queued', context.language),
+          },
+          (handle) =>
+            runImportAsDefault(
+              context,
+              handle,
+              { attachmentId: body.attachment_id, name: body.name ?? null },
+              (action, summary, data) =>
+                audit(
+                  request,
+                  action,
+                  current ? { kind: 'profile', id: current.id } : null,
+                  summary,
+                  data,
+                ),
+            ),
+        );
+      } catch (error) {
+        releaseDefaultReplacement(db);
+        throw error;
+      }
+      audit(request, 'auth.profile_import_started', null, 'default profile import started', {
+        job_id: job.id,
+        replace_default: true,
+      });
+      return reply.code(202).send({ job_id: job.id });
+    }
     if (slugTaken(db, body.slug)) throw new HubError('conflict', { messageKey: 'auth.slug_taken' });
     const context = transferContext(request);
     if (!context.ports.files.open(context.scope, body.attachment_id)) {

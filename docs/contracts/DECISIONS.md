@@ -3660,3 +3660,52 @@ the notification preferences, which belong to the person.
 
 Rejected: keeping the interceptors (every client would have to know which global operations are
 secretly scoped), and a `?profile=` query form (§4 rejected it for all operations).
+
+## 116. An archive can replace the default profile; the old default is kept as `default-backup`
+
+Proposed (2026-09-27) — the owner asked for it and confirmed the design (the backup names never run
+out; any failure leaves the original default exactly as it was); the details are the owner's to
+confirm.
+
+People moving to the hub bring their old program's default profile. `auth.importProfile` always made
+a new profile beside the default, because Hermes refuses to import as `default`: the default profile
+is Hermes's root home, not a folder under `profiles/` (`hermes_cli/profiles.py` §import_profile,
+v2026.9.14), and Hermes has no operation that turns the root into a named profile either.
+
+`ProfileImport.replace_default: true` (optional, absent = the old behaviour) makes the archive the
+default. The hub itself moves files inside Hermes's home, on one filesystem, with a journal:
+1. The whole archive is checked first (§34's checks, the providers file of §37), then unpacked under
+   `profiles/.corehub-import-<job>/` — a dot name, invisible to Hermes and to the profile listing.
+2. The backup id is `default-backup`, then `default-backup-2`, `-3`, …: the first free both in the
+   hub (any workspace, archived included) and in Hermes (a folder or a deletion tombstone). A taken
+   name is never an error.
+3. With the root gateway held down, the TUI gateway closed and Hermes's dashboard server stopped,
+   every root entry that belongs to the default profile moves to the backup folder, and the
+   archive's entries take their place. What Hermes shares across profiles stays at the root and is
+   never replaced: `profiles/`, the task board (`kanban.db*`, `kanban/`), the shared OAuth store
+   (`auth.json`), `shared/`, `honcho.json`, `logs/`, the root gateway's runtime files and the
+   installation (`bin`, `node`, `node_modules`, `hermes-agent`, …). The list is of what stays, not
+   of what moves, because Hermes's per-profile files are many and grow.
+4. In one database transaction: a workspace row for the backup (its settings copied from the
+   default's), the default's new name when one was given, and the archive's providers as the
+   default's own. The default workspace keeps its id and `is_default`, so the shared providers and
+   keys (§37), members, tokens and every hub row stay where they were — including the hub's
+   transcripts, which stay readable in the default (continuing one starts a new Hermes
+   conversation: its Hermes session moved to the backup).
+5. Any failure in 3 or 4 rolls the transaction back and replays the journal backwards; the job fails
+   with "The import did not happen and your default profile is as it was:" and the reason.
+6. Then, best effort: the default's own providers are copied to the backup with their keys (a copy,
+   §37), the backup's `.env` loses the hub's shared keys, the hub's tools leave the backup (their
+   key belongs to the default) and return to the new root, the skill library is seeded, and the
+   root gateway starts again on the hub's providers. The backup's channels and schedules moved with
+   it and keep running from its own gateway until somebody moves them.
+
+Admins only, as every import. Audited as `auth.profile_default_replaced` or
+`auth.profile_default_replace_failed`. A second replacement while one runs is `409 conflict` before
+any job exists.
+
+Rejected: importing the archive into Hermes under a temporary name and moving it (Hermes's import
+leaves a wrapper script for that name the hub cannot find to remove); an allow-list of what moves
+(an unlisted file of the default would stay and mix with the imported one); moving the hub's own
+per-profile rows to the backup (ten modules' tables and their attachment folders — a larger and
+riskier change than this one).

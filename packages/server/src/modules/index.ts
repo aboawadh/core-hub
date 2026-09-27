@@ -12,6 +12,7 @@ import {
   ProfileMirrorError,
   RUNTIME_DEFAULT_PROFILE,
   authModule,
+  mirrorDisplayName,
   emitToUser,
   findUser,
   listWorkspacesFor,
@@ -27,6 +28,7 @@ import {
   revokeToken,
   tokenLive,
   type ProfileArchiveRuntime,
+  type ProfileDefaultReplacement,
   type ProfileTransferPorts,
 } from './auth/index.js';
 import {
@@ -45,6 +47,7 @@ import {
   readHermesCompression,
   writeHermesCompression,
   hermesDashboardFor,
+  hermesDefaultReplacementFor,
   hermesProcessesFor,
   hermesProfileRunner,
   hermesRuntimeFor,
@@ -485,6 +488,7 @@ registerProfileMirror((app) => {
 export function profileTransferPorts(
   app: FastifyInstance,
   runtime: ProfileArchiveRuntime | null = hermesProfileArchives(app),
+  defaultProfile: ProfileDefaultReplacement | null = hermesDefaultReplacementFor(app),
 ): ProfileTransferPorts {
   const hermes = hermesRuntimeFor(app);
   return {
@@ -501,7 +505,12 @@ export function profileTransferPorts(
       importInto: (workspaceId, actorId, bundle) =>
         modelsServiceFor(app).importProviders(workspaceId, { userId: actorId }, bundle),
     },
-    added: (profile, actorId) => profileCreatedFor(app, { profile, source: null, actorId }),
+    added: (profile, actorId, source) =>
+      profileCreatedFor(app, { profile, source: source ?? null, actorId }),
+    // An archive as the default profile (contract decision §116): the files are Hermes's
+    // (`agents`), the rows are `auth`'s, and the default's new name goes to Hermes after.
+    defaultProfile,
+    renamed: (profile) => mirrorDisplayName(app, profile),
   };
 }
 
