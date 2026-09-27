@@ -22,6 +22,7 @@ import { LinkedHubsScreen } from '../screens/LinkedHubsScreen.js';
 import { NewChatScreen } from '../screens/NewChatScreen.js';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen.js';
 import { SearchScreen } from '../screens/SearchScreen.js';
+import { WorkflowsScreen } from '../screens/WorkflowsScreen.js';
 import { SettingsScreen } from '../settings/SettingsScreen.js';
 import { navigation, preAuthRouteOf, routeOf, webDestinations } from './manifest.js';
 
@@ -50,6 +51,7 @@ const SPECIAL: Record<string, () => ReactElement> = {
   rooms: () => <RoomsScreen />,
   tasks: () => <TasksScreen />,
   schedules: () => <SchedulesScreen />,
+  workflows: () => <WorkflowsScreen />,
   models: () => <ModelsScreen />,
   global_agent: () => <GlobalAgentScreen />,
 };

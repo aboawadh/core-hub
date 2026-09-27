@@ -1,5 +1,7 @@
 /**
- * The Workflows section of the Schedules page and its canvas (DECISIONS §52).
+ * The Workflows page and its canvas (DECISIONS §52) — a tab of Schedules until 2026-09-28, its
+ * own page since (DECISIONS §126); the old `/schedules?section=workflows…` addresses the tests
+ * below still open prove the redirect keeps them working.
  *
  * Asserted: every profile's workflows are listed (`profiles=all`); a new workflow is drawn
  * from the palette, connected from the side panel, checked by the hub as it changes (its
@@ -18,6 +20,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { SchedulesScreen } from '../src/schedules/SchedulesScreen.js';
+import { WorkflowsScreen } from '../src/screens/WorkflowsScreen.js';
 
 afterEach(cleanup);
 
@@ -299,10 +302,19 @@ function mount(fetchImpl: typeof fetch, at: string, language: 'en' | 'ar' = 'en'
               <MemoryRouter initialEntries={[at]}>
                 <Routes>
                   <Route
-                    path="*"
+                    path="/schedules"
                     element={
                       <>
                         <SchedulesScreen />
+                        <Where />
+                      </>
+                    }
+                  />
+                  <Route
+                    path="/workflows"
+                    element={
+                      <>
+                        <WorkflowsScreen />
                         <Where />
                       </>
                     }
@@ -322,12 +334,13 @@ async function pick(user: ReturnType<typeof userEvent.setup>, testId: string, op
   await user.click(await screen.findByRole('option', { name: option }));
 }
 
-describe('Schedules: the Workflows section', () => {
+describe('Workflows: its own page', () => {
   it("lists every profile's workflows and opens one in its own profile", async () => {
     const user = userEvent.setup();
     const { seen, fetchImpl } = fakeHub();
-    mount(fetchImpl, '/schedules');
-    await user.click(screen.getByRole('tab', { name: 'Workflows' }));
+    mount(fetchImpl, '/workflows');
+    // Its own page now: Schedules has no Workflows tab any more.
+    expect(screen.queryByRole('tab', { name: 'Workflows' })).toBeNull();
     const cards = await screen.findAllByTestId('workflow-card');
     expect(cards.map((card) => within(card).getByText(/Release|Digest/).textContent)).toEqual([
       'Release',
@@ -337,7 +350,7 @@ describe('Schedules: the Workflows section', () => {
     await user.click(within(cards[0]!).getByTestId('workflow-open'));
     expect(await screen.findByTestId('workflow-editor')).toHaveAttribute('data-workflow-id', FLOW);
     expect(screen.getByTestId('where')).toHaveTextContent(
-      `/schedules?section=workflows&workflow=${FLOW}&profile=designer`,
+      `/workflows?workflow=${FLOW}&profile=designer`,
     );
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
     expect(seen.find((c) => c.path === `/workflows/${FLOW}`)!.profile).toBe('designer');
@@ -668,5 +681,26 @@ describe('Schedules: the Workflows section', () => {
     expect(await screen.findByTestId('workflow-canvas')).toHaveAttribute('data-direction', 'rtl');
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
     expect(screen.getByRole('tab', { name: 'تحرير' })).toBeInTheDocument();
+  });
+});
+
+describe('the old Schedules address of Workflows (DECISIONS §126)', () => {
+  it('lands on the Workflows page with the rest of the address kept', async () => {
+    const { fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer&run=${RUN}`);
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent(
+        `/workflows?workflow=${FLOW}&profile=designer&run=${RUN}`,
+      ),
+    );
+    expect(await screen.findByTestId('workflow-editor')).toHaveAttribute('data-workflow-id', FLOW);
+  });
+
+  it('keeps Schedules itself, without a Workflows tab', async () => {
+    const { fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules');
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/schedules$/);
+    expect(screen.queryByRole('tab', { name: 'Workflows' })).toBeNull();
+    expect(screen.queryByTestId('workflows-section')).toBeNull();
   });
 });

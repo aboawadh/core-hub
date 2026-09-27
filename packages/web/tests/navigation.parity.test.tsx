@@ -8,10 +8,15 @@ import en from '../src/i18n/en.json' with { type: 'json' };
 import {
   agentMenu,
   agentPageFromPath,
+  brandRowIds,
   canOpen,
+  destinationsById,
   legacyRedirect,
   navigation,
+  pathIsUnder,
+  railIds,
   routeOf,
+  sidebarGroups,
   termKey,
   visibleEntries,
   webDestinations,
@@ -142,6 +147,26 @@ describe('navigation parity (web)', () => {
     const memberTabs = visibleEntries(navigation.settingsTabs, 'member').map((d) => d.id);
     expect(memberTabs).not.toContain('users');
     expect(memberTabs).not.toContain('webhooks');
+  });
+
+  it('Tools and Search beside the toggle (DECISIONS §126): presentation over the rail, nothing new to the phones', () => {
+    // `rail` is what every client (the phones too) still matches exactly; Workflows, which only
+    // web and desktop have yet, is in `railExtra`.
+    expect(raw.rail).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
+    expect(railIds()).toEqual([...raw.rail, 'workflows']);
+    expect(routeOf('workflows')).toBe('/workflows');
+    expect(destinationsById.get('workflows')?.surfaces).toEqual(['web', 'desktop']);
+    expect(brandRowIds()).toEqual(['search']);
+    const groups = sidebarGroups();
+    expect(groups.map((g) => g.id)).toEqual(['tools']);
+    expect(groups[0]!.items).toEqual(['agent_manager', 'tasks', 'workflows', 'schedules']);
+    expect((en.nav as Record<string, string>).tools).toBe('Tools');
+    expect((ar.nav as Record<string, string>).tools).toBe('الأدوات');
+    for (const id of groups[0]!.items) expect(railIds()).toContain(id);
+    // A page inside the group is found from its path, with or without the rest of it.
+    expect(pathIsUnder('/workflows', 'workflows')).toBe(true);
+    expect(pathIsUnder('/tasks/01J8QK3ZR2W7M5N4P6T8V9X0YA', 'tasks')).toBe(true);
+    expect(pathIsUnder('/chat', 'tasks')).toBe(false);
   });
 
   it('the Agents page and the agent level live under /agents; the old /settings/agents URLs move', () => {

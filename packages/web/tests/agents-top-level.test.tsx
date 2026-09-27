@@ -161,7 +161,9 @@ describe('Agents: a main-sidebar entry above Tasks (owner, 2026-09-24)', () => {
     const ids = within(rail)
       .getAllByRole('link')
       .map((link) => link.getAttribute('data-nav-id'));
-    expect(ids).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
+    // Since 2026-09-28 (DECISIONS §126) Search is an icon beside the fold toggle, and Agents
+    // heads the «Tools» group — still directly above Tasks.
+    expect(ids).toEqual(['new_chat', 'agent_manager', 'tasks', 'workflows', 'schedules']);
     const entry = within(rail).getByRole('link', { name: 'Agents' });
     expect(entry.getAttribute('href')).toBe('/agents');
     // And it is gone from Settings → Management.

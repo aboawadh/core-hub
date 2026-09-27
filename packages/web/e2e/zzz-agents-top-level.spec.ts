@@ -37,13 +37,14 @@ test('27. Agents above Tasks: a card chip opens the agent with its own side list
 }) => {
   await login(page, 'admin', PASSWORD);
 
-  // The rail: New chat · Search · Agents · Tasks · Schedules — Agents directly above Tasks.
+  // The rail: New chat, then «Tools» — Agents · Tasks · Workflows · Schedules, Agents directly
+  // above Tasks. Search is an icon beside the fold toggle since 2026-09-28 (DECISIONS §126).
   const rail = page.getByTestId('rail');
   await expect(rail.getByRole('link')).toHaveCount(5);
   const order = await rail
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.getAttribute('data-nav-id')));
-  expect(order).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
+  expect(order).toEqual(['new_chat', 'agent_manager', 'tasks', 'workflows', 'schedules']);
   await rail.getByRole('link', { name: 'الوكلاء' }).click();
   await expect(page).toHaveURL(/\/agents$/);
   await expect(page.getByRole('heading', { name: 'الوكلاء' }).first()).toBeVisible();

@@ -50,7 +50,9 @@
     "terminal": "Terminal",
     "files": "Files",
     "config_files": "Config files",
-    "linked_hubs": "Linked hubs"
+    "linked_hubs": "Linked hubs",
+    "workflows": "Workflows",
+    "tools": "Tools"
   },
   "common": {
     "loading": "Loading…",
@@ -1522,8 +1524,6 @@
   },
   "workflows": {
     "section": "Workflows",
-    "schedules_section": "Schedules",
-    "sections_label": "Schedules and workflows",
     "new": "New workflow",
     "new_hint": "Draw the steps and connect them. New workflows are made in {name}.",
     "empty": "No workflows yet",

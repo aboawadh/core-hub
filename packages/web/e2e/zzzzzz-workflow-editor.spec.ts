@@ -46,10 +46,10 @@ test('32. a two-step workflow drawn on the canvas runs, and its run is read on t
 }) => {
   await login(page);
   await inDefault(page);
-  await page.getByRole('link', { name: 'الجدولة', exact: true }).click();
-  await expect(page).toHaveURL(/\/schedules$/);
+  // Workflows has its own entry under «الأدوات» since 2026-09-28 (DECISIONS §126).
+  await page.getByTestId('rail').getByRole('link', { name: 'سير العمل', exact: true }).click();
+  await expect(page).toHaveURL(/\/workflows$/);
 
-  await page.getByRole('tab', { name: 'سير العمل' }).click();
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await expect(editor).toHaveAttribute('data-workflow-id', 'new');
@@ -149,8 +149,7 @@ test('32b. a new workflow is checked before it has a name, then named, saved and
 }) => {
   await login(page);
   await inDefault(page);
-  await page.getByRole('link', { name: 'الجدولة', exact: true }).click();
-  await page.getByRole('tab', { name: 'سير العمل' }).click();
+  await page.getByTestId('rail').getByRole('link', { name: 'سير العمل', exact: true }).click();
   await page.getByTestId('workflow-new').click();
   const editor = page.getByTestId('workflow-editor');
   await expect(editor).toHaveAttribute('data-workflow-id', 'new');

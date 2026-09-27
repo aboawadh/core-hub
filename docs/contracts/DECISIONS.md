@@ -3987,3 +3987,30 @@ Rejected: re-serialising the parsed body to check its signature (other bytes tha
 signed); putting the secret in the address (it would be in every proxy log); new values in
 `RunTrigger.kind` (an older app would meet an enum value it does not know — the run says
 `api` and carries the new optional fields).
+
+## 126. The web and desktop sidebar: Search beside the fold toggle, and «Tools» around Agents, Tasks, Workflows and Schedules
+
+Owner's design, approved 2026-09-28 (web and desktop; the phones follow in their own change once he
+has seen it): the search icon sits next to the fold toggle at the top, and comes back as the row
+right below New chat when the sidebar is folded into its rail of icons. One expandable entry,
+«الأدوات» / "Tools", holds — in this order — Agents (owners and admins only, as before), Tasks,
+Workflows and Schedules. A press on it closes it so the chats list gets the room and opens it again;
+the choice is the device's (local storage, read inside try/catch, open by default), and while it is
+closed on one of its pages the heading is marked as the current place. Workflows leaves the
+Schedules page, where it was a tab, for a page and an entry of its own (`/workflows`), and the tab's
+old address (`/schedules?section=workflows…`) still lands there with the rest of it kept.
+
+**The navigation contract grows, and nothing a phone reads changes.** `docs/clients/navigation.json`
+gains the term `workflows` and `tools`; the destination `workflows` (`surfaces: web, desktop`,
+member, entry kind `rail`) listed in a new `railExtra` rather than in `rail`, because the Android
+parity test compares `rail` exactly and the phones do not have the page yet; `brandRow` (the rail
+entries web and desktop draw beside the fold toggle: `search`) and `sidebarGroups` (`tools` with its
+items) — presentation over the rail, not destinations. `rail` itself is unchanged. `nav:check`
+counts `railExtra` as a primary list and checks that every `brandRow` and group item is a rail entry,
+in one place only, on the group's surfaces, with a known title term. `profileScope.alwaysAll` gains
+`workflows` (the page lists every profile, as the tab did). The API contract does not change.
+
+Rejected: putting `workflows` in `rail` (every phone parity test would fail until the phones draw
+it); a Tools destination with its own page (it would be a hub page listing four links, the
+"settings inside settings" NAVIGATION rules out); remembering the group per account (it is about the
+room on this screen, like the fold); keeping Workflows as a tab too (two entries to one place).

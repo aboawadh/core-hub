@@ -36,11 +36,24 @@ export interface PreAuthScreen {
   routes: Partial<Record<Surface, string>>;
 }
 
+/** A heading the sidebar gathers rail entries under (`sidebarGroups` in the manifest). */
+export interface SidebarGroupSpec {
+  title: string;
+  surfaces?: Surface[];
+  items: string[];
+}
+
 export interface NavigationManifest {
   version: number;
   terms: Record<string, { en: string; ar: string }>;
   destinations: Destination[];
   rail: string[];
+  /** Rail entries only some surfaces have yet (`workflows`: web and desktop), after `rail`. */
+  railExtra?: string[];
+  /** Rail entries drawn as an icon in the brand row beside the fold toggle (DECISIONS §126). */
+  brandRow?: { surfaces?: Surface[]; items: string[] };
+  /** Rail entries gathered under one expandable heading, keyed by group (DECISIONS §126). */
+  sidebarGroups?: Record<string, SidebarGroupSpec | string>;
   segments: string[];
   footer: string[];
   settingsTabs: string[];
@@ -184,4 +197,34 @@ export function legacyRedirect(pathname: string): string | null {
     if (pathname.startsWith(`${from}/`)) return `${to}${pathname.slice(from.length)}`;
   }
   return null;
+}
+
+/** The rail on this surface: `rail`, then the entries only some surfaces have (`railExtra`). */
+export function railIds(): string[] {
+  return [...navigation.rail, ...(navigation.railExtra ?? [])];
+}
+
+const onSurface = (surfaces: readonly Surface[] | undefined) =>
+  !surfaces || surfaces.includes(SURFACE);
+
+/** Rail entries this surface draws in the brand row instead of as rows (`brandRow`). */
+export function brandRowIds(): string[] {
+  const row = navigation.brandRow;
+  return row && onSurface(row.surfaces) ? [...row.items] : [];
+}
+
+/** The groups of rail entries on this surface, each with its id (`sidebarGroups`). */
+export function sidebarGroups(): Array<SidebarGroupSpec & { id: string }> {
+  return Object.entries(navigation.sidebarGroups ?? {})
+    .filter((entry): entry is [string, SidebarGroupSpec] => !entry[0].startsWith('$'))
+    .filter(([, group]) => onSurface(group.surfaces))
+    .map(([id, group]) => ({ id, ...group }));
+}
+
+/** Whether a path is (under) a destination's page: `/workflows?x` is inside `workflows`. */
+export function pathIsUnder(pathname: string, id: string): boolean {
+  const route = ROUTES[id];
+  if (!route) return false;
+  const base = route.split('/:')[0] ?? route;
+  return pathname === base || pathname.startsWith(`${base}/`);
 }
