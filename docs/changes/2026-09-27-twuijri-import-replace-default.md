@@ -87,7 +87,7 @@
   العميل أي معرّف صالح).
 - وصف `auth.importProfile`: السلوك الجديد، الرفض `409` لاستبدال جارٍ، ونتيجة المهمة الإضافية
   `{replaced_default: true, backup: {profile_id, slug, name}, skipped}`.
-- `docs/contracts/DECISIONS.md` §التالي الحر.
+- `docs/contracts/DECISIONS.md` §116 (مقترح).
 
 ## الملفات والتأثير
 - **العقد:** `packages/contracts/openapi.yaml` (`ProfileImport.replace_default`، ووصف `auth.importProfile`)،
