@@ -77,10 +77,19 @@ describe('auth: the owner on this computer (desktop local mode)', () => {
     }
   });
 
-  it('resets the password once, revokes every other sign-in and paired phone, signs the app in, audits without the password', async () => {
+  it('resets the password once, ends the sign-ins on other devices but keeps personal tokens, signs the app in, audits without the password', async () => {
     const hub = await signedInHub();
     try {
       const phone = await pairPhone(hub);
+      // A personal token for a script or integration (owner, 2026-09-28: it must survive).
+      const created = await hub.app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/app-tokens',
+        headers: { authorization: `Bearer ${hub.token}` },
+        payload: { name: 'backup script', scopes: ['read'] },
+      });
+      expect(created.statusCode).toBe(201);
+      const personal = created.json() as { token: string };
       const access = localOwnerAccessFor(hub.app.hub.io)!;
       const opened = access.beginRecovery('touch_id');
       expect(opened.username).toBe('admin');
@@ -99,7 +108,7 @@ describe('auth: the owner on this computer (desktop local mode)', () => {
       expect(pair.user.username).toBe('admin');
       expect(pair.refresh_token).toMatch(/^hub_rt_/);
 
-      // Only the app's new sign-in is left.
+      // The app's new sign-in and the personal token are all that is left.
       const db = requireSqlite(hub.app.hub.database);
       const device = db.select().from(devices).where(eq(devices.id, phone.device.id)).get()!;
       expect(device.status).toBe('revoked');
@@ -109,7 +118,7 @@ describe('auth: the owner on this computer (desktop local mode)', () => {
         .where(eq(appTokens.userId, hub.userId))
         .all()
         .filter((row) => row.revokedAt === null);
-      expect(live.map((row) => row.name)).toEqual([LABEL]);
+      expect(live.map((row) => row.name).sort()).toEqual(['backup script', LABEL].sort());
 
       // Single use.
       await expect(
@@ -124,6 +133,8 @@ describe('auth: the owner on this computer (desktop local mode)', () => {
       expect((await me(hub, hub.token)).statusCode).toBe(401);
       expect((await me(hub, phone.app_token)).statusCode).toBe(401);
       expect((await me(hub, pair.access_token)).statusCode).toBe(200);
+      // The personal token still works.
+      expect((await me(hub, personal.token)).statusCode).toBe(200);
 
       const rows = db.select().from(auditEvents).all();
       const recovered = rows.find((row) => row.action === 'auth.password_recovered')!;
@@ -132,12 +143,14 @@ describe('auth: the owner on this computer (desktop local mode)', () => {
       expect(recovered.data).toMatchObject({
         via: 'desktop_local',
         method: 'touch_id',
+        sessions_revoked: 1,
         devices_revoked: 1,
       });
       expect(rows.some((row) => row.action === 'auth.password_recovery_started')).toBe(true);
       const everything = JSON.stringify(rows);
       expect(everything).not.toContain(NEW_PASSWORD);
       expect(everything).not.toContain(opened.grant);
+      expect(everything).not.toContain(personal.token);
     } finally {
       await hub.close();
     }
