@@ -91,9 +91,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Workflows on the phone (B12): every workflow of every profile the person may enter, run with the
- * limits the hub supports, and a read-only view of a run whose steps follow it live — a waiting
- * step is approved or denied right there. The graph itself is drawn and edited on the web.
+ * Workflows on the phone (B12; its own page since 2026-09-28, DECISIONS §128): every workflow of
+ * every profile the person may enter, run with the limits the hub supports, edited as a list of
+ * steps (WorkflowEditor.kt), and a view of a run whose steps follow it live — a waiting step is
+ * approved or denied right there.
  */
 object Workflows {
     private val done = setOf(WorkflowRun.Status.SUCCEEDED, WorkflowRun.Status.FAILED, WorkflowRun.Status.CANCELLED)
@@ -188,6 +189,10 @@ data class WorkflowsUi(
  * scripted hub. Every call about a workflow or a run goes to its own profile (ADR 0016).
  */
 class WorkflowsModel(private val apis: () -> HubApis?, private val home: () -> String) {
+    companion object {
+        const val RUNS_LIMIT = 50
+    }
+
     private val _ui = MutableStateFlow(WorkflowsUi())
     val ui: StateFlow<WorkflowsUi> = _ui.asStateFlow()
 
@@ -209,7 +214,8 @@ class WorkflowsModel(private val apis: () -> HubApis?, private val home: () -> S
 
     suspend fun loadRuns() {
         val w = _ui.value.opened ?: return
-        call { it.schedules.schedulesListWorkflowRuns(w.profile, w.id, limit = 10) }
+        // Enough runs for "Find a run" by task or event id (the web's run picker).
+        call { it.schedules.schedulesListWorkflowRuns(w.profile, w.id, limit = RUNS_LIMIT) }
             .onSuccess { page -> _ui.update { it.copy(runs = page.items) } }
             .onFailure { e -> _ui.update { it.copy(runs = emptyList(), error = e as HubError) } }
     }
@@ -282,6 +288,9 @@ class WorkflowsModel(private val apis: () -> HubApis?, private val home: () -> S
 class WorkflowsViewModel(graph: AppGraph) : ViewModel() {
     val model = WorkflowsModel({ graph.store.current?.let(graph::apis) }, { graph.store.current?.profile ?: "default" })
     val ui: StateFlow<WorkflowsUi> = model.ui
+
+    /** The top bar's "New workflow" ([NewWorkflowButton]), taken by the list's editor. */
+    val newRequest = MutableStateFlow(false)
 
     init {
         graph.realtime.subscribeAll(SCHEDULES_NAMESPACE)
@@ -384,7 +393,18 @@ private fun limitFacts(limits: WorkflowLimits): List<String> = listOfNotNull(
     limits.stepTimeoutSeconds?.let { stringResource(R.string.workflow_limit_step, Workflows.minutes(it)) },
 )
 
-/** The Workflows half of Schedules: a card per workflow; a tap opens its sheet. */
+/** The Workflows page's top-bar action: a new workflow in the selector's profile. */
+@Composable
+fun NewWorkflowButton() {
+    val context = LocalContext.current
+    val vm: WorkflowsViewModel = viewModel { WorkflowsViewModel(context.graph) }
+    HubIconButton(
+        Lucide.Plus, stringResource(R.string.wfe_new), { vm.newRequest.value = true },
+        kind = hub.core.android.ui.kit.IconKind.Glass, modifier = Modifier.testTag("workflows.new"),
+    )
+}
+
+/** The Workflows page: a card per workflow; a tap opens its sheet. */
 @Composable
 fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     val context = LocalContext.current
@@ -398,6 +418,10 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
     var editing by remember { mutableStateOf<Workflow?>(null) }
     var creating by remember { mutableStateOf<WorkflowDraft?>(null) }
     var deleting by remember { mutableStateOf<Workflow?>(null) }
+    val wantsNew by vm.newRequest.collectAsState()
+    LaunchedEffect(wantsNew) {
+        if (wantsNew) { vm.newRequest.value = false; creating = WorkflowDraft() }
+    }
     val focus by hub.core.android.nav.Focus.item.collectAsState()
     LaunchedEffect(focus, ui.loading) {
         if (ui.loading) return@LaunchedEffect
@@ -415,12 +439,6 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                HubButton(
-                    stringResource(R.string.wfe_new), { creating = WorkflowDraft() }, size = ControlSize.Md, icon = Lucide.Plus,
-                    modifier = Modifier.testTag("workflows.new"),
-                )
-            }
             if (ui.items.isEmpty()) item { EmptyState(stringResource(R.string.workflows_empty), body = stringResource(R.string.workflows_empty_body), icon = Lucide.Workflow) }
             items(ui.items, key = { it.profile + "/" + it.id }) { w ->
                 HubCard(Modifier.testTag("workflow.card.${w.id}"), onClick = { vm.open(w) }, padding = 14.dp) {
@@ -460,7 +478,11 @@ fun WorkflowsList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
         }
     }
     editing?.let { w ->
-        WorkflowEditorSheet(w, w.profile, editOps, onDismiss = { editing = null }, onSaved = { editing = null; vm.reload() })
+        WorkflowEditorSheet(
+            w, w.profile, editOps, onDismiss = { editing = null }, onSaved = { editing = null; vm.reload() },
+            // A trigger delivery's run: the run view of that run, in the workflow's sheet.
+            onShowRun = { id -> editing = null; vm.openRunOf(w.profile, id) },
+        )
     }
     creating?.let { draft ->
         WorkflowEditorSheet(
@@ -546,13 +568,20 @@ private fun WorkflowSheet(
             enabled = problem == null && w.nodes.isNotEmpty(), loading = ui.acting, modifier = Modifier.fillMaxWidth().testTag("workflow.run"),
         )
         SectionTitle(stringResource(R.string.workflows_runs))
+        var find by remember(w.id) { mutableStateOf("") }
         when (val runs = ui.runs) {
             null -> Loading(Modifier.padding(16.dp))
             else -> if (runs.isEmpty()) Text(stringResource(R.string.schedules_no_runs), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
-            else GroupedList {
-                runs.forEach { run ->
+            else {
+            // The runs about one task or one event (§123): matched on the ids a trigger gave them.
+            HubTextField(
+                find, { find = it }, label = stringResource(R.string.wft_run_find), placeholder = stringResource(R.string.wft_run_find_hint),
+                mono = true, size = ControlSize.Md, leadingIcon = Lucide.Search, fieldTag = "workflow.runs.find",
+            )
+            GroupedList {
+                WorkflowFlowRules.findRuns(runs, find).forEach { run ->
                     Item(
-                        run.startedAt?.let(::localTime) ?: run.createdAt.let(::localTime),
+                        (run.startedAt?.let(::localTime) ?: run.createdAt.let(::localTime)) + (run.taskId?.let { " · $it" } ?: ""),
                         subtitle = run.error ?: run.input,
                         chevron = true,
                         tag = "workflow.run.${run.id}",
@@ -560,6 +589,7 @@ private fun WorkflowSheet(
                         trailing = { val (label, tone) = runState(run.status); Badge(label, tone = tone, dot = true) },
                     )
                 }
+            }
             }
         }
         // Its steps and connections are edited here (WorkflowEditor.kt).
@@ -588,7 +618,10 @@ private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: Workflow
             Badge(label, tone = tone, dot = true, modifier = Modifier.testTag("workflow.run.status"))
             // Where the run is (§127); a value this app does not know is shown as it is.
             run.phase?.let { Badge(phaseLabel(it), modifier = Modifier.testTag("workflow.run.phase")) }
-            run.taskId?.let { Badge(stringResource(R.string.wfe_run_task, it)) }
+            if (run.filtered == true) Badge(stringResource(R.string.wft_run_filtered), modifier = Modifier.testTag("workflow.run.filtered"))
+            // Ids read left to right whatever the UI language.
+            run.taskId?.let { id -> LtrBadge(stringResource(R.string.wfe_run_task, id), BadgeTone.Info, "workflow.run.task") }
+            run.eventId?.let { id -> LtrBadge(stringResource(R.string.wft_run_event, id), BadgeTone.Neutral, "workflow.run.event") }
             run.startedAt?.let { Badge(localTime(it)) }
             run.cost?.let { Badge(stringResource(R.string.workflow_limit_cost, it.amount)) }
         }
@@ -673,5 +706,15 @@ private fun RunView(w: Workflow, run: WorkflowRun, ui: WorkflowsUi, vm: Workflow
                 ErrorNotice(failed)
             }
         }
+    }
+}
+
+/** A badge whose words hold an id: laid out left to right. */
+@Composable
+private fun LtrBadge(text: String, tone: BadgeTone, tag: String) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+    ) {
+        Badge(text, tone = tone, modifier = Modifier.testTag(tag))
     }
 }

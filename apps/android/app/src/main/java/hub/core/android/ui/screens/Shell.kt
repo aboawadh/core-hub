@@ -63,6 +63,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -84,6 +88,7 @@ import hub.core.android.graph
 import hub.core.android.nav.Navigator
 import hub.core.android.nav.Route
 import hub.core.android.nav.Screens
+import hub.core.android.nav.SidebarGroups
 import hub.core.android.ui.components.AgentAvatar
 import hub.core.android.ui.components.AgentIdentity
 import hub.core.android.ui.components.BrandMark
@@ -199,6 +204,7 @@ fun railIcon(destination: String): Int = when (destination) {
     "agent_manager" -> Lucide.Cpu
     "tasks" -> Lucide.ListChecks
     "schedules" -> Lucide.CalendarClock
+    "workflows" -> Lucide.Workflow
     "chat" -> Lucide.MessagesSquare
     "rooms" -> Lucide.Users
     "settings" -> Lucide.Settings
@@ -222,19 +228,44 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
             BrandMark(28)
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.app_name), fontSize = FontTokens.sizeLg.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            // The brand row's entries (Search) as icons beside the close button (DECISIONS §128).
+            Screens.brandRow.forEach { destination ->
+                val route = Screens.routeOf(destination) ?: return@forEach
+                HubIconButton(
+                    railIcon(destination), term(destination), { nav.go(route); onClose() },
+                    size = ControlTokens.heightMd.dp, iconSize = 18.dp,
+                    kind = if (nav.current == route) IconKind.Soft else IconKind.Plain,
+                    modifier = Modifier.testTag("rail.$destination"),
+                )
+            }
             HubIconButton(Lucide.X, stringResource(R.string.menu_close), onClose, size = ControlTokens.heightMd.dp, iconSize = 18.dp)
         }
         Spacer(Modifier.height(8.dp))
         val go: (Route) -> Unit = { route -> nav.go(route); onClose() }
+        val graph = LocalContext.current.graph
+        val closedGroups by graph.sidebarGroups.closed.collectAsState()
         val rail: @Composable () -> Unit = {
             Column(Modifier.padding(horizontal = 8.dp)) {
-                RailRow("new_chat", nav.current == Route.NewChat) { go(Route.NewChat) }
-                RailRow("search", nav.current == Route.Search) { go(Route.Search) }
-                if (Screens.visible("agent_manager", s.user.isAdmin)) {
-                    RailRow("agent_manager", nav.current == Route.Agents) { go(Route.Agents) }
+                Screens.railRows.forEach { destination ->
+                    val route = Screens.routeOf(destination) ?: return@forEach
+                    if (Screens.visible(destination, s.user.isAdmin)) RailRow(destination, nav.current == route) { go(route) }
                 }
-                RailRow("tasks", nav.current == Route.Tasks) { go(Route.Tasks) }
-                RailRow("schedules", nav.current == Route.Schedules) { go(Route.Schedules) }
+                Screens.groups.forEach { (group, items) ->
+                    val shown = SidebarGroups.visibleItems(items, s.user.isAdmin)
+                    if (shown.isEmpty()) return@forEach
+                    val closed = group in closedGroups
+                    GroupHeading(group, open = !closed, marked = SidebarGroups.headingMarked(closed, shown, nav.current.destination)) {
+                        graph.sidebarGroups.toggle(group)
+                    }
+                    if (!closed) {
+                        Column(Modifier.padding(start = 12.dp)) {
+                            shown.forEach { destination ->
+                                val route = Screens.routeOf(destination) ?: return@forEach
+                                RailRow(destination, nav.current == route) { go(route) }
+                            }
+                        }
+                    }
+                }
             }
             Segmented(
                 listOf(
@@ -254,6 +285,51 @@ private fun Sidebar(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) 
         Hairline(Modifier.fillMaxWidth())
         Footer(shell, nav, onClose)
     }
+}
+
+/**
+ * A group's heading («Tools»): its icon, its title, and a chevron at the end — down when open,
+ * pointing to the reading end when closed. A tap opens or closes it; closed on one of its pages, it
+ * is drawn as the current place (the selected row's background, «selected» for TalkBack).
+ */
+@Composable
+private fun GroupHeading(group: String, open: Boolean, marked: Boolean, onToggle: () -> Unit) {
+    val t = LocalTokens.current
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val state = stringResource(if (open) R.string.sidebar_group_expanded else R.string.sidebar_group_collapsed)
+    Row(
+        Modifier.fillMaxWidth().height(ControlTokens.heightLg.dp).clip(ItemShape)
+            .background(if (marked) t.surface2 else Color.Transparent, ItemShape)
+            .clickable(onClick = onToggle)
+            .semantics {
+                stateDescription = state
+                selected = marked
+                if (open) collapse { onToggle(); true } else expand { onToggle(); true }
+            }
+            .padding(horizontal = 8.dp).testTag("sidebar.group.$group"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        LucideIcon(groupIcon(group), null, size = 18.dp, tint = if (marked) t.text else t.textMuted)
+        Text(
+            term(group), fontSize = FontTokens.sizeMd.sp, color = t.text,
+            fontWeight = if (marked) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f),
+        )
+        LucideIcon(
+            when {
+                open -> Lucide.ChevronDown
+                rtl -> Lucide.ChevronLeft
+                else -> Lucide.ChevronRight
+            },
+            null, size = 16.dp, tint = t.textMuted,
+        )
+    }
+}
+
+/** A group heading's icon (Lucide, as the web's). */
+fun groupIcon(group: String): Int = when (group) {
+    "tools" -> Lucide.Wrench
+    else -> Lucide.Info
 }
 
 /** One rail row: an icon and the destination's name, the height of a large control. */

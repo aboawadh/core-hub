@@ -215,7 +215,10 @@ class PushTest {
         )
         assertEquals("/chat/01J8QK3ZR2W7M5N4P6T8V9X0YA", PushPayload.path(data("resource_kind" to "session", "resource_id" to "01J8QK3ZR2W7M5N4P6T8V9X0YA")))
         assertEquals("/tasks", PushPayload.path(data("resource_kind" to "task", "resource_id" to "T")))
-        assertEquals("/schedules", PushPayload.path(data("resource_kind" to "workflow_run", "resource_id" to "R")))
+        // A workflow run opens on Workflows, the run itself (DECISIONS §128).
+        assertEquals("/workflows?workflow_run=R&profile=work", PushPayload.path(data("resource_kind" to "workflow_run", "resource_id" to "R", "profile" to "work")))
+        assertEquals("/workflows", PushPayload.path(data("resource_kind" to "workflow_run")))
+        assertEquals("/schedules", PushPayload.path(data("resource_kind" to "schedule_run", "resource_id" to "R")))
         assertEquals("/settings/notifications", PushPayload.path(data()))
         assertEquals("/settings/notifications", PushPayload.path(data("resource_kind" to "session")))
         // An id that is not a plain id cannot break out of the path.

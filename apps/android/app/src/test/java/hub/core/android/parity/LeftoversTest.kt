@@ -94,7 +94,7 @@ class LeftoversTest {
 
     @Test fun `each item opens where it lives`() {
         assertEquals(Route.Tasks, BackgroundRules.routeOf(item("task_run", session = "01J8QK3ZR2W7M5N4P6T8V9X0YA")))
-        assertEquals(Route.Schedules, BackgroundRules.routeOf(item("workflow_run", resource = """{"kind":"workflow_run","id":"01J8QK3ZR2W7M5N4P6T8V9X0WR"}""")))
+        assertEquals(Route.Workflows, BackgroundRules.routeOf(item("workflow_run", resource = """{"kind":"workflow_run","id":"01J8QK3ZR2W7M5N4P6T8V9X0WR"}""")))
         assertEquals(Route.Chat("01J8QK3ZR2W7M5N4P6T8V9X0YA", "home"), BackgroundRules.routeOf(item("subagent", session = "01J8QK3ZR2W7M5N4P6T8V9X0YA", profile = "home")))
         assertEquals(Route.Chat("01J8QK3ZR2W7M5N4P6T8V9X0YA", "work"), BackgroundRules.routeOf(item("chat_run", session = "01J8QK3ZR2W7M5N4P6T8V9X0YA")))
         assertEquals(Route.SettingsPage("workspaces"), BackgroundRules.routeOf(item("job", jobKind = "export")))

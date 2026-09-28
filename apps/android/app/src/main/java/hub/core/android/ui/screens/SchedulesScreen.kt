@@ -13,7 +13,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,8 +51,6 @@ import hub.core.android.ui.kit.HubSheet
 import hub.core.android.ui.kit.Lucide
 import hub.core.android.ui.kit.LucideIcon
 import hub.core.android.ui.kit.NoticeBox
-import hub.core.android.ui.kit.Segment
-import hub.core.android.ui.kit.Segmented
 import hub.core.android.ui.theme.LocalTokens
 import hub.core.client.model.Agent
 import hub.core.client.model.JobStatus
@@ -177,27 +174,9 @@ internal fun ScheduleNoteView(note: ScheduleNote?, modifier: Modifier = Modifier
  */
 @Composable
 fun SchedulesScreen(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {
-    // Schedules and workflows share the page, as on the web: one segmented switch above them.
-    var half by rememberSaveable { mutableStateOf(SchedulesHalf.SCHEDULES) }
-    // A workflow run to open (Background, Pending, a notice): the Workflows half shows it (nav/Focus.kt).
-    val focus by hub.core.android.nav.Focus.item.collectAsState()
-    LaunchedEffect(focus) { if (focus?.kind == hub.core.android.nav.FocusItem.Kind.WORKFLOW_RUN) half = SchedulesHalf.WORKFLOWS }
-    Column(Modifier.fillMaxSize()) {
-        Segmented(
-            listOf(
-                Segment(SchedulesHalf.SCHEDULES, stringResource(R.string.schedules_tab_jobs), Lucide.CalendarClock, "schedules.tab.jobs"),
-                Segment(SchedulesHalf.WORKFLOWS, stringResource(R.string.schedules_tab_workflows), Lucide.Workflow, "schedules.tab.workflows"),
-            ),
-            half, { half = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        when (half) {
-            SchedulesHalf.SCHEDULES -> SchedulesList(shell, onOpenChat)
-            SchedulesHalf.WORKFLOWS -> WorkflowsList(shell, onOpenChat)
-        }
-    }
+    // Schedules only, as on the web: workflows have their own page since 2026-09-28 (DECISIONS §128).
+    SchedulesList(shell, onOpenChat)
 }
-
-enum class SchedulesHalf { SCHEDULES, WORKFLOWS }
 
 @Composable
 private fun SchedulesList(shell: ShellViewModel, onOpenChat: (String, String) -> Unit) {

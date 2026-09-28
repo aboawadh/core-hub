@@ -159,6 +159,8 @@ class WorkflowsTest {
 
         m.open(m.ui.value.items.first())
         assertEquals(1, m.ui.value.runs?.size)
+        // Enough runs for "Find a run" by task or event id (§128).
+        assertEquals("50", requests.first { it.requestUrl!!.encodedPath.endsWith("/runs") }.requestUrl!!.queryParameter("limit"))
 
         val limits = Workflows.limits(Workflows.LimitsInput(minutes = "5")).first
         assertTrue(m.run(m.ui.value.opened!!, "  الفرع  ", limits))
