@@ -13,7 +13,11 @@ import type { HermesApiCall } from './hermes-tools.js';
 import { McpError, getMcpServer, setOAuthRedirect, type McpServer } from './mcp.js';
 import {
   McpOAuthFlows,
+  awaitSignIn,
   callbackPage,
+  explainFlowError,
+  stateOf,
+  type CallbackOutcome,
   callbackUri,
   cancelHermesFlow,
   hubBaseOf,
@@ -59,13 +63,13 @@ export function registerMcpOAuthRoutes(
     return server;
   };
 
-  const answer = (record: McpOAuthFlowRecord) => ({
+  const answer = (record: McpOAuthFlowRecord, request: FastifyRequest) => ({
     id: record.id,
     server_name: record.serverName,
     status: record.last.status,
     authorization_url: record.last.authorization_url,
     redirect_uri: record.redirectUri,
-    error: record.last.error,
+    error: explainFlowError(record.last.error, request.language),
     tools: record.last.tools,
     expires_at: flows.expiresAt(record),
   });
@@ -117,10 +121,11 @@ export function registerMcpOAuthRoutes(
         hermesFlowId: started.hermesFlowId,
         redirectUri,
         createdAt: Date.now(),
+        state: stateOf(started.view.authorization_url),
         last: started.view,
       };
       flows.add(record);
-      return answer(record);
+      return answer(record, request);
     },
   });
 
@@ -132,7 +137,7 @@ export function registerMcpOAuthRoutes(
         const view = await pollHermesFlow(helpers.hermesApi(request, agentId), record.hermesFlowId);
         record.last = view ?? { ...record.last, status: 'expired', authorization_url: null };
       }
-      return answer(record);
+      return answer(record, request);
     },
   });
 
@@ -146,7 +151,7 @@ export function registerMcpOAuthRoutes(
         const view = await pollHermesFlow(api, record.hermesFlowId);
         record.last = view ?? { ...record.last, status: 'cancelled', error: null };
       }
-      return answer(record);
+      return answer(record, request);
     },
   });
 
@@ -172,17 +177,32 @@ export function registerMcpOAuthRoutes(
       const name = params.server_name as string;
       const url = request.raw.url ?? '';
       const at = url.indexOf('?');
-      const outcome = await relayCallback(
-        helpers.callbackApi(request.server),
-        name,
-        at === -1 ? '' : url.slice(at + 1),
-      );
+      const query = at === -1 ? '' : url.slice(at + 1);
+      const api = helpers.callbackApi(request.server);
+      const relayed = await relayCallback(api, name, query);
+      let outcome: CallbackOutcome;
+      let detail: { tools?: number; error?: string | null } = {};
+      if (relayed !== 'received') {
+        outcome = relayed;
+      } else {
+        // The code reached Hermes; the page speaks once Hermes says how the exchange ended.
+        const record = flows.byState(name, new URLSearchParams(query).get('state'));
+        const view = record && api ? await awaitSignIn(api, record) : null;
+        if (!view || view.status === 'pending') outcome = 'pending';
+        else if (view.status === 'approved') {
+          outcome = 'connected';
+          detail = { tools: view.tools.length };
+        } else if (view.status === 'failed') {
+          outcome = 'failed';
+          detail = { error: explainFlowError(view.error, request.language) };
+        } else outcome = 'expired';
+      }
       void reply
         .status(200)
         .type('text/html; charset=utf-8')
         .header('cache-control', 'no-store')
         .header('referrer-policy', 'no-referrer')
-        .send(callbackPage(outcome, name, request.language));
+        .send(callbackPage(outcome, name, request.language, detail));
       return reply;
     },
   });

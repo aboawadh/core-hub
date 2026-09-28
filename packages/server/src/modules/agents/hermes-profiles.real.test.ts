@@ -26,6 +26,9 @@ describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE 
         [
           'run',
           '--rm',
+          // Hermes from v2026.9.21 warns on stderr when it is PID 1 (an overridden entrypoint);
+          // the hub runs it as its own child, so the test gives it an init as well.
+          '--init',
           '-v',
           `${home}:/hh`,
           '-e',
@@ -79,6 +82,9 @@ describe.skipIf(!image)('Hermes profiles (real Hermes; set COREHUB_HERMES_IMAGE 
         [
           'run',
           '--rm',
+          // Hermes from v2026.9.21 warns on stderr when it is PID 1 (an overridden entrypoint);
+          // the hub runs it as its own child, so the test gives it an init as well.
+          '--init',
           '-v',
           `${home}:/hh`,
           '--entrypoint',

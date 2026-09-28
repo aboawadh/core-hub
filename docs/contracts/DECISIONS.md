@@ -3924,6 +3924,32 @@ asking the person to type the redirect URI; returning the token's expiry from `e
 the file time (wrong after a restart); a `hub_url` taken without checking (anything but `http(s)`
 without credentials is `400`).
 
+**Amended (2026-09-28, the ClickUp report).** The owner's tester signed in to ClickUp on the test
+image: the callback page said "Sign-in received", but the server stayed not connected and Test got
+`401`. Reproduced against the real Hermes of the image (v2026.9.14) with a real OAuth 2.1 + MCP
+server: ClickUp advertises `authorization_response_iss_parameter_supported` and sends `iss` on the
+redirect (RFC 9207); Hermes v2026.9.14's dashboard callback takes only `code`, `state` and `error`,
+so the MCP SDK refuses the sign-in ("Authorization response missing iss parameter advertised by the
+authorization server") after the page had already said it was received. Hermes v2026.9.21 (0.21.4)
+carries `iss` through. So — proposed, owner to confirm:
+- **The image pins Hermes v2026.9.21.** The whole real-Hermes suite was run against both pins
+  (docs/changes/2026-09-28-twuijri-mcp-oauth-real-hermes.md); a new CI job,
+  "MCP OAuth against the real Hermes", installs the pinned tag the way the image does and runs the
+  sign-in end to end.
+- **The callback page says connected only when Hermes says so**: it waits (45 s at most) for the
+  flow Hermes started for that server and `state`, and answers connected with the tool count, the
+  failure in Hermes's words, or "still finishing" — never success on the code's arrival alone.
+- A failure the hub understands is explained first: Hermes older than v2026.9.21 dropping `iss`
+  reads "update Hermes", then Hermes's sentence.
+- The web follows the sign-in while the person is on the provider's tab, runs Test by itself once
+  signed in, and offers Reconnect beside Disconnect when connected.
+- **"Add server" → Sign in (OAuth)**: an address and a name read from the host
+  (`mcp.clickup.com` → `clickup`, the next free name when taken); the hub writes the smallest block
+  a server that signs in needs — `url` and `auth: oauth`, no `connect_timeout` or `skip_preflight`
+  (Hermes's sign-in waits 315 s itself and skips its preflight for OAuth) — and the sign-in starts
+  at once. Only `https`, or `http` on this computer.
+
+
 ## 123. Inbound webhook triggers start a workflow; a condition can hold several rules
 
 Owner's goal (2026-09-28): outside systems — ClickUp first — send events into a Core Hub

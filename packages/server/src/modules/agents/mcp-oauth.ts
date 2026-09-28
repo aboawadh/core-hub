@@ -194,8 +194,38 @@ export interface McpOAuthFlowRecord {
   hermesFlowId: string;
   redirectUri: string;
   createdAt: number;
+  /**
+   * The `state` of the provider's page Hermes named: the callback finds its sign-in by it (with
+   * the server's name), so the page it answers can wait for Hermes's outcome. Not a secret of
+   * the kind a token is — it travels in the browser's address bar — but it is never logged.
+   */
+  state: string | null;
   /** What was last heard, answered again once Hermes has forgotten the flow. */
   last: McpOAuthView;
+}
+
+/** The `state` query parameter of an authorization URL, if it has one. */
+export function stateOf(authorizationUrl: string | null): string | null {
+  if (!authorizationUrl) return null;
+  try {
+    return new URL(authorizationUrl).searchParams.get('state');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hermes's own words for why a sign-in failed, with the hub's sentence first where the hub
+ * knows the cause. Hermes before v2026.9.21 (0.21.4) drops the provider's RFC 9207 `iss` from
+ * the callback, and the MCP SDK then refuses the sign-in of every provider that advertises it
+ * (ClickUp does): the person is told to update Hermes rather than shown the SDK's sentence alone.
+ */
+export function explainFlowError(error: string | null, language: Language): string | null {
+  if (!error) return null;
+  if (/missing iss parameter/i.test(error)) {
+    return `${t('agents.mcp_oauth.needs_newer_hermes', language)} (${error})`;
+  }
+  return error;
 }
 
 /** The contract's `McpOAuthFlow` minus the fields the record fills. */
@@ -321,6 +351,18 @@ export class McpOAuthFlows {
     return record;
   }
 
+  /** The sign-in the provider's callback is for: this server, this `state`. */
+  byState(serverName: string, state: string | null): McpOAuthFlowRecord | null {
+    this.sweep();
+    if (!state) return null;
+    for (const record of this.flows.values()) {
+      if (record.serverName === serverName && record.state !== null && record.state === state) {
+        return record;
+      }
+    }
+    return null;
+  }
+
   expiresAt(record: McpOAuthFlowRecord): string {
     return new Date(record.createdAt + FLOW_TTL_MS).toISOString();
   }
@@ -333,7 +375,47 @@ export class McpOAuthFlows {
 
 // ------------------------------------------------------------------ the callback
 
-export type CallbackOutcome = 'received' | 'declined' | 'expired' | 'unavailable';
+/** What handing the callback to Hermes did: the code arrived, or why not. */
+export type RelayOutcome = 'received' | 'declined' | 'expired' | 'unavailable';
+
+/**
+ * What the page says. `connected` only once Hermes reports the sign-in finished — the token
+ * exchanged and stored, the server answering with it (DECISIONS §122, amended): the code merely
+ * arriving is `pending` while Hermes works and becomes `failed` with Hermes's reason when the
+ * exchange or the first connection fails.
+ */
+export type CallbackOutcome =
+  'connected' | 'failed' | 'pending' | Exclude<RelayOutcome, 'received'>;
+
+/** How long the callback page waits for Hermes to finish before it says "still finishing". */
+export const CALLBACK_WAIT_MS = 45_000;
+
+/**
+ * After Hermes took the code: ask how the sign-in ended, until it did or `waitMs` ran out. The
+ * record keeps what was heard, so the MCP page's next poll answers the same.
+ */
+export async function awaitSignIn(
+  api: HermesApiCall,
+  record: McpOAuthFlowRecord,
+  options: { waitMs?: number; pollMs?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<McpOAuthView> {
+  const waitMs = options.waitMs ?? CALLBACK_WAIT_MS;
+  const pollMs = options.pollMs ?? 500;
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const began = Date.now();
+  for (;;) {
+    let view: McpOAuthView | null;
+    try {
+      view = await pollHermesFlow(api, record.hermesFlowId);
+    } catch {
+      return record.last;
+    }
+    record.last = view ?? { ...record.last, status: 'expired', authorization_url: null };
+    if (record.last.status !== 'pending' || Date.now() - began >= waitMs) return record.last;
+    await sleep(pollMs);
+  }
+}
 
 /**
  * Hand the browser's arrival to Hermes's callback, the query exactly as the provider sent it.
@@ -344,7 +426,7 @@ export async function relayCallback(
   api: HermesApiCall | null,
   name: string,
   rawQuery: string,
-): Promise<CallbackOutcome> {
+): Promise<RelayOutcome> {
   if (!api) return 'unavailable';
   const params = new URLSearchParams(rawQuery);
   try {
@@ -371,14 +453,21 @@ const escape = (text: string): string =>
  * hub's colours in light and dark, and a button that closes the tab the MCP page opened. No
  * script but the close; no value from the query is echoed.
  */
-export function callbackPage(outcome: CallbackOutcome, name: string, language: Language): string {
+export function callbackPage(
+  outcome: CallbackOutcome,
+  name: string,
+  language: Language,
+  detail: { tools?: number; error?: string | null } = {},
+): string {
   const key = `agents.mcp_oauth`;
-  const title =
-    outcome === 'received' ? t(`${key}.title`, language) : t(`${key}.${outcome}_title`, language);
-  const body = t(`${key}.${outcome}`, language).replace('{server}', name);
+  const title = t(`${key}.${outcome}_title`, language);
+  const body = t(`${key}.${outcome}`, language)
+    .replace('{server}', name)
+    .replace('{count}', String(detail.tools ?? 0));
+  const reason = outcome === 'failed' && detail.error ? detail.error : null;
   const product = language === 'ar' ? PRODUCT.nameAr : PRODUCT.name;
   const dir = language === 'ar' ? 'rtl' : 'ltr';
-  const tone = outcome === 'received' ? '#1f7a4d' : '#b3261e';
+  const tone = outcome === 'connected' ? '#1f7a4d' : outcome === 'pending' ? '#8a5a00' : '#b3261e';
   return `<!doctype html>
 <html lang="${language}" dir="${dir}">
 <head>
@@ -393,6 +482,7 @@ export function callbackPage(outcome: CallbackOutcome, name: string, language: L
 body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans Arabic", sans-serif; }
 main { max-width: 28rem; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
 .product { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+.reason { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 h1 { font-size: 18px; margin: 0 0 8px; color: ${tone}; }
 p { margin: 0 0 16px; }
 button { font: inherit; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 10px; padding: 6px 14px; cursor: pointer; }
@@ -403,7 +493,7 @@ button { font: inherit; border: 1px solid var(--line); background: transparent; 
 <p class="product">${escape(product)}</p>
 <h1>${escape(title)}</h1>
 <p>${escape(body)}</p>
-<button type="button" onclick="window.close()">${escape(t(`${key}.close`, language))}</button>
+${reason ? `<p class="reason" dir="auto">${escape(reason)}</p>\n` : ''}<button type="button" onclick="window.close()">${escape(t(`${key}.close`, language))}</button>
 </main>
 </body>
 </html>

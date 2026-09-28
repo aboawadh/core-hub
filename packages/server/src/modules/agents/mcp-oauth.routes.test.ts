@@ -37,7 +37,7 @@ interface FakeFlow {
 }
 
 /** Hermes's dashboard, played in memory against the hub's data folder. */
-function fakeHermes(root: string) {
+function fakeHermes(root: string, options: { failAfterCallback?: string } = {}) {
   const calls: string[] = [];
   const flows = new Map<string, FakeFlow>();
   let next = 0;
@@ -102,6 +102,12 @@ function fakeHermes(root: string) {
       if (url.searchParams.get('code') !== CODE) {
         throw new HermesDashboardRefusal(`${method} ${route}`, 400, 'bad code');
       }
+      if (options.failAfterCallback) {
+        // Hermes took the code, then the exchange failed: its route still answers 200.
+        flow.status = 'error';
+        flow.error = options.failAfterCallback;
+        return '<h1>Authorization received</h1>' as T;
+      }
       // What Hermes's worker writes once the provider exchanged the code.
       const dir = path.join(flow.home, 'mcp-tokens');
       mkdirSync(dir, { recursive: true });
@@ -126,7 +132,10 @@ function fakeHermes(root: string) {
   return { api, calls, flows };
 }
 
-async function boot(logger?: ReturnType<typeof capturingLogger>['logger']) {
+async function boot(
+  logger?: ReturnType<typeof capturingLogger>['logger'],
+  options: { failAfterCallback?: string } = {},
+) {
   let hermes: ReturnType<typeof fakeHermes> | null = null;
   const api: HermesApiCall = (...args) => hermes!.api(...args);
   hub = await signedInHub(
@@ -137,7 +146,7 @@ async function boot(logger?: ReturnType<typeof capturingLogger>['logger']) {
     },
   );
   const root = path.join(hub.dataDir, 'hermes');
-  hermes = fakeHermes(root);
+  hermes = fakeHermes(root, options);
   const list = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
   const agent = (list.json() as { items: Array<{ id: string; kind: string }> }).items.find(
     (row) => row.kind === 'hermes',
@@ -219,7 +228,9 @@ describe('connecting an MCP server by OAuth', () => {
     });
     expect(back.statusCode).toBe(200);
     expect(back.headers['content-type']).toContain('text/html');
-    expect(back.body).toContain('data-outcome="received"');
+    // The page waited for Hermes: connected, with the tools it listed.
+    expect(back.body).toContain('data-outcome="connected"');
+    expect(back.body).toContain('عدد الأدوات التي يعرضها: 2');
     expect(back.body).toContain('dir="rtl"');
     expect(hermes.calls).toContain(
       `GET /api/mcp/oauth/callback/clickup?code=${CODE}&state=state-1`,
@@ -239,6 +250,34 @@ describe('connecting an MCP server by OAuth', () => {
       url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1`,
     });
     expect(again.body).toContain('data-outcome="expired"');
+  });
+
+  it('says the sign-in failed, with the reason, when Hermes took the code but the exchange failed', async () => {
+    const { hub: h, agent } = await boot(undefined, {
+      failAfterCallback:
+        'Authorization response missing iss parameter advertised by the authorization server',
+    });
+    const flow = (
+      await authed(h, h.token, {
+        method: 'POST',
+        url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
+      })
+    ).json() as { id: string };
+    const back = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1`,
+      headers: { 'accept-language': 'en' },
+    });
+    expect(back.body).toContain('data-outcome="failed"');
+    expect(back.body).not.toMatch(/received|Connected/);
+    expect(back.body).toContain('v2026.9.21');
+    const polled = await authed(h, h.token, {
+      method: 'GET',
+      url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`,
+    });
+    expect(polled.json()).toMatchObject({ status: 'failed' });
+    expect((polled.json() as { error: string }).error).toMatch(/Update Hermes.*missing iss/);
+    expect((await servers(h, agent))[0]?.oauth?.status).toBe('not_connected');
   });
 
   it("uses the request's own address without `hub_url`, and keeps a redirect the person wrote", async () => {

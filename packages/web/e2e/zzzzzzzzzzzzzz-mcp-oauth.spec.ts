@@ -59,8 +59,10 @@ test('MCP OAuth: a remote server is signed in from the web, tested, and disconne
   await failed.getByTestId('mcp-test-connect-clickup').click();
   const tab = await popup;
   await tab.waitForURL(/\/api\/v1\/mcp-oauth\/callback\/clickup\?code=e2e-code&state=/);
-  await expect(tab.locator('main')).toHaveAttribute('data-outcome', 'received');
-  await expect(tab.locator('h1')).toHaveText('وصل تسجيل الدخول');
+  // The page waited for Hermes: it says connected, with the tools, only once Hermes has them.
+  await expect(tab.locator('main')).toHaveAttribute('data-outcome', 'connected');
+  await expect(tab.locator('h1')).toHaveText('تم الربط');
+  await expect(tab.locator('main')).toContainText('عدد الأدوات التي يعرضها: 3');
   await expect(tab.locator('html')).toHaveAttribute('dir', 'rtl');
   await tab.close();
 
@@ -70,10 +72,11 @@ test('MCP OAuth: a remote server is signed in from the web, tested, and disconne
   await expect(page.getByTestId('mcp-oauth-status-clickup')).toHaveText(/^\s*متصل\s*$/);
   await page.screenshot({ path: path.join(shots, 'agent-mcp-oauth-ar-light.png'), fullPage: true });
 
-  await page.getByTestId('mcp-oauth-test-clickup').click();
+  // Signed in: the test ran by itself; the button now offers a new sign-in.
   const ok = page.getByTestId('mcp-test-result-clickup');
   await expect(ok).toHaveAttribute('data-ok', 'true');
   await expect(ok).toContainText('get_workspace_hierarchy');
+  await expect(page.getByTestId('mcp-oauth-connect-clickup')).toHaveText('إعادة الربط عبر OAuth');
 
   // Disconnect, after asking: this profile forgets the sign-in.
   await page.getByTestId('mcp-oauth-disconnect-clickup').click();
@@ -81,6 +84,37 @@ test('MCP OAuth: a remote server is signed in from the web, tested, and disconne
   await expect(page.getByTestId('mcp-oauth-status-clickup')).toContainText('غير متصل');
 
   // Leave the page as it was for the journeys after this one.
+  await page.getByTestId('mcp-delete-clickup').click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'حذف' }).click();
+  await expect(page.getByTestId('mcp-oauth-status-clickup')).toHaveCount(0);
+});
+
+test('MCP OAuth: "Add server" by its address signs in, turns Connected and tests itself', async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await openMcp(page);
+
+  await page.getByTestId('new-mcp').click();
+  await page.getByTestId('mcp-add-mode').getByRole('radio', { name: 'تسجيل دخول (OAuth)' }).click();
+  await page.getByTestId('mcp-signin-url').fill('https://mcp.clickup.com/mcp');
+  // The name is read from the host: `mcp.clickup.com` → `clickup`.
+  await expect(page.getByTestId('mcp-signin-name')).toHaveValue('clickup');
+  await page.screenshot({ path: path.join(shots, 'agent-mcp-signin-add-ar-light.png') });
+
+  const popup = context.waitForEvent('page');
+  await page.getByTestId('mcp-signin-submit').click();
+  const tab = await popup;
+  await tab.waitForURL(/\/api\/v1\/mcp-oauth\/callback\/clickup\?code=e2e-code&state=/);
+  await expect(tab.locator('main')).toHaveAttribute('data-outcome', 'connected');
+  await tab.close();
+
+  await expect(page.getByTestId('mcp-oauth-status-clickup')).toHaveText(/^\s*متصل\s*$/);
+  const ok = page.getByTestId('mcp-test-result-clickup');
+  await expect(ok).toHaveAttribute('data-ok', 'true');
+  await expect(ok).toContainText('get_workspace_hierarchy');
+
   await page.getByTestId('mcp-delete-clickup').click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'حذف' }).click();
   await expect(page.getByTestId('mcp-oauth-status-clickup')).toHaveCount(0);

@@ -108,7 +108,7 @@ internal fun McpOAuthRow(ops: AgentsTwoOps, server: McpServer, onChanged: () -> 
                     dot = true,
                 )
             }
-            if (flow?.status != McpOAuthFlow.Status.PENDING && state.status != McpOAuthState.Status.CONNECTED) {
+            if (flow?.status != McpOAuthFlow.Status.PENDING) {
                 HubButton(
                     stringResource(if (state.status == McpOAuthState.Status.NOT_CONNECTED) R.string.mcp_oauth_connect else R.string.mcp_oauth_reconnect),
                     {

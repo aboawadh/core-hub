@@ -14,6 +14,8 @@ import {
   FLOW_TTL_MS,
   callbackPage,
   callbackUri,
+  explainFlowError,
+  stateOf,
   hubBaseOf,
   isHubCallback,
   oauthStateOf,
@@ -240,11 +242,31 @@ describe('the callback', () => {
     expect(await relayCallback(null, 'x', 'code=c1')).toBe('unavailable');
   });
 
+  it('names the Hermes update when Hermes dropped the provider’s `iss`', () => {
+    const sdk =
+      'Authorization response missing iss parameter advertised by the authorization server';
+    expect(explainFlowError(sdk, 'en')).toMatch(
+      /^This provider sends an `iss` value .* v2026\.9\.21 .*\(Authorization response missing iss/,
+    );
+    expect(explainFlowError('invalid_grant', 'en')).toBe('invalid_grant');
+    expect(explainFlowError(null, 'en')).toBeNull();
+    expect(stateOf('https://a.example/authorize?client_id=c&state=s-1')).toBe('s-1');
+    expect(stateOf(null)).toBeNull();
+  });
+
   it('answers a page in the language asked, naming the server safely', () => {
-    const ar = callbackPage('received', 'clickup', 'ar');
+    const ar = callbackPage('connected', 'clickup', 'ar', { tools: 3 });
     expect(ar).toContain('dir="rtl"');
     expect(ar).toContain('كور هب');
-    expect(ar).toContain('data-outcome="received"');
+    expect(ar).toContain('data-outcome="connected"');
+    expect(ar).toContain('عدد الأدوات التي يعرضها: 3');
+    const failed = callbackPage('failed', 'clickup', 'en', { error: 'invalid_grant <x>' });
+    expect(failed).toContain('Sign-in did not finish');
+    expect(failed).toContain('invalid_grant &#60;x&#62;');
+    // Nothing on any page says the sign-in worked unless it is `connected`.
+    for (const outcome of ['failed', 'pending', 'declined', 'expired', 'unavailable'] as const) {
+      expect(callbackPage(outcome, 'clickup', 'en')).not.toMatch(/Connected|received/i);
+    }
     const en = callbackPage('declined', '<b>', 'en');
     expect(en).toContain('dir="ltr"');
     expect(en).not.toContain('<b>');

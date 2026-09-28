@@ -2302,7 +2302,19 @@
       "failed": "The sign-in did not finish:",
       "cancelled": "The sign-in was cancelled.",
       "expired": "The sign-in ran out before it finished. Start it again.",
-      "test_needs": "This server needs a sign-in."
+      "test_needs": "This server needs a sign-in.",
+      "starting_short": "Starting…"
+    },
+    "signin_add": {
+      "how": "How to add it",
+      "mode_json": "JSON",
+      "mode_signin": "Sign in (OAuth)",
+      "note": "For a server that signs in with its provider, such as ClickUp: give its address, sign in, and Core Hub writes the rest.",
+      "about": "Core Hub adds the server with this address, opens the provider's sign-in page in a new tab, and tests the server once you are signed in.",
+      "url": "Server address",
+      "url_bad": "An https:// address (http:// only for this computer).",
+      "submit": "Add and sign in",
+      "name_taken": "A server named {name} already exists; choose another name."
     }
   },
   "hub_tools": {

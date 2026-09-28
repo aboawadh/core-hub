@@ -1039,7 +1039,15 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     const profile = url.searchParams.get('profile') ?? 'default';
     const name = decodeURIComponent(oauthStart[1]!);
     const config = readFileSync(path.join(hermesHome(profile), 'config.yaml'), 'utf8');
-    const redirect = /redirect_uri:\s*(\S+)/.exec(config)?.[1] ?? '';
+    // The redirect the hub wrote into this server's block (not another server's).
+    const lines = config.split('\n');
+    const at = lines.findIndex((line) => line === `  ${name}:`);
+    const block = at === -1 ? [] : lines.slice(at + 1);
+    const end = block.findIndex((line) => /^ {0,2}\S/.test(line));
+    const redirect =
+      (end === -1 ? block : block.slice(0, end))
+        .map((line) => /redirect_uri:\s*(\S+)/.exec(line)?.[1])
+        .find(Boolean) ?? '';
     oauthFlows += 1;
     const flow = {
       id: `e2e-oauth-${oauthFlows}`,

@@ -6825,9 +6825,11 @@ paths:
         browser arrives from the provider without the hub's session; the query is handed to
         Hermes's own callback (`GET /api/mcp/oauth/callback/{server_name}`), which accepts it
         only with the `state` of a sign-in it started. Answers a short page in the browser's
-        language saying whether the sign-in was received, always `200`; the outcome itself is
-        read by polling `agents.getMcpOAuthFlow`. The query is never logged (contract decision
-        §122).
+        language, always `200`, once Hermes says how the sign-in ended (it waits up to 45 s):
+        connected (with the number of tools) only after Hermes exchanged the code, stored the
+        token and reached the server with it; otherwise the failure in Hermes's words, or "still
+        finishing" — never success on the code's arrival alone. `agents.getMcpOAuthFlow`
+        answers the same outcome. The query is never logged (contract decision §122).
       security: []
       x-scope: global
       parameters:
@@ -22350,6 +22352,10 @@ components:
           type: string
         error:
           type: [string, 'null']
+          description: >-
+            Why a `failed` sign-in stopped, in Hermes's words, with the hub's sentence first where
+            it knows the cause — a Hermes older than v2026.9.21 drops the provider's RFC 9207
+            `iss`, which providers such as ClickUp require.
         tools:
           type: array
           description: The tools Hermes listed once signed in; empty until `approved`.

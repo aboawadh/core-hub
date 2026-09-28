@@ -216,8 +216,13 @@
   },
   "agents": {
     "mcp_oauth": {
-      "title": "Sign-in received",
-      "received": "The sign-in to {server} reached Hermes. You can close this tab and return to Core Hub; the MCP page shows the result.",
+      "connected_title": "Connected",
+      "connected": "{server} is connected: Hermes signed in and lists {count} tools. You can close this tab and return to Core Hub.",
+      "failed_title": "Sign-in did not finish",
+      "failed": "Hermes could not finish the sign-in to {server}. Return to Core Hub and try again; Hermes's reason:",
+      "pending_title": "Still finishing",
+      "pending": "The provider sent you back and Hermes is still finishing the sign-in to {server}. Return to Core Hub: the MCP page shows the result.",
+      "needs_newer_hermes": "This provider sends an `iss` value that Hermes before v2026.9.21 (0.21.4) does not pass on, so the sign-in is refused. Update Hermes, then connect again.",
       "declined_title": "Sign-in not completed",
       "declined": "The provider did not grant access to {server}. Return to Core Hub and try again.",
       "expired_title": "This sign-in has ended",
