@@ -88,3 +88,36 @@ html {
 .ch-badge-label {
   white-space: nowrap;
 }
+
+/* A label cut with an ellipsis is cut sideways only. `overflow: hidden` also cut the ink of
+   glyphs that reach below or above a tight line — Arabic descenders (ي ج ع) in a card title,
+   Thai and Vietnamese marks — so these clip the inline axis and let the block axis show. The
+   ellipsis and the layout are unchanged. */
+.truncate,
+.ch-btn-label,
+.ch-card-title,
+.ch-card-subtitle,
+.ch-badge-label,
+.ch-sidebar-row-label,
+.ch-segment-label,
+.ch-menu-choice-label,
+.ch-combo-name,
+.ch-combo-sub,
+.tool-chip,
+.tool-file,
+.file-tab-name,
+.files-name,
+.session-preview,
+.notice-body,
+.provider-facts dd,
+.skill-description,
+.run-status-step,
+.tool-group-names,
+.tool-preview,
+.slash-option-description,
+.trajectory-step-summary,
+.run-change-path,
+.subagent-goal {
+  overflow-x: clip;
+  overflow-y: visible;
+}
