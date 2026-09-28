@@ -122,15 +122,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-cjk
       - run: pnpm i18n:limits
 
-  # DECISIONS §122 (amended): MCP OAuth end to end against the real Hermes at the tag the image
-  # pins, installed the way the image installs it (packages/server/Dockerfile), with a real
-  # OAuth 2.1 + MCP server that behaves like ClickUp (RFC 9207 `iss`). The ClickUp report of
-  # 2026-09-28 only reproduced against the real Hermes, never against the scripted one, so this
-  # runs on every PR.
+  # Every real-Hermes suite (`*.real.test.ts`) against the two Hermes releases the hub is proven
+  # with (DECISIONS §119, §132; `packages/server/src/modules/agents/catalog/hermes-versions.ts`):
+  # the floor, the oldest a person's own Hermes may be, and the release the image pins. Each builds
+  # the image at that Hermes (`HERMES_REF`) exactly as a release does, and runs the suites against
+  # it — MCP OAuth with a real OAuth 2.1 + MCP server that sends `iss` (the ClickUp report of
+  # 2026-09-28, §122) among them. The two suites that run Hermes's CLI from source (kanban, the
+  # cron grammar) get a checkout and a venv of the same tag. Required through `gate`.
   hermes-real:
-    name: MCP OAuth against the real Hermes (the image's pinned tag)
+    name: Real Hermes suites (${{ matrix.target }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [floor, pinned]
     steps:
       - uses: actions/checkout@v4
       - name: Enable pnpm
@@ -140,24 +146,57 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Hermes at the image's HERMES_REF, installed as the image installs it
+      - name: The Hermes release of this target
+        id: hermes
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           set -eu
-          ref=$(sed -n 's/^ARG HERMES_REF=//p' packages/server/Dockerfile)
+          node scripts/hermes-watch.mjs current --output "$RUNNER_TEMP/pins"
+          if [ "$TARGET" = floor ]; then
+            ref=$(sed -n 's/^floor_ref=//p' "$RUNNER_TEMP/pins")
+          else
+            ref=$(sed -n 's/^tested_ref=//p' "$RUNNER_TEMP/pins")
+          fi
+          echo "ref=$ref" | tee -a "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: The image with that Hermes
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          build-args: |
+            HERMES_REF=${{ steps.hermes.outputs.ref }}
+          push: false
+          load: true
+          tags: core-hub:hermes-${{ matrix.target }}
+          cache-from: type=gha,scope=hermes-real-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=hermes-real-${{ matrix.target }}
+      - name: Hermes's source and a venv of the same tag (kanban and cron grammar suites)
+        env:
+          REF: ${{ steps.hermes.outputs.ref }}
+        run: |
+          set -eu
           uv_version=$(sed -n 's/^ARG UV_VERSION=//p' packages/server/Dockerfile)
           curl -LsSf "https://github.com/astral-sh/uv/releases/download/${uv_version}/uv-installer.sh" | sh
           export PATH="$HOME/.local/bin:$PATH"
           uv python install 3.12
           uv venv --python 3.12 "$RUNNER_TEMP/hermes/.venv"
-          git clone --depth 1 --branch "$ref" https://github.com/NousResearch/hermes-agent "$RUNNER_TEMP/hermes/src"
+          git clone --depth 1 --branch "$REF" https://github.com/NousResearch/hermes-agent "$RUNNER_TEMP/hermes/src"
           cd "$RUNNER_TEMP/hermes/src"
           uv pip install --python "$RUNNER_TEMP/hermes/.venv/bin/python" -e ".[cron,mcp]" "aiohttp==3.14.3"
-          "$RUNNER_TEMP/hermes/.venv/bin/hermes" --version
+          docker run --rm --entrypoint /opt/hermes/.venv/bin/hermes "core-hub:hermes-${{ matrix.target }}" --version
       - run: pnpm --filter @corehub/contracts build
-      - name: Connect OAuth → callback → token exchange → token in the profile's home → Test
+      - name: Every *.real.test.ts against the image
         env:
-          COREHUB_HERMES_BIN: ${{ runner.temp }}/hermes/.venv/bin/hermes
-        run: pnpm --filter @corehub/server exec vitest run --project unit src/modules/agents/mcp-oauth.real.test.ts
+          COREHUB_HERMES_IMAGE: core-hub:hermes-${{ matrix.target }}
+          HERMES_SRC: ${{ runner.temp }}/hermes/src
+        run: |
+          set -eu
+          export PATH="$RUNNER_TEMP/hermes/.venv/bin:$PATH"
+          cd packages/server
+          files=$(find src tests -name '*.real.test.ts' | sort)
+          pnpm exec vitest run --project unit --maxWorkers=2 $files
 
   gate:
     name: Lint, typecheck, contracts, tests, build
@@ -168,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every check and every server test shard passed
+      - name: Every check, every server test shard and both real-Hermes targets passed
         env:
           CHECKS: ${{ needs.checks.result }}
           SERVER_TESTS: ${{ needs.server-tests.result }}
