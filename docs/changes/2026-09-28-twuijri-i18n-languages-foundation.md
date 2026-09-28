@@ -15,7 +15,7 @@
 `feat/i18n-languages-apps` بعد هذه.
 
 ## القرار والموافقات
-ADR 0028 وDECISIONS §129 — مقترح، بانتظار تأكيد المالك. الخلاصة:
+ADR 0028 وDECISIONS §130 — مقترح، بانتظار تأكيد المالك. الخلاصة:
 - **سجل واحد** `locales/languages.json` (+ مخطط JSON): الرمز BCP 47، الاسم بالإنجليزية وبلغته،
   الاتجاه، الحالة (`complete`/`partial`)، `required` (العربية والإنجليزية فقط)، سلسلة الرجوع،
   و`numerals`. كل حزمة TypeScript تقرؤه عبر `@corehub/contracts` (يُولَّد إلى
@@ -62,7 +62,7 @@ ADR 0028 وDECISIONS §129 — مقترح، بانتظار تأكيد المال
 مستند OpenAPI والأحداث: **لا شيء**. في الحزمة: وحدة `src/languages.ts` جديدة (تصدير من
 `index.ts` ومن المسار الفرعي `@corehub/contracts/languages` لنافذة سطح المكتب الأولى التي لا تحمل
 وحدات Node)، `generate-ts.mjs` يولّد `generated/ts/languages.ts` من السجل، وخيار `language` في
-عميل TypeScript صار `string` بدل `'ar' | 'en'` (السلك نفسه). DECISIONS §129 يوثق قراءة
+عميل TypeScript صار `string` بدل `'ar' | 'en'` (السلك نفسه). DECISIONS §130 يوثق قراءة
 `Accept-Language`.
 
 ## الملفات والتأثير
@@ -86,7 +86,7 @@ ADR 0028 وDECISIONS §129 — مقترح، بانتظار تأكيد المال
   `pseudo-screens.ts`، رحلة اللغات التجريبية، ومواصفة القياس الاختيارية.
 - CI: وظيفة `i18n-space` (خطوط Noto + `pnpm i18n:limits`) ضمن البوابة؛ خطوط Noto في وظيفة e2e،
   ولقطات اللغات التجريبية artifact دائمًا.
-- المستندات: ADR 0028، DECISIONS §129، STATUS (قسم Languages)، `validation.md`، CONTRIBUTING،
+- المستندات: ADR 0028، DECISIONS §130، STATUS (قسم Languages)، `validation.md`، CONTRIBUTING،
   `docs/guides/add-a-language.md`، `.github/ISSUE_TEMPLATE/new_language.yml`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
@@ -158,4 +158,4 @@ pass | PR adds or updates a change record · PR leaves graphify-out/ to the code
 - المرحلة الثانية `feat/i18n-languages-apps`: نصوص أندرويد تُولَّد من JSON وقت البناء، iOS يقرأ
   السجل ويرجع بالطريقة نفسها، قواعد المساحة نفسها، اختبارات Compose وXCTest باللغات التجريبية،
   واختيار اللغة لكل تطبيق.
-- للمالك: تأكيد ADR 0028 وDECISIONS §129، واقتراح `numerals: native`.
+- للمالك: تأكيد ADR 0028 وDECISIONS §130، واقتراح `numerals: native`.
