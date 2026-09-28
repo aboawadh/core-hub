@@ -130,7 +130,18 @@ playwright smoke + zz-design + zz-task-board + zzzz-sidebar-rail   26 passed (1.
 الخاصية وبدونها — لا سطر انتقل؛ أقصى فرق 99 بكسلًا بدلتا لون ≤ 8/255 (تنعيم حواف فقط)، ولقطة
 التحكم بلا تغيير صفرية الفرق.
 
-CI على الطلب: يُضاف بعد الدفع.
+CI على الطلب #212 (الدفعة 80179ee7، التشغيل 36410726685): كل الفحوص خضراء —
+```
+pass | Lint, typecheck, contracts, client tests, build
+pass | Lint, typecheck, contracts, tests, build
+pass | Server unit tests (shard 1/3, 2/3, 3/3)
+pass | Translations fit their labels (measured widths)
+pass | Web smoke journeys (Playwright against the real hub)
+pass | Desktop app smoke · Docker image · db:migrate · Android · Installers (macOS, Ubuntu, Windows)
+pass | PR adds or updates a change record · PR leaves graphify-out/ to the code-map bot
+```
+التشغيل الأول فشل مرتين وأُصلح: خطآ lint (مسافة غير مرئية حرفية في اختبار، ونوع `import()`)، ثم
+وجدت رحلة اللغات التجريبية قص نقاط الحروف العربية (أعلاه).
 
 ## المخاطر والرجوع
 - القياس بخطوط Noto (من أعرض خطوط الواجهة)؛ Segoe UI وSF أضيق، فما ينجح هنا يتسع هناك. خط
