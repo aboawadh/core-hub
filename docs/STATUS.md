@@ -1029,8 +1029,9 @@ Since 2026-09-28 the **desktop app's own hub** (local mode) has «نسيت كل�
 "Forgot password?" on its sign-in screen (DECISIONS §131; design approved, defaults proposed —
 owner to confirm): the operating system confirms the person (Touch ID or a Mac administrator's
 password, Windows Hello, polkit), the owner's username is shown in monospace, and a new password
-revokes every other sign-in, paired device and personal token of the owner, signs the app in and
-is audited. The hub accepts it only over the IPC channel of the app that started it — no HTTP
+ends the owner's sign-ins on other devices (web sessions, paired phones and computers, their push
+and live connections — personal tokens, provider keys, MCP, channels and Hermes are untouched),
+signs the app in and is audited. The hub accepts it only over the IPC channel of the app that started it — no HTTP
 route. The same channel signs the owner in without a password on that computer when This device
 → «الدخول دون كلمة مرور على هذا الحاسوب» is on (on for a new install, off for an existing one).
 Tested with the OS prompt faked (server, desktop unit and the desktop smoke run under Xvfb);

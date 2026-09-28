@@ -14,7 +14,7 @@
 // spends it once. At most `RECOVERY_BEGINS_MAX` grants in `RECOVERY_WINDOW_MS`, one alive at a
 // time.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import type { ModuleDb } from '../../lib/db.js';
 import { AuditService } from '../audit/index.js';
 import { endPushForOwners, revokeDeviceByToken } from '../devices/index.js';
@@ -149,9 +149,12 @@ export class LocalOwnerAccess {
   }
 
   /**
-   * Spends the grant: the owner's new password; every token and session of the owner revoked
-   * (phones and other computers pair again, personal tokens stop working); a fresh sign-in for
-   * the app; an audit row without the password.
+   * Spends the grant: the owner's new password; the owner's sign-ins on other devices end — web
+   * sessions, paired phones and computers (device tokens), their push registrations and live
+   * connections — and a fresh sign-in for the app; an audit row without the password.
+   * Personal tokens (`hub_at_…` for scripts and integrations) stay, and so does everything else:
+   * provider keys, MCP connections, channels and Hermes's state are not auth's and are not touched
+   * (owner, 2026-09-28).
    */
   async finishRecovery(grant: string, password: string, label: string): Promise<LocalTokenPair> {
     if (
@@ -182,14 +185,20 @@ export class LocalOwnerAccess {
       const ended = tx
         .update(appTokens)
         .set({ revokedAt: new Date(now) })
-        .where(and(eq(appTokens.userId, owner.id), isNull(appTokens.revokedAt)))
+        .where(
+          and(
+            eq(appTokens.userId, owner.id),
+            inArray(appTokens.kind, ['web', 'device']),
+            isNull(appTokens.revokedAt),
+          ),
+        )
         .returning({ id: appTokens.id, kind: appTokens.kind })
         .all();
       let devices = 0;
       for (const row of ended)
         if (row.kind === 'device' && revokeDeviceByToken(tx as ModuleDb, row.id, now)) devices++;
       endPushForOwners(tx as ModuleDb, [owner.id]);
-      return { tokens: ended.length, devices };
+      return { sessions: ended.filter((row) => row.kind === 'web').length, devices };
     });
     revalidateSockets(this.ctx.io(), this.db, now);
     const pair = await this.tokens(
@@ -207,7 +216,7 @@ export class LocalOwnerAccess {
         data: {
           via: 'desktop_local',
           method: live.method,
-          tokens_revoked: revoked.tokens,
+          sessions_revoked: revoked.sessions,
           devices_revoked: revoked.devices,
         },
         ownerId: owner.id,

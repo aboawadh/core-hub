@@ -97,7 +97,7 @@
       "confirm": "Confirm the new password",
       "mismatch": "The two passwords are not the same.",
       "too_short": "The password must be at least {min} characters.",
-      "signs_out": "Saving signs the owner out everywhere else: phones and other computers paired with this hub must sign in again, and personal access tokens stop working.",
+      "signs_out": "Saving signs the owner out on other devices: phones and other computers must sign in again.",
       "save": "Save and sign in",
       "saving": "Saving…",
       "cancel": "Cancel",

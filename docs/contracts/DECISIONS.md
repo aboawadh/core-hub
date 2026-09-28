@@ -4302,10 +4302,14 @@ administrator's password (`systemPreferences.promptTouchID`, then Authorization 
 (`UserConsentVerifier` through Windows PowerShell's WinRT projection), polkit on Linux
 (`pkexec /usr/bin/true`). No native module is shipped. After it, the page shows the owner's
 username in monospace and asks for a new password twice (8–1024 characters, as setup); saving
-sets it, revokes **every** token and session of the owner (web sessions, paired devices — which
-are marked revoked — and personal tokens), ends their push registrations and sockets, signs the
-app in with a fresh session and writes `auth.password_recovery_started` and
-`auth.password_recovered` audit rows (method, counts; never the password or the grant).
+sets it and ends the owner's sign-ins on other devices only — web sessions, paired phones and
+computers (their device tokens; the device rows are marked revoked), the owner's push
+registrations and live connections — signs the app in with a fresh session and writes
+`auth.password_recovery_started` and `auth.password_recovered` audit rows (method, counts of
+sessions and devices; never the password or the grant). **Owner's decision (2026-09-28):** the
+owner's personal tokens (`hub_at_…`, scripts and integrations) are **not** revoked, and nothing
+else is touched — provider keys, MCP connections, channels and Hermes's state are not auth's and
+never were affected. The screen says only that phones and other computers must sign in again.
 
 **Local only, never HTTP.** The hub has no route for any of this. `LocalOwnerAccess`
 (`packages/server/src/modules/auth/local-owner.ts`, `localOwnerAccessFor(io)`) is reached only from
