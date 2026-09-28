@@ -101,7 +101,19 @@ rc=0
 والوضع يتحول؛ 75 عادي ← إعادة تشغيل كما كان)، والبوابة الجذرية بجانب Hermes المستخدم
 (75 ← قفل معزول وتشغيل فوري؛ 75 ثانٍ بعد العزل ← خطأ ظاهر كما كان).
 
-CI: يُحدَّث بعد الدفع.
+CI على PR #213 عند `956a2375` (كل الفحوص ناجحة):
+```
+Desktop app smoke (Electron under Xvfb against the real hub) | pass
+Docker image builds and answers /health | pass
+Lint, typecheck, contracts, client tests, build | pass
+Lint, typecheck, contracts, tests, build | pass
+PR adds or updates a change record | pass
+Server unit tests (shard 1/3) | pass
+Server unit tests (shard 2/3) | pass
+Server unit tests (shard 3/3) | pass
+Web smoke journeys (Playwright against the real hub) | pass
+db:generate + db:migrate (SQLite and PostgreSQL) | pass
+```
 
 ## المخاطر والرجوع
 - **لم يُتحقق على جهاز حقيقي**: لا macOS مع Hermes 0.21.5 وبوابته الخاصة تعمل. السلوك مبني على
