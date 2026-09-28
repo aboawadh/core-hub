@@ -155,7 +155,12 @@ describe('navigation parity (web)', () => {
     expect(raw.rail).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
     expect(railIds()).toEqual([...raw.rail, 'workflows']);
     expect(routeOf('workflows')).toBe('/workflows');
-    expect(destinationsById.get('workflows')?.surfaces).toEqual(['web', 'desktop', 'ios', 'android']);
+    expect(destinationsById.get('workflows')?.surfaces).toEqual([
+      'web',
+      'desktop',
+      'ios',
+      'android',
+    ]);
     expect(brandRowIds()).toEqual(['search']);
     const groups = sidebarGroups();
     expect(groups.map((g) => g.id)).toEqual(['tools']);
