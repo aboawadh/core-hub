@@ -178,7 +178,12 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
     // `corehub://open/<path>`: the same paths as the web (surfaceRoutes.android).
     LaunchedEffect(pendingPath) {
         val path = pendingPath ?: return@LaunchedEffect
-        AppPaths.resolve(path)?.let { AppPaths.route(it, session!!.profile) }?.let(nav::go)
+        AppPaths.resolve(path)?.let { target ->
+            val route = AppPaths.route(target, session!!.profile) ?: return@let
+            // A workflow run named in the path opens on its page (nav/Focus.kt).
+            AppPaths.focus(target, session!!.profile)?.let { hub.core.android.nav.Focus.item.value = it }
+            nav.go(route)
+        }
         onPathHandled()
     }
     // Links to this hub's own pages in a reply open here (nav/HubLinks.kt); a room invite opens Join.
@@ -188,7 +193,11 @@ private fun AppRoot(pendingPairing: PairingRequest?, onPairingHandled: () -> Uni
         // The person may have chosen the browser for links (Display → where links open).
         if (!hub.core.android.ui.screens.HubDisplay.linksInApp(display)) return@open false
         when (val link = hub.core.android.nav.HubLinks.target(uri, s.hub, s.profile)) {
-            is hub.core.android.nav.InAppLink.Page -> { nav.go(link.route); true }
+            is hub.core.android.nav.InAppLink.Page -> {
+                link.focus?.let { hub.core.android.nav.Focus.item.value = it }
+                nav.go(link.route)
+                true
+            }
             is hub.core.android.nav.InAppLink.Join -> { hub.core.android.nav.HubLinks.joinCode.value = link.code; true }
             null -> false
         }
@@ -296,6 +305,10 @@ private fun Destination(route: Route, nav: Navigator, shell: ShellViewModel, ope
             Route.Schedules -> {
                 TopBar(term("schedules"), onMenu = openDrawer)
                 SchedulesScreen(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
+            }
+            Route.Workflows -> {
+                TopBar(term("workflows"), onMenu = openDrawer) { hub.core.android.ui.screens.NewWorkflowButton() }
+                hub.core.android.ui.screens.WorkflowsList(shell, onOpenChat = { id, profile -> nav.go(Route.Chat(id, profile)) })
             }
             Route.Settings -> {
                 TopBar(term("settings"), onMenu = openDrawer)

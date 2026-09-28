@@ -94,14 +94,16 @@ enum OwnSettingsRules {
         }
     }
 
-    /// Where a tapped notice leads (the same place its push opens): a conversation, the board, Schedules.
+    /// Where a tapped notice leads (the same place its push opens): a conversation, the board,
+    /// Schedules, or Workflows (a workflow run's own view when the notice names it).
     static func route(for notice: Notice, selector: String) -> MainContent? {
         let resource = notice.resource
         return NoticeRouting.route(
             kind: resource?.kind.rawValue,
             sessionID: resource?.kind == .session ? resource?.id : nil,
             profile: notice.profile,
-            selector: selector
+            selector: selector,
+            runID: resource?.kind == .workflowRun ? resource?.id : nil
         )
     }
 

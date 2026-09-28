@@ -149,13 +149,18 @@ describe('navigation parity (web)', () => {
     expect(memberTabs).not.toContain('webhooks');
   });
 
-  it('Tools and Search beside the toggle (DECISIONS §126): presentation over the rail, nothing new to the phones', () => {
-    // `rail` is what every client (the phones too) still matches exactly; Workflows, which only
-    // web and desktop have yet, is in `railExtra`.
+  it('Tools and Search beside the toggle (DECISIONS §126): presentation over the rail', () => {
+    // `rail` is what every client (the phones too) still matches exactly; Workflows, which an app
+    // built before it lacks, is in `railExtra` (the phones adopted it, DECISIONS §128).
     expect(raw.rail).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
     expect(railIds()).toEqual([...raw.rail, 'workflows']);
     expect(routeOf('workflows')).toBe('/workflows');
-    expect(destinationsById.get('workflows')?.surfaces).toEqual(['web', 'desktop']);
+    expect(destinationsById.get('workflows')?.surfaces).toEqual([
+      'web',
+      'desktop',
+      'ios',
+      'android',
+    ]);
     expect(brandRowIds()).toEqual(['search']);
     const groups = sidebarGroups();
     expect(groups.map((g) => g.id)).toEqual(['tools']);

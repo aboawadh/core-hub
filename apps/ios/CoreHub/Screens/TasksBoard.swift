@@ -454,12 +454,21 @@ struct TaskBoardView: View {
         VStack(alignment: .leading, spacing: Space.s2) {
             HStack(spacing: Space.s2) {
                 Circle().fill(color(column.statuses[0])).frame(width: 8, height: 8)
+                // One line always: a narrow (folded) column shrinks the title a little, then ends it
+                // with "…", instead of dropping its last letters to a second line.
                 Text("\(l10n("board.column_\(column.id.rawValue)")) · \(tasks.count)")
                     .font(.system(size: FontSize.sizeSm, weight: .semibold))
                     .foregroundStyle(Tone.textMuted)
-                Spacer()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                Spacer(minLength: Space.s1)
                 if folded {
-                    Button(l10n("board.open_column")) { openedWaiting = true }.font(.system(size: FontSize.sizeXs))
+                    Button(l10n("board.open_column")) { openedWaiting = true }
+                        .font(.system(size: FontSize.sizeXs))
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             if !folded {

@@ -14,13 +14,18 @@ enum BackgroundRules {
     static let runningPoll: TimeInterval = 10
     static let idlePoll: TimeInterval = 60
 
-    /// Where an item lives: the task board (a task run), Schedules (a workflow run), its conversation
-    /// (a chat or schedule run, a subagent — the Subagents sheet is there), or the page its job is
-    /// about (Settings for the pages kept there, Agents for an agent's work); nil when it has no place.
+    /// Where an item lives: the task board (a task run), the run on the Workflows page (a workflow
+    /// run), its conversation (a chat or schedule run, a subagent — the Subagents sheet is there),
+    /// or the page its job is about (Settings for the pages kept there, Agents for an agent's
+    /// work); nil when it has no place.
     static func destination(of item: BackgroundItem) -> MainContent? {
         switch item.kind {
         case .taskRun: return .destination(.tasks)
-        case .workflowRun: return .destination(.schedules)
+        case .workflowRun:
+            if let resource = item.resource, resource.kind == .workflowRun, !resource.id.isEmpty {
+                return .workflowRun(runID: resource.id, profile: item.profile)
+            }
+            return .destination(.workflows)
         default: break
         }
         if let session = item.sessionId { return .chat(sessionID: session, profile: item.profile) }
@@ -30,7 +35,8 @@ enum BackgroundRules {
         case "install", "update", "uninstall", "restart", "check_update", "discover", "plugin_install", "channel_login":
             return .destination(.agentManager)
         case "worktree": return .destination(.tasks)
-        case "schedule_run", "workflow_run": return .destination(.schedules)
+        case "schedule_run": return .destination(.schedules)
+        case "workflow_run": return .destination(.workflows)
         default: return item.resource?.kind == .agent ? .destination(.agentManager) : nil
         }
     }

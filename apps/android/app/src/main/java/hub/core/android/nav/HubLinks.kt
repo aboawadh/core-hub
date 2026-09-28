@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 /** What a link in the app opens. */
 sealed interface InAppLink {
-    data class Page(val route: Route) : InAppLink
+    /** A page, and the item to open on it once it is on screen ([Focus]), when the link names one. */
+    data class Page(val route: Route, val focus: FocusItem? = null) : InAppLink
     data class Join(val code: String) : InAppLink
 }
 
@@ -41,8 +42,9 @@ object HubLinks {
             val code = path.removePrefix("/join/").substringBefore('?').substringBefore('/').uppercase()
             return code.takeIf { it.length in 6..32 && it.all(Char::isLetterOrDigit) }?.let { InAppLink.Join(it) }
         }
-        val route = AppPaths.resolve(path)?.let { AppPaths.route(it, profile) } ?: return null
-        return InAppLink.Page(route)
+        val target = AppPaths.resolve(path) ?: return null
+        val route = AppPaths.route(target, profile) ?: return null
+        return InAppLink.Page(route, AppPaths.focus(target, profile))
     }
 }
 

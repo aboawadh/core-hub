@@ -15,11 +15,11 @@ enum PendingItems {
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// Its room, its conversation, or Schedules for a workflow's step.
+    /// Its room, its conversation, or its workflow run on the Workflows page for a workflow's step.
     static func destination(of approval: Approval) -> MainContent? {
         if let room = approval.roomId { return .room(roomID: room, profile: approval.profile) }
         if let session = approval.sessionId { return .chat(sessionID: session, profile: approval.profile) }
-        if approval.workflowRunId != nil { return .destination(.schedules) }
+        if let run = approval.workflowRunId { return .workflowRun(runID: run, profile: approval.profile) }
         return nil
     }
 

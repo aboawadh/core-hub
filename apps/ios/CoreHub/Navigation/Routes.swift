@@ -16,6 +16,7 @@ enum AppRoutes {
         .rooms: "/rooms/:roomId?",
         .tasks: "/tasks",
         .schedules: "/schedules",
+        .workflows: "/workflows",
         .settings: "/settings",
         .account: "/settings/account",
         .users: "/settings/users",

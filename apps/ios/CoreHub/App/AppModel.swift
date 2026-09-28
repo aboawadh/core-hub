@@ -421,7 +421,9 @@ final class AppModel {
     }
 
     /// `corehub://open/<path>` → the page it names (the paths of `surfaceRoutes.ios`). A chat
-    /// opens in the profile its `?profile=` names, else the selector's.
+    /// opens in the profile its `?profile=` names, else the selector's. Workflows have their own
+    /// page (DECISIONS §128): `/workflows`, and the old `/schedules?section=workflows…`, open it;
+    /// `?workflow_run=<id>` (or `?workflow=…&run=<id>`) opens that run, in `?profile=`.
     nonisolated static func route(for url: URL, selector: String) -> MainContent? {
         guard url.scheme?.lowercased() == Product.id,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
@@ -447,6 +449,19 @@ final class AppModel {
             return .newChat
         case .settings:
             return .settings
+        case .schedules, .workflows:
+            let query = components.queryItems ?? []
+            let value: (String) -> String? = { name in
+                guard let found = query.first(where: { $0.name == name })?.value, !found.isEmpty else { return nil }
+                return found
+            }
+            let profile = value("profile") ?? selector
+            if let run = value("workflow_run") { return .workflowRun(runID: run, profile: profile) }
+            if value("workflow") != nil, let run = value("run"), run != "latest" {
+                return .workflowRun(runID: run, profile: profile)
+            }
+            if destination == .workflows || value("section") == "workflows" { return .destination(.workflows) }
+            return .destination(.schedules)
         default:
             if NavigationMap.settingsTabs.contains(destination) || NavigationMap.settingsManagement.contains(destination)
                 || NavigationMap.settingsTools.contains(destination) { return .settings }

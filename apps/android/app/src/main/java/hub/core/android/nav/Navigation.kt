@@ -24,6 +24,8 @@ sealed interface Route {
     data object Agents : Route { override val destination = "agent_manager" }
     data object Tasks : Route { override val destination = "tasks" }
     data object Schedules : Route { override val destination = "schedules" }
+    /** Every workflow of every profile, its own page since 2026-09-28 (DECISIONS §128); a tab of Schedules before. */
+    data object Workflows : Route { override val destination = "workflows" }
     data object Settings : Route { override val destination = "settings" }
     /** The person's one standing conversation in a profile (null: the selector's). */
     data class GlobalAgent(val profile: String? = null) : Route { override val destination = "global_agent" }
@@ -43,7 +45,7 @@ object Screens {
      * list under the segments and leave the drawer open (NAVIGATION.md §1).
      */
     val top = listOf(
-        Route.NewChat, Route.Search, Route.Agents, Route.Tasks, Route.Schedules, Route.Settings, Route.GlobalAgent(),
+        Route.NewChat, Route.Search, Route.Agents, Route.Tasks, Route.Workflows, Route.Schedules, Route.Settings, Route.GlobalAgent(),
     ).map { it.destination } + listOf("chat", "rooms")
 
     /** The Settings list, in the manifest's order, as the phone's Settings page draws it. */
@@ -60,6 +62,35 @@ object Screens {
 
     /** The drawer's primary rows (the manifest's `rail`), segments and footer. */
     val rail = listOf("new_chat", "search", "agent_manager", "tasks", "schedules")
+
+    /** Primary entries the manifest keeps out of `rail` (`railExtra`) so an older app still matches it. */
+    val railExtra = listOf("workflows")
+
+    /**
+     * The manifest's `brandRow`: entries drawn as an icon in the drawer's header, beside its close
+     * button, instead of as a row (DECISIONS §128; the web draws them beside the fold toggle).
+     */
+    val brandRow = listOf("search")
+
+    /**
+     * The manifest's `sidebarGroups`: entries of `rail`/`railExtra` gathered under one heading
+     * (its title term, then its items in order), each filtered by role when drawn.
+     */
+    val groups: List<Pair<String, List<String>>> = listOf("tools" to listOf("agent_manager", "tasks", "workflows", "schedules"))
+
+    /** The rail rows drawn as rows: `rail` + `railExtra`, less the brand row and the grouped items (which the groups draw). */
+    val railRows: List<String> get() = (rail + railExtra).filter { it !in brandRow && groups.none { g -> it in g.second } }
+
+    /** The route a drawer entry opens. */
+    fun routeOf(destination: String): Route? = when (destination) {
+        "new_chat" -> Route.NewChat
+        "search" -> Route.Search
+        "agent_manager" -> Route.Agents
+        "tasks" -> Route.Tasks
+        "workflows" -> Route.Workflows
+        "schedules" -> Route.Schedules
+        else -> null
+    }
     val segments = listOf("chat", "rooms")
     val footer = listOf("settings")
 

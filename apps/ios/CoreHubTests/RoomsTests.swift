@@ -185,7 +185,8 @@ final class RoomsTests: XCTestCase {
         XCTAssertEqual(PendingItems.merge([[inRoom, step], [inChat, inChat]]).map(\.id), ["q2", "q3", "q1"])
         XCTAssertEqual(PendingItems.destination(of: inRoom), .room(roomID: room, profile: "work"))
         XCTAssertEqual(PendingItems.destination(of: inChat), .chat(sessionID: "s9", profile: "home"))
-        XCTAssertEqual(PendingItems.destination(of: step), .destination(.schedules))
+        // A workflow's step opens its run on the Workflows page (DECISIONS §128).
+        XCTAssertEqual(PendingItems.destination(of: step), .workflowRun(runID: "wr1", profile: "work"))
         XCTAssertEqual(PendingItems.placeKey(of: inRoom), "pending.in_room")
     }
 

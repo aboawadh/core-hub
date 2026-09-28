@@ -69,7 +69,7 @@ class OwnSettingsTest {
 
     @Test fun `a tapped notice opens what it is about`() {
         assertEquals(Route.Chat("S", "work"), NoticeLinks.route(ResourceRef(ResourceRef.Kind.SESSION, "S"), "work"))
-        assertEquals(Route.Schedules, NoticeLinks.route(ResourceRef(ResourceRef.Kind.WORKFLOW_RUN, "R"), "work"))
+        assertEquals(Route.Workflows, NoticeLinks.route(ResourceRef(ResourceRef.Kind.WORKFLOW_RUN, "R"), "work"))
         assertNull(NoticeLinks.route(null, "work"))
     }
 

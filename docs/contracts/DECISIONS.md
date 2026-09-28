@@ -4160,3 +4160,39 @@ watch.
 Rejected: a stored `phase` column (it would be a second record of what the steps already say);
 alerting on every failed run by default (an older workflow would start sending notices nobody
 asked for).
+
+## 128. The phones take the web's «Tools» drawer and edit workflows as the web does
+
+Owner's approval (2026-09-28): what §123, §124, §126 and §127 gave the web and desktop comes to the
+iPhone and Android apps. The details below are proposed — owner to confirm.
+
+**Navigation.** The phones' drawer is drawn from the same manifest keys as the web's sidebar:
+`sidebarGroups.tools` (Agents for owners and admins, Tasks, Workflows, Schedules under one heading
+«الأدوات» / "Tools", open by default, the choice kept in the app's own settings on this device, the
+heading marked as the current place while it is closed on one of its pages) and `brandRow` (Search).
+The drawer has no fold, so the phone equivalent of the web's brand row is the drawer's header: the
+Search icon sits beside the close button, always, and the Search row leaves the rail. `workflows` gains
+the `ios` and `android` surfaces and the route `/workflows` on both; it stays in `railExtra`, so an
+app built before it still matches `rail` exactly (`rail` is unchanged). Schedules on the phones loses
+its Jobs | Workflows switch; every way a phone reached a workflow run through Schedules (pending
+approvals, the Background sheet, notices, `corehub://open/schedules?section=workflows…`) now opens
+Workflows.
+
+**Workflow editing.** The phones stop saying "edited on the web": a saved workflow's editor has the
+Triggers section (add with a sender preset, the address to copy, the secret set or replaced — never
+shown back, the header/prefix/encoding of a signed or token webhook, the events it takes, Send test
+event, the delivery log with a way to each run, delete), a condition's several rules (all / any,
+path with suggestions, the operator words, value; switching them off sends an explicit `null`), the
+palette's "Send message" with Telegram and Core Hub conversation targets and Send test message, the
+workflow's failure alert (written only when changed in the editor, `null` when emptied, left out
+otherwise), "Test this step" on every step, and a run's phase, filtered mark, task and event ids with
+"Find a run" by task or event id. The words are the web's.
+
+**Nothing breaks.** No contract change. An older hub answers 404 to the trigger, send-test and
+step-test endpoints: the phone hides the Triggers section and shows a plain error for a test, and
+saving a workflow still works (the new node and workflow fields are optional and kept by the hub when
+left out). A target of a platform the phone does not know is kept as it is.
+
+Rejected: a canvas on the phone (a list of steps is what a phone screen holds; the drawing's
+positions are kept); a Tools destination with its own page (as in §126); keeping the Search row in
+the phone rail too (two entries to one place).

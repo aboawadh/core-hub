@@ -63,7 +63,14 @@
         "matches": "matches (regular expression)",
         "exists": "exists",
         "empty": "is empty"
-      }
+      },
+      "rules_toggle": "Several rules",
+      "rules_match": "Say yes when",
+      "rules_all": "every rule holds",
+      "rules_any": "any one rule holds",
+      "rules_remove": "Remove this rule",
+      "rules_add": "Add a rule",
+      "rules_hint": "Each rule compares a path — trigger.event, trigger.task_id, trigger.body.…, steps.<id>.output — with a value. Yes follows the green connections, no the red ones; a no with nothing after it ends the run as “filtered”."
     },
     "routes": {
       "success": "On success",
@@ -114,28 +121,73 @@
     },
     "triggers": {
       "title": "Triggers",
-      "read_only": "Addresses other services send events to. Add a trigger, its secret and its events on the web.",
+      "hint": "An address on this hub that another service (ClickUp, GitHub…) sends events to. Each event that passes the signature check and the event filter starts a run with the event as {{trigger.…}}. The hub must be reachable from the internet.",
+      "save_first": "Save the workflow first, then add a trigger.",
+      "preset": "Sender",
+      "add": "Add trigger",
       "presets": {
         "clickup": "ClickUp",
         "github": "GitHub",
-        "generic_hmac": "Signed webhook",
+        "generic_hmac": "Signed webhook (HMAC)",
         "token": "Webhook with a token"
       },
-      "off": "Off",
+      "enabled": "On",
+      "url": "Address",
+      "url_hint": "Give this address to the sender. It stays the same.",
       "copy": "Copy",
       "copied": "Copied",
-      "secret_stored": "A secret is stored.",
-      "secret_missing": "No secret yet: every delivery is refused."
-    },
-    "rules": {
-      "all": "Yes when every rule holds",
-      "any": "Yes when any rule holds",
-      "read_only": "These rules are kept as they are when you save here; edit them on the web."
+      "secret": "Secret",
+      "secret_hint": {
+        "clickup": "Register the webhook in ClickUp with the address above; paste the “secret” from ClickUp’s answer here.",
+        "github": "The secret you typed in the GitHub webhook’s settings.",
+        "generic_hmac": "The secret the sender signs the body with (HMAC-SHA256).",
+        "token": "The token the sender puts in the header."
+      },
+      "secret_stored": "A secret is stored. It is never shown; typing a new one replaces it.",
+      "secret_missing": "No secret yet: every delivery is refused until one is stored.",
+      "header": "Header",
+      "prefix": "Prefix before the signature",
+      "encoding": "Encoding",
+      "events": "Events it takes",
+      "events_hint": "None chosen takes every event.",
+      "test_event": "Test event",
+      "test": "Send test event",
+      "status": {
+        "received": "Received",
+        "duplicate": "Repeat, ignored",
+        "signature_rejected": "Signature refused",
+        "filtered_out": "Event not taken",
+        "run_started": "Run started",
+        "run_succeeded": "Run succeeded",
+        "run_failed": "Run failed"
+      },
+      "deliveries": "Deliveries (last 7 days)",
+      "no_deliveries": "Nothing has arrived yet.",
+      "filtered": "filtered",
+      "test_badge": "test",
+      "open_run": "Open the run",
+      "delete": "Delete trigger",
+      "delete_title": "Delete this trigger?",
+      "delete_body": "Its address stops answering and its delivery log is deleted. The sender keeps sending until you remove the webhook there too."
     },
     "send": {
+      "title": "Send message",
+      "hint": "Sends the step’s words to Telegram and/or a Core Hub conversation.",
       "message": "Message",
-      "targets": "Sends to",
-      "read_only": "A “Send message” step: its targets are kept as they are when you save here; change them on the web."
+      "targets": "Send to",
+      "telegram": "Telegram",
+      "chat_id": "Telegram chat id",
+      "telegram_hint": "A chat, user or group id (a group is like -1001234567890). Sent by this profile’s own Telegram bot; long text is split into several messages.",
+      "conversation": "A Core Hub conversation",
+      "conversation_hint": "Posted in the conversation, so it shows in every app. If the conversation is deleted, a new one with the same title is made and the step points to it.",
+      "pick": "Choose a conversation",
+      "untitled": "Untitled conversation",
+      "test": "Send test message",
+      "status": {
+        "sent": "Sent",
+        "partial": "Sent to some targets only",
+        "failed": "Not sent"
+      }
     },
     "phase": {
       "received": "Received",
@@ -146,6 +198,25 @@
       "completed": "Completed",
       "failed": "Failed"
     },
-    "run_task": "Task {id}"
+    "run_task": "Task {id}",
+    "alert": {
+      "title": "When a run fails",
+      "inbox": "Tell me in the inbox",
+      "hint": "The workflow’s name and the run’s error. Telegram and a conversation work as in a Send message step."
+    },
+    "test": {
+      "title": "Test this step",
+      "input": "Sample input ({{input}})",
+      "trigger": "Sample event ({{trigger.…}}), as JSON",
+      "bad_json": "The sample event is not valid JSON.",
+      "execute": "Run the agent for real",
+      "run": "Try it",
+      "yes": "Yes — the green connections would follow",
+      "no": "No — the red connections would follow"
+    },
+    "run_event": "Event {id}",
+    "run_filtered": "Filtered: not one to act on",
+    "run_find": "Find a run",
+    "run_find_hint": "Task or event id"
   }
 }
