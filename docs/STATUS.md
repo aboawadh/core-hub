@@ -955,6 +955,22 @@ its approval.
   `site/src/config.js`, and has a "Run your own hub" section. `pages.yml` deploys it; **it is not
   live until the owner sets Settings → Pages → Source to "GitHub Actions"** (`docs/RELEASING.md`).
 
+## Languages
+Since 2026-09-28 (ADR 0028, proposed — owner to confirm) the UI languages come from **one
+registry, `locales/languages.json`** — only Arabic and English are in it, so nothing a person sees
+changed. The web client, the desktop app, the hub's error messages and the CLI read the list, the
+direction, the fallback chain (a missing key reads in English, never as a raw key) and the number
+locale (Latin digits, §113) from it; `pnpm i18n:new <code>` adds a language to all four, `pnpm
+i18n:check` keeps Arabic/English strict and reports every other language's coverage, and `pnpm
+i18n:limits` measures each translation against the room its label has (`locales/limits.json`, 56
+labels measured in the running web client; HarfBuzz with the Noto fonts in CI). Four test-only
+pseudo-locales (`en-XA`, `ar-XB`, `zh-XC`, `th-XD`) walk 18 main screens at desktop and phone width
+in the web journeys and fail on spilled, clipped or lone-letter labels, overlapping controls and
+sideways scroll. With a third language the language switch becomes a menu and Display a list —
+proven by unit tests with a stand-in registry, not yet with a real translation. The hub keeps
+storing `ar`/`en` as a person's `locale` (the contract's enum); the phones read the registry in
+phase 2 (`feat/i18n-languages-apps`).
+
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the
 command `corehub`, `COREHUB_*` variables, image `ghcr.io/twuijri/core-hub`. Every name it had

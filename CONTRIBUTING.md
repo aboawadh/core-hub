@@ -26,9 +26,16 @@ The short version:
    `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm contract:test`, `pnpm build`.
 6. **Arabic and English.** Every user-facing string exists in both; every screen's entry label
    equals its title (`docs/clients/NAVIGATION.md`).
-7. **Issues** start from a form (bug, feature, wording/translation): version, where it happens and
+7. **Add your language.** `pnpm i18n:new <code>` (for example `fr`, `pt-BR`, `zh-Hant`) registers
+   it in `locales/languages.json` and writes every platform's catalogue with the English keys
+   and empty strings; fill them, run `pnpm i18n:check` (coverage, placeholders) and
+   `pnpm i18n:limits` (every string that is wider than its label, measured with real fonts —
+   the rooms are in `locales/limits.md`), and open a pull request from the "New language" issue
+   form. Untranslated strings show in English meanwhile. Step by step:
+   `docs/guides/add-a-language.md` (ADR 0028).
+8. **Issues** start from a form (bug, feature, wording/translation): version, where it happens and
    your own idea for the solution. Blank issues are off.
-8. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
+9. **Pull requests** are written in English: problem, decision, evidence, risks and rollback.
    Put `Closes #<issue>` in the description so the issue closes itself when the owner merges;
    do not close it by hand before the merge.
    Only the owner merges into `main`; nobody enables auto-merge. Merging into `main`, publishing

@@ -418,5 +418,5 @@ export function pseudoize(template: string, style: PseudoLocaleInfo['style']): s
   // a filler word for what they did not add.
   const words = template.replace(/\{[a-zA-Z0-9_]+\}/g, '');
   const short = Math.ceil(words.length * 1.4) - body.replace(/\{[a-zA-Z0-9_]+\}/g, '').length;
-  return `[${body}${short > 0 ? ` ${'ẋ'.repeat(Math.max(short - 1, 1))}` : ''}]`;
+  return `[${body}${short > 0 ? ` ${'ẋ'.repeat(Math.max(short - 1, 3))}` : ''}]`;
 }

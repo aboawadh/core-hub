@@ -59,8 +59,9 @@ export function WorkspacesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <p className="text-xs text-muted">{t('workspaces.note')}</p>
+      {/* The buttons move under the note when a language's words need the room (ADR 0028). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs text-muted">{t('workspaces.note')}</p>
         <Button
           className="ms-auto"
           size="sm"

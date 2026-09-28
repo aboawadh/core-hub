@@ -8,18 +8,19 @@ Keys that are not listed have no fixed room: they wrap onto more lines or the la
 
 ## Badges and status chips
 
-| Key                                 | English                     |  Room | ≈ Latin letters | Font     |
-| ----------------------------------- | --------------------------- | ----: | --------------: | -------- |
-| `agents.update_available`           | Update available: {version} | 262px |              39 | 12px/400 |
-| `devices.push.provider.apns`        | APNs (iPhone)               | 306px |              46 | 12px/400 |
-| `devices.push.provider.fcm`         | FCM (Android)               | 306px |              46 | 12px/400 |
-| `devices.push.provider.webpush`     | Web Push                    | 306px |              46 | 12px/400 |
-| `devices.push.state.not_configured` | Not configured              | 316px |              47 | 12px/400 |
-| `devices.push.state.ready`          | Ready                       | 316px |              47 | 12px/400 |
-| `tasks.count_one`                   | 1 task                      | 342px |              51 | 12px/400 |
-| `tasks.status.done`                 | Done                        |  90px |              13 | 12px/500 |
-| `workspaces.current`                | Current                     | 136px |              20 | 12px/600 |
-| `workspaces.default`                | Default                     | 136px |              20 | 12px/600 |
+| Key                                 | English                                                     |  Room | ≈ Latin letters | Font     |
+| ----------------------------------- | ----------------------------------------------------------- | ----: | --------------: | -------- |
+| `agents.update_available`           | Update available: {version}                                 | 262px |              39 | 12px/400 |
+| `agents.update_available_untested`  | Update available: {version} — newer than the tested version | 262px |              39 | 12px/400 |
+| `devices.push.provider.apns`        | APNs (iPhone)                                               | 306px |              46 | 12px/400 |
+| `devices.push.provider.fcm`         | FCM (Android)                                               | 306px |              46 | 12px/400 |
+| `devices.push.provider.webpush`     | Web Push                                                    | 306px |              46 | 12px/400 |
+| `devices.push.state.not_configured` | Not configured                                              | 316px |              47 | 12px/400 |
+| `devices.push.state.ready`          | Ready                                                       | 316px |              47 | 12px/400 |
+| `tasks.count_one`                   | 1 task                                                      | 342px |              51 | 12px/400 |
+| `tasks.status.done`                 | Done                                                        |  90px |              13 | 12px/500 |
+| `workspaces.current`                | Current                                                     | 136px |              20 | 12px/600 |
+| `workspaces.default`                | Default                                                     | 136px |              20 | 12px/600 |
 
 ## Card subtitles
 

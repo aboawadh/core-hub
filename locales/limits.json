@@ -33,6 +33,14 @@
       "maxLines": 1,
       "where": "/agents (desktop)"
     },
+    "agents.update_available_untested": {
+      "area": "ch-badge-label",
+      "maxWidth": 262,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/agents (desktop)"
+    },
     "channel_accounts.subtitle": {
       "area": "ch-card-subtitle",
       "maxWidth": 324,

@@ -77,7 +77,7 @@ describe('pseudo-locales (tests only)', () => {
   });
 
   it('draw every string from the base language, transformed', () => {
-    expect(translate('en-XA', 'nav.tasks')).toMatch(/^\[Ţáášķš ẋ\]$/);
+    expect(translate('en-XA', 'nav.tasks')).toMatch(/^\[Ţáášķš ẋẋẋ\]$/);
     expect(translate('ar-XB', 'nav.tasks')).toMatch(/^«.*»$/);
   });
 });
