@@ -60,11 +60,16 @@ export interface TestHubOptions extends Omit<BuildOptions, 'config'> {
 
 export async function testHub(env: EnvSource = {}, options: TestHubOptions = {}): Promise<TestHub> {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'corehub-test-'));
-  // The shared models catalogue lives on GitHub; the suite never reads it (§110).
+  // The shared models catalogue lives on GitHub; the suite never reads it (§110). Nor does it
+  // reach the real push relay built into the hub (DEFAULT_RELAY_URL): a test that wants a relay
+  // gives its fake's address, or switches it on to see the built-in one.
+  const relayGiven =
+    env.COREHUB_PUSH_RELAY_URL !== undefined || env.COREHUB_PUSH_RELAY !== undefined;
   const config = loadConfig({
     DATA_DIR: dataDir,
     PORT: '0',
     COREHUB_MODELS_CATALOG_URL: 'off',
+    ...(relayGiven ? {} : { COREHUB_PUSH_RELAY: 'off' }),
     ...env,
   });
   const { agents: agentOverrides, models: modelOverrides, ...build } = options;

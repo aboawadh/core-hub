@@ -1,5 +1,7 @@
 /**
- * The Workflows section of the Schedules page and its canvas (DECISIONS §52).
+ * The Workflows page and its canvas (DECISIONS §52) — a tab of Schedules until 2026-09-28, its
+ * own page since (DECISIONS §126); the old `/schedules?section=workflows…` addresses the tests
+ * below still open prove the redirect keeps them working.
  *
  * Asserted: every profile's workflows are listed (`profiles=all`); a new workflow is drawn
  * from the palette, connected from the side panel, checked by the hub as it changes (its
@@ -18,6 +20,7 @@ import { ThemeProvider } from '../src/design/theme.js';
 import { I18nProvider } from '../src/i18n/context.js';
 import { RealtimeProvider } from '../src/realtime/context.js';
 import { SchedulesScreen } from '../src/schedules/SchedulesScreen.js';
+import { WorkflowsScreen } from '../src/screens/WorkflowsScreen.js';
 
 afterEach(cleanup);
 
@@ -26,6 +29,7 @@ const OTHER = '01J8QK3ZR2W7M5N4P6T8V9X0WG';
 const RUN = '01J8QK3ZR2W7M5N4P6T8V9X0WR';
 const APPROVAL = '01J8QK3ZR2W7M5N4P6T8V9X0AP';
 const AGENT = '01J8QK3ZR2W7M5N4P6T8V9X0AG';
+const TRIGGER = '01J8QK3ZR2W7M5N4P6T8V9X0TG';
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -99,6 +103,8 @@ function fakeHub(
   } = {},
 ) {
   const seen: Seen[] = [];
+  const triggers: Array<Record<string, unknown>> = [];
+  const lines: Array<Record<string, unknown>> = [];
   const json = (body: unknown, status = 200) =>
     Promise.resolve(
       new Response(JSON.stringify(body), {
@@ -158,6 +164,93 @@ function fakeHub(
             setTimeout(() => void json(saved).then(resolve), delay),
           )
         : json(saved);
+    }
+    if (path === '/workflows/test-step') {
+      const node = (body as { node: { kind: string } }).node;
+      return json(
+        node.kind === 'condition'
+          ? {
+              rendered: 'trigger.event == taskCreated',
+              answer: true,
+              output: 'true',
+              error: null,
+              executed: true,
+            }
+          : {
+              rendered: 'Prompt about sample-task',
+              answer: null,
+              output: null,
+              error: null,
+              executed: false,
+            },
+      );
+    }
+    if (path === '/workflows/send-test') {
+      return json({
+        status: 'partial',
+        message_id: '801',
+        message_ids: ['801'],
+        delivered_to: ['core_hub:01J8QK3ZR2W7M5N4P6T8V9X0SS'],
+        failures: [{ target: 'telegram:-100404', reason: 'Bad Request: chat not found' }],
+      });
+    }
+    if (path === '/sessions' && url.search.includes('limit=200')) {
+      return json({
+        items: [{ id: '01J8QK3ZR2W7M5N4P6T8V9X0SS', title: 'Reports', agent_id: AGENT }],
+        next_cursor: null,
+      });
+    }
+    if (path === `/workflows/${FLOW}/triggers` && method === 'GET') {
+      return json({ items: triggers });
+    }
+    if (path === `/workflows/${FLOW}/triggers` && method === 'POST') {
+      const made = {
+        id: TRIGGER,
+        workflow_id: FLOW,
+        name: 'ClickUp',
+        enabled: true,
+        events: [],
+        secret_stored: false,
+        signature_header: null,
+        signature_encoding: null,
+        signature_prefix: null,
+        path: `/api/v1/workflow-hooks/${TRIGGER}`,
+        last_delivery_at: null,
+        ...(body as object),
+      };
+      triggers.push(made);
+      return json(made, 201);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}` && method === 'PATCH') {
+      const patch = { ...(body as Record<string, unknown>) };
+      if ('secret' in patch) {
+        patch.secret_stored = !!patch.secret;
+        delete patch.secret;
+      }
+      Object.assign(triggers[0]!, patch);
+      return json(triggers[0]);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}/test`) {
+      const line = {
+        id: '01J8QK3ZR2W7M5N4P6T8V9X0DK',
+        trigger_id: TRIGGER,
+        workflow_id: FLOW,
+        received_at: '2026-09-28T09:00:00Z',
+        status: 'run_started',
+        event: (body as { event?: string | null }).event ?? 'taskCreated',
+        event_id: '1',
+        task_id: 'core-hub-test-task',
+        workflow_run_id: RUN,
+        filtered: false,
+        test: true,
+        error: null,
+        body_preview: '{}',
+      };
+      lines.unshift(line);
+      return json(line);
+    }
+    if (path === `/workflow-triggers/${TRIGGER}/deliveries`) {
+      return json({ items: lines, next_cursor: null });
     }
     if (path === `/workflows/${FLOW}/run`)
       return json({ job_id: '01J8QK3ZR2W7M5N4P6T8V9X0JY', workflow_run_id: RUN }, 202);
@@ -244,10 +337,19 @@ function mount(fetchImpl: typeof fetch, at: string, language: 'en' | 'ar' = 'en'
               <MemoryRouter initialEntries={[at]}>
                 <Routes>
                   <Route
-                    path="*"
+                    path="/schedules"
                     element={
                       <>
                         <SchedulesScreen />
+                        <Where />
+                      </>
+                    }
+                  />
+                  <Route
+                    path="/workflows"
+                    element={
+                      <>
+                        <WorkflowsScreen />
                         <Where />
                       </>
                     }
@@ -267,12 +369,13 @@ async function pick(user: ReturnType<typeof userEvent.setup>, testId: string, op
   await user.click(await screen.findByRole('option', { name: option }));
 }
 
-describe('Schedules: the Workflows section', () => {
+describe('Workflows: its own page', () => {
   it("lists every profile's workflows and opens one in its own profile", async () => {
     const user = userEvent.setup();
     const { seen, fetchImpl } = fakeHub();
-    mount(fetchImpl, '/schedules');
-    await user.click(screen.getByRole('tab', { name: 'Workflows' }));
+    mount(fetchImpl, '/workflows');
+    // Its own page now: Schedules has no Workflows tab any more.
+    expect(screen.queryByRole('tab', { name: 'Workflows' })).toBeNull();
     const cards = await screen.findAllByTestId('workflow-card');
     expect(cards.map((card) => within(card).getByText(/Release|Digest/).textContent)).toEqual([
       'Release',
@@ -282,7 +385,7 @@ describe('Schedules: the Workflows section', () => {
     await user.click(within(cards[0]!).getByTestId('workflow-open'));
     expect(await screen.findByTestId('workflow-editor')).toHaveAttribute('data-workflow-id', FLOW);
     expect(screen.getByTestId('where')).toHaveTextContent(
-      `/schedules?section=workflows&workflow=${FLOW}&profile=designer`,
+      `/workflows?workflow=${FLOW}&profile=designer`,
     );
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
     expect(seen.find((c) => c.path === `/workflows/${FLOW}`)!.profile).toBe('designer');
@@ -400,6 +503,173 @@ describe('Schedules: the Workflows section', () => {
       .find((item) => item.dataset.code === 'field_invalid')!;
     expect(issue).toHaveTextContent('The hub did not accept “title” as written.');
     expect(screen.getByTestId('workflow-save')).toBeDisabled();
+  });
+
+  it('adds a ClickUp trigger: its address to copy, a secret never shown, a test event and its line (§123)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer`);
+    await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
+    const panel = await screen.findByTestId('workflow-triggers');
+    await user.click(within(panel).getByTestId('workflow-trigger-add'));
+    const card = await within(panel).findByTestId('workflow-trigger');
+    expect(
+      seen.find((c) => c.path === `/workflows/${FLOW}/triggers` && c.method === 'POST'),
+    ).toMatchObject({
+      profile: 'designer',
+      body: { preset: 'clickup', events: ['taskCreated', 'taskStatusUpdated'] },
+    });
+    expect(within(card).getByTestId('workflow-trigger-url')).toHaveValue(
+      `${window.location.origin}/api/v1/workflow-hooks/${TRIGGER}`,
+    );
+    expect(within(card).getByTestId('workflow-trigger-test')).toBeDisabled();
+
+    await user.type(within(card).getByTestId('workflow-trigger-secret'), 'from-clickup');
+    await user.click(within(card).getByTestId('workflow-trigger-secret-save'));
+    await waitFor(() =>
+      expect(within(card).getByTestId('workflow-trigger-secret')).toHaveAttribute(
+        'placeholder',
+        '[stored]',
+      ),
+    );
+    expect(within(card).getByTestId('workflow-trigger-secret')).toHaveValue('');
+    expect(
+      seen.find((c) => c.path === `/workflow-triggers/${TRIGGER}` && c.method === 'PATCH')!.body,
+    ).toEqual({ secret: 'from-clickup' });
+
+    await user.click(within(card).getByTestId('workflow-trigger-event-taskAssigneeUpdated'));
+    await waitFor(() =>
+      expect(
+        seen
+          .filter((c) => c.path === `/workflow-triggers/${TRIGGER}` && c.method === 'PATCH')
+          .at(-1)!.body,
+      ).toEqual({ events: ['taskCreated', 'taskStatusUpdated', 'taskAssigneeUpdated'] }),
+    );
+
+    await user.click(within(card).getByTestId('workflow-trigger-test'));
+    expect(await within(card).findByTestId('workflow-trigger-test-result')).toHaveTextContent(
+      'Run started',
+    );
+    const line = await within(card).findByTestId('workflow-trigger-delivery');
+    expect(line).toHaveAttribute('data-status', 'run_started');
+    expect(line).toHaveTextContent('task core-hub-test-task');
+    await user.click(within(line).getByTestId('workflow-delivery-run'));
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(`run=${RUN}`));
+  });
+
+  it('a Send message step: Telegram and a conversation, a test send, saved as a notice with targets (§124)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Report');
+    await user.click(screen.getByTestId('workflow-add-send'));
+    await user.type(await screen.findByTestId('workflow-step-text'), 'Done');
+    await user.click(screen.getByTestId('workflow-send-telegram'));
+    await user.type(screen.getByTestId('workflow-send-chat'), '-100404');
+    await user.click(screen.getByTestId('workflow-send-conversation'));
+    await pick(user, 'workflow-send-session', 'Reports');
+    await user.click(screen.getByTestId('workflow-send-test'));
+    const result = await screen.findByTestId('workflow-send-test-result');
+    expect(result).toHaveTextContent('Sent to some targets only');
+    expect(result).toHaveTextContent('Bad Request: chat not found');
+    expect(seen.find((c) => c.path === '/workflows/send-test')!.body).toEqual({
+      text: 'Done',
+      send: {
+        targets: [
+          { platform: 'telegram', chat_id: '-100404' },
+          {
+            platform: 'core_hub',
+            session_id: '01J8QK3ZR2W7M5N4P6T8V9X0SS',
+            title: 'Reports',
+            agent_id: AGENT,
+          },
+        ],
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    const node = (
+      seen.find((c) => c.path === '/workflows' && c.method === 'POST')!.body as {
+        nodes: Array<Record<string, unknown>>;
+      }
+    ).nodes[0]!;
+    expect(node).toMatchObject({ kind: 'notify', input: 'Done' });
+    expect((node.send as { targets: unknown[] }).targets).toHaveLength(2);
+  });
+
+  it('a failure alert is saved with the workflow, and a step is tried with a sample (§127)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Alerted');
+    await user.click(screen.getByTestId('workflow-add-condition'));
+    await user.click(await screen.findByTestId('workflow-step-test'));
+    await user.click(screen.getByTestId('workflow-step-test-run'));
+    const tested = await screen.findByTestId('workflow-step-test-result');
+    expect(tested).toHaveTextContent('Yes — the green connections would follow');
+    const sent = seen.find((c) => c.path === '/workflows/test-step')!.body as {
+      node: { kind: string };
+      trigger: { event: string };
+      execute: boolean;
+    };
+    expect(sent).toMatchObject({ node: { kind: 'condition' }, execute: false });
+    expect(sent.trigger.event).toBe('taskStatusUpdated');
+
+    // Nothing selected: the workflow's own settings, with who is told when a run fails.
+    fireEvent.keyDown(screen.getAllByTestId('workflow-node')[0]!, { key: 'Escape' });
+    const alert = await screen.findByTestId('workflow-alert');
+    await user.click(within(alert).getByTestId('workflow-alert-inbox'));
+    await user.click(within(alert).getByTestId('workflow-alert-telegram'));
+    await user.type(within(alert).getByTestId('workflow-alert-chat'), '-100777');
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    expect(
+      (
+        seen.find((c) => c.path === '/workflows' && c.method === 'POST')!.body as Record<
+          string,
+          unknown
+        >
+      ).on_failure,
+    ).toEqual({ inbox: true, send: { targets: [{ platform: 'telegram', chat_id: '-100777' }] } });
+  });
+
+  it('a condition holds several rules, saved as the contract’s rules (§123)', async () => {
+    const user = userEvent.setup();
+    const { seen, fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules?section=workflows&workflow=new&profile=default');
+    await screen.findByTestId('workflow-editor');
+    await user.type(screen.getByTestId('workflow-name'), 'Filter');
+    await user.click(screen.getByTestId('workflow-add-condition'));
+    await user.click(await screen.findByTestId('workflow-condition-rules'));
+    const rules = await screen.findByTestId('workflow-rules');
+    expect(within(rules).getAllByTestId('workflow-rule')).toHaveLength(1);
+    await user.clear(within(rules).getByTestId('workflow-rule-path'));
+    await user.type(within(rules).getByTestId('workflow-rule-path'), 'trigger.event');
+    await user.click(within(rules).getByTestId('workflow-rule-add'));
+    const second = within(rules).getAllByTestId('workflow-rule')[1]!;
+    await user.type(within(second).getByTestId('workflow-rule-value'), 'taskCreated');
+    await pick(user, 'workflow-rules-match', 'any one rule holds');
+    await waitFor(() => expect(screen.getByTestId('workflow-save')).toBeEnabled());
+    await user.click(screen.getByTestId('workflow-save'));
+    await waitFor(() =>
+      expect(seen.some((c) => c.path === '/workflows' && c.method === 'POST')).toBe(true),
+    );
+    const post = seen.find((c) => c.path === '/workflows' && c.method === 'POST')!;
+    expect((post.body as { nodes: Array<Record<string, unknown>> }).nodes[0]!.rules).toEqual({
+      match: 'any',
+      items: [
+        { path: 'trigger.event', operator: 'exists', value: null },
+        { path: 'trigger.event', operator: '==', value: 'taskCreated' },
+      ],
+    });
   });
 
   it('keeps the workflow’s limits in the side panel while no step is selected (§102)', async () => {
@@ -530,5 +800,26 @@ describe('Schedules: the Workflows section', () => {
     expect(await screen.findByTestId('workflow-canvas')).toHaveAttribute('data-direction', 'rtl');
     await waitFor(() => expect(screen.getAllByTestId('workflow-node')).toHaveLength(4));
     expect(screen.getByRole('tab', { name: 'تحرير' })).toBeInTheDocument();
+  });
+});
+
+describe('the old Schedules address of Workflows (DECISIONS §126)', () => {
+  it('lands on the Workflows page with the rest of the address kept', async () => {
+    const { fetchImpl } = fakeHub();
+    mount(fetchImpl, `/schedules?section=workflows&workflow=${FLOW}&profile=designer&run=${RUN}`);
+    await waitFor(() =>
+      expect(screen.getByTestId('where')).toHaveTextContent(
+        `/workflows?workflow=${FLOW}&profile=designer&run=${RUN}`,
+      ),
+    );
+    expect(await screen.findByTestId('workflow-editor')).toHaveAttribute('data-workflow-id', FLOW);
+  });
+
+  it('keeps Schedules itself, without a Workflows tab', async () => {
+    const { fetchImpl } = fakeHub();
+    mount(fetchImpl, '/schedules');
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/schedules$/);
+    expect(screen.queryByRole('tab', { name: 'Workflows' })).toBeNull();
+    expect(screen.queryByTestId('workflows-section')).toBeNull();
   });
 });

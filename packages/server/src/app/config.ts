@@ -31,6 +31,7 @@ export const ENV_KEYS = [
   'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
   'COREHUB_TRUST_PROXY',
   'COREHUB_MODELS_CATALOG_URL',
+  'COREHUB_TELEGRAM_API_BASE',
 ] as const;
 export type EnvKey = (typeof ENV_KEYS)[number];
 export type EnvSource = Partial<Record<EnvKey, string | undefined>> & {
@@ -173,6 +174,12 @@ const envSchema = z.object({
    * Unset, the Core Hub repository's `catalog/models.json`.
    */
   COREHUB_MODELS_CATALOG_URL: z.string().trim().optional(),
+  /** Where a workflow's "Send message" step reaches Telegram's Bot API (DECISIONS §124). */
+  COREHUB_TELEGRAM_API_BASE: z
+    .string()
+    .trim()
+    .regex(/^https?:\/\/\S+$/, 'COREHUB_TELEGRAM_API_BASE must be an http(s):// address')
+    .optional(),
 });
 
 /** The shared models catalogue every hub reads (DECISIONS §110). */
@@ -302,6 +309,8 @@ export interface HubConfig {
    * or absent reads none.
    */
   modelsCatalogUrl?: string | null;
+  /** Telegram's Bot API origin for "Send message" steps (`COREHUB_TELEGRAM_API_BASE`, §124). */
+  telegramApiBase?: string;
 }
 
 export interface WebTerminalConfig {
@@ -374,6 +383,7 @@ export function loadConfig(
     },
     trustProxy: parseTrustProxy(env.COREHUB_TRUST_PROXY),
     modelsCatalogUrl: parseModelsCatalogUrl(env.COREHUB_MODELS_CATALOG_URL),
+    telegramApiBase: env.COREHUB_TELEGRAM_API_BASE ?? 'https://api.telegram.org',
   };
 }
 

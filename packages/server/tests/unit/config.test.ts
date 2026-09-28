@@ -45,6 +45,7 @@ describe('config', () => {
       'COREHUB_WEB_TERMINAL_IDLE_MINUTES',
       'COREHUB_TRUST_PROXY',
       'COREHUB_MODELS_CATALOG_URL',
+      'COREHUB_TELEGRAM_API_BASE',
     ]);
     const picked = pickEnv({
       DATA_DIR: '/x',

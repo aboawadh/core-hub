@@ -157,6 +157,8 @@ export const destinationIcons: Readonly<Record<string, IconComponent>> = {
   agent_manager: IconAgents,
   tasks: IconTasks,
   schedules: IconSchedules,
+  /** Its own page since 2026-09-28 (DECISIONS §126); until then a tab of Schedules. */
+  workflows: lucide('workflow'),
   chat: lucide('messages-square'),
   rooms: lucide('users'),
   settings: IconSettings,
@@ -183,6 +185,8 @@ export const destinationIcons: Readonly<Record<string, IconComponent>> = {
   plugins: lucide('puzzle'),
   files: IconFolder,
   terminal: lucide('square-terminal'),
+  /** Settings → Secrets, the owner's (DECISIONS §125). */
+  secrets: lucide('key-round'),
   agent_skills: IconSpark,
   agent_mcp: lucide('server'),
   agent_memory: lucide('brain'),
@@ -192,4 +196,9 @@ export const destinationIcons: Readonly<Record<string, IconComponent>> = {
   agent_config_files: lucide('file-cog'),
   agent_settings: lucide('sliders-horizontal'),
   global_agent: IconGlobe,
+};
+
+/** The headings `sidebarGroups` gathers rail entries under (DECISIONS §126). */
+export const groupIcons: Readonly<Record<string, IconComponent>> = {
+  tools: IconTool,
 };

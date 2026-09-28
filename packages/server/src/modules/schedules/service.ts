@@ -14,21 +14,25 @@ import { newUlid } from '../../db/ids.js';
 import type { ModuleDb } from '../../lib/db.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { CronError, nextRunAt, parseCron } from './cron.js';
-import { ConditionError, parseCondition, pathsIn } from './expr.js';
+import { ConditionError, hasRules, parseCondition, pathsIn, ruleProblem } from './expr.js';
 import { deliveryOfHermes, type HermesJob } from './hermes-jobs.js';
 import { NO_LIMITS, limitsOf } from './limits.js';
 import { MAX_DELAY_SECONDS } from './workflow-engine.js';
+import { hasSend, sendProblems } from './send.js';
 import {
   nodeRuns,
   scheduleRuns,
   schedules,
   workflowRuns,
+  workflowSentParts,
   workflows,
   SCHEDULE_OVERLAPS,
   type ScheduleOverlap,
   type WorkflowDefinition,
   type WorkflowEdge,
+  type WorkflowFailureAlert,
   type WorkflowLimits,
+  type WorkflowSend,
   type WorkflowNode,
   type WorkflowResumeState,
 } from './schema.js';
@@ -882,13 +886,21 @@ export class SchedulesService {
       patch.nodes !== undefined ||
       patch.edges !== undefined ||
       patch.working_dir !== undefined ||
-      patch.limits !== undefined
+      patch.limits !== undefined ||
+      patch.on_failure !== undefined
     ) {
       const definition = definitionOf({
-        nodes: patch.nodes ?? current.definition.nodes,
+        nodes:
+          patch.nodes !== undefined
+            ? keepRules(patch.nodes as WorkflowNode[], current.definition.nodes)
+            : current.definition.nodes,
         edges: patch.edges ?? current.definition.edges,
         working_dir: patch.working_dir ?? current.definition.workingDir ?? null,
         limits: patch.limits !== undefined ? patch.limits : (current.definition.limits ?? null),
+        on_failure:
+          patch.on_failure !== undefined
+            ? patch.on_failure
+            : (current.definition.onFailure ?? null),
       });
       const problems = validateDefinition(definition);
       if (problems.length > 0) throw conflict({ reason: 'workflow_invalid', problems });
@@ -922,12 +934,23 @@ export class SchedulesService {
 
   // -------------------------------------------------------- workflow runs
 
-  workflowRunsOf(scope: Scope, workflowId: string, limit: number): WorkflowRunRow[] {
+  workflowRunsOf(
+    scope: Scope,
+    workflowId: string,
+    limit: number,
+    only: { eventId?: string | null; taskId?: string | null } = {},
+  ): WorkflowRunRow[] {
     this.workflow(scope, workflowId);
     return this.db
       .select()
       .from(workflowRuns)
-      .where(eq(workflowRuns.workflowId, workflowId))
+      .where(
+        and(
+          eq(workflowRuns.workflowId, workflowId),
+          only.eventId ? eq(workflowRuns.eventId, only.eventId) : undefined,
+          only.taskId ? eq(workflowRuns.taskId, only.taskId) : undefined,
+        ),
+      )
       .orderBy(desc(workflowRuns.id))
       .limit(limit)
       .all();
@@ -970,6 +993,8 @@ export class SchedulesService {
       scheduleId?: string | null;
       /** The limits this run works under; the workflow's when not given. */
       limits?: WorkflowLimits;
+      /** A trigger's delivery started it (§123). */
+      event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
     const id = newUlid();
@@ -993,9 +1018,100 @@ export class SchedulesService {
         },
         input: input.input,
         startedAt: now,
+        workflowTriggerId: input.event?.triggerId ?? null,
+        eventId: input.event?.eventId ?? null,
+        taskId: input.event?.taskId ?? null,
       })
       .run();
     return this.workflowRun(scope, id);
+  }
+
+  /** The run a rerun repeats, followed back to the first: what a sent part is kept under (§124). */
+  rootRunOf(run: WorkflowRunRow): string {
+    let current = run;
+    for (let hop = 0; hop < 20; hop += 1) {
+      if (current.triggerKind !== 'manual' || !current.triggerRef) break;
+      const before = this.workflowRunById(current.triggerRef);
+      if (!before || before.workflowId !== current.workflowId) break;
+      current = before;
+    }
+    return current.id;
+  }
+
+  sentPart(runKey: string, nodeKey: string, target: string, part: number): string | null {
+    return (
+      this.db
+        .select({ messageId: workflowSentParts.messageId })
+        .from(workflowSentParts)
+        .where(
+          and(
+            eq(workflowSentParts.runKey, runKey),
+            eq(workflowSentParts.nodeKey, nodeKey),
+            eq(workflowSentParts.target, target),
+            eq(workflowSentParts.part, part),
+          ),
+        )
+        .get()?.messageId ?? null
+    );
+  }
+
+  recordSent(
+    run: WorkflowRunRow,
+    key: { runKey: string; nodeKey: string; target: string; part: number },
+    messageId: string,
+  ): void {
+    const now = new Date();
+    this.db
+      .insert(workflowSentParts)
+      .values({
+        id: newUlid(),
+        ownerId: run.ownerId,
+        workspace: run.workspace,
+        ...key,
+        messageId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  /**
+   * A conversation target was made again (its conversation was deleted): the workflow's node
+   * now names the new one, so the next run posts there. The drawing is otherwise unchanged,
+   * so its version is not bumped.
+   */
+  repointConversation(
+    workflowId: string,
+    nodeId: string,
+    from: string | null,
+    to: { sessionId: string; title: string | null },
+  ): boolean {
+    const row = this.workflowById(workflowId);
+    if (!row) return false;
+    const definition = row.definition as WorkflowDefinition;
+    let changed = false;
+    const nodes = definition.nodes.map((node) => {
+      if (node.id !== nodeId || !hasSend(node.send)) return node;
+      return {
+        ...node,
+        send: {
+          targets: node.send.targets.map((target) => {
+            if (target.platform !== 'core_hub' || (target.session_id ?? null) !== from)
+              return target;
+            changed = true;
+            return { ...target, session_id: to.sessionId, title: to.title ?? target.title ?? null };
+          }),
+        },
+      };
+    });
+    if (!changed) return false;
+    this.db
+      .update(workflows)
+      .set({ definition: { ...definition, nodes }, updatedAt: new Date() })
+      .where(eq(workflows.id, workflowId))
+      .run();
+    return true;
   }
 
   updateWorkflowRun(id: string, patch: Partial<typeof workflowRuns.$inferInsert>): void {
@@ -1294,12 +1410,44 @@ function deliveryOf(delivery: Record<string, unknown> | undefined) {
   };
 }
 
+/** Who is told when a run fails (§127), as stored; anything unreadable is nobody. */
+export function failureAlertOf(value: unknown): WorkflowFailureAlert | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { inbox?: unknown; send?: unknown };
+  const send = hasSend(raw.send as WorkflowSend) ? (raw.send as WorkflowSend) : null;
+  const inbox = raw.inbox === true;
+  return inbox || send ? { inbox, send } : null;
+}
+
+/**
+ * An app that does not know a condition's `rules` (§123) or a notice's `send` (§124) sends the
+ * node without the field; what the saved node with the same id had is kept rather than erased.
+ * `null` removes it.
+ */
+export function keepRules(nodes: WorkflowNode[], saved: WorkflowNode[]): WorkflowNode[] {
+  const before = new Map(saved.map((node) => [node.id, node]));
+  const has = (node: WorkflowNode, field: string) =>
+    Object.prototype.hasOwnProperty.call(node, field);
+  return nodes.map((node) => {
+    const old = before.get(node.id);
+    if (!old) return node;
+    if (node.kind === 'condition' && !has(node, 'rules') && old.rules) {
+      return { ...node, rules: old.rules };
+    }
+    if (node.kind === 'notify' && !has(node, 'send') && old.send) {
+      return { ...node, send: old.send };
+    }
+    return node;
+  });
+}
+
 export function definitionOf(input: Record<string, unknown>): WorkflowDefinition {
   return {
     nodes: ((input.nodes as WorkflowNode[] | undefined) ?? []).map((node) => ({ ...node })),
     edges: ((input.edges as WorkflowEdge[] | undefined) ?? []).map((edge) => ({ ...edge })),
     workingDir: (input.working_dir as string | null | undefined) ?? null,
     limits: limitsOf(input.limits),
+    onFailure: failureAlertOf(input.on_failure),
   };
 }
 
@@ -1367,6 +1515,55 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
   for (const node of definition.nodes) {
     const name = node.title || node.id;
     const input = node.input ?? '';
+    if (node.kind === 'notify' && hasSend(node.send)) {
+      // A "Send message" step (§124): each target must name where it goes.
+      for (const found of sendProblems(node.send)) {
+        problems.push(
+          issue(
+            found.code,
+            found.index === null
+              ? `"${name}" sends nowhere: add Telegram or a conversation`
+              : `target ${found.index + 1} of "${name}" cannot be sent to (${found.code})`,
+            { node: node.id, detail: found.index === null ? null : String(found.index + 1) },
+          ),
+        );
+      }
+    }
+    if (node.kind === 'condition' && hasRules(node.rules)) {
+      // Several rules (§123): each one is read now, and a `steps.` path must name a step.
+      node.rules.items.forEach((rule, index) => {
+        const reason = ruleProblem(rule);
+        const path = typeof rule.path === 'string' ? rule.path.trim() : '';
+        if (reason) {
+          problems.push(
+            issue(reason, `rule ${index + 1} of "${name}" cannot be read (${reason})`, {
+              node: node.id,
+              detail: String(index + 1),
+            }),
+          );
+          return;
+        }
+        const [root, second] = path.split('.');
+        if (root !== 'input' && root !== 'trigger' && root !== 'steps') {
+          problems.push(
+            issue(
+              'template_root_unknown',
+              `"${name}" refers to ${path}; a path starts with input, trigger or steps`,
+              { node: node.id, detail: path },
+            ),
+          );
+        } else if (root === 'steps' && (!second || !ids.has(second))) {
+          problems.push(
+            issue(
+              'template_step_unknown',
+              `"${name}" refers to ${path}, but there is no step "${second ?? ''}"`,
+              { node: node.id, detail: path },
+            ),
+          );
+        }
+      });
+      continue;
+    }
     if (node.kind === 'condition') {
       try {
         parseCondition(input);
@@ -1412,6 +1609,16 @@ export function problemsOf(definition: WorkflowDefinition): WorkflowIssue[] {
           ),
         );
       }
+    }
+  }
+  // Who is told when a run fails (§127): its targets are checked like a send step's.
+  if (definition.onFailure?.send) {
+    for (const found of sendProblems(definition.onFailure.send)) {
+      problems.push(
+        issue(found.code, `the failure alert cannot be sent (${found.code})`, {
+          detail: found.index === null ? null : String(found.index + 1),
+        }),
+      );
     }
   }
   return problems;

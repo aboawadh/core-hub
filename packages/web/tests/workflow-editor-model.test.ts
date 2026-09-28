@@ -12,8 +12,10 @@ import {
   issuesByTarget,
   joinCondition,
   nodeStates,
+  firstRule,
   placeRefusedFields,
   reducer,
+  rulesOf,
   splitCondition,
   takenEdges,
   toWrite,
@@ -133,6 +135,8 @@ describe('workflow editor: the drawing', () => {
           skills: [],
           input: 'Sum up {{input}}',
           approval_required: false,
+          rules: null,
+          send: null,
           position: state.draft.nodes[0]!.position,
         },
         {
@@ -146,6 +150,8 @@ describe('workflow editor: the drawing', () => {
           skills: [],
           input: 'Said: {{steps.agent_1.output}}',
           approval_required: false,
+          rules: null,
+          send: null,
           position: state.draft.nodes[1]!.position,
         },
       ],
@@ -393,5 +399,44 @@ describe('a refused drawing, field by field', () => {
       'limits.max_cost',
       '',
     ]);
+  });
+});
+
+describe('a condition’s several rules (§123)', () => {
+  it('round-trips through the contract, and starts from the single comparison', () => {
+    let state = reducer(initialState(), { type: 'add', kind: 'condition', title: 'Only new' });
+    const rules = {
+      match: 'any' as const,
+      items: [
+        { path: 'trigger.event', operator: '==' as const, value: 'taskCreated' },
+        { path: 'trigger.task_id', operator: 'exists' as const, value: null },
+      ],
+    };
+    state = reducer(state, { type: 'update', id: 'condition_1', patch: { rules } });
+    const write = toWrite({ ...state.draft, name: 'x' });
+    expect(write.nodes[0]!.rules).toEqual(rules);
+    expect(fromWorkflow(write).nodes[0]!.rules).toEqual(rules);
+    // No rules, or a node of another kind: `null`, and the single line is what is read.
+    expect(
+      toWrite(
+        reducer(state, {
+          type: 'update',
+          id: 'condition_1',
+          patch: { rules: { match: 'all', items: [] } },
+        }).draft,
+      ).nodes[0]!.rules,
+    ).toBeNull();
+    expect(rulesOf(null)).toBeNull();
+    expect(rulesOf({ match: 'weird', items: [{ path: 'a', operator: '>', value: 3 }] })).toEqual({
+      match: 'all',
+      items: [{ path: 'a', operator: '>', value: null }],
+    });
+    expect(firstRule('steps.a.output contains "ok"')).toEqual({
+      path: 'steps.a.output',
+      operator: 'contains',
+      value: 'ok',
+    });
+    expect(firstRule('input exists')).toEqual({ path: 'input', operator: 'exists', value: null });
+    expect(firstRule('')).toEqual({ path: 'trigger.event', operator: '==', value: '' });
   });
 });

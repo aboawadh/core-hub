@@ -27,6 +27,8 @@ import {
   type BadgeTone,
 } from '../../ui/index.js';
 import { Combobox } from '../../ui/Combobox.js';
+import { SendForm } from './SendForm.js';
+import { StepTest } from './StepTest.js';
 import { chatModels } from '../../models/queries.js';
 import { modelOption } from '../../models/useModelPicker.js';
 import type { Agent, Model } from '../../types.js';
@@ -34,6 +36,7 @@ import {
   MAX_DELAY_SECONDS,
   OPERATORS,
   UNARY,
+  firstRule,
   insertAt,
   joinCondition,
   splitCondition,
@@ -43,6 +46,8 @@ import {
   type NodeRunState,
   type Operator,
   type Route,
+  type Rule,
+  type Rules,
   type RunStep,
   type WfEdge,
   type WfNode,
@@ -135,6 +140,7 @@ export function StepPanel({
   onRunFrom,
   runFromBusy,
   settings,
+  profile,
 }: {
   draft: Draft;
   node: WfNode | null;
@@ -148,6 +154,8 @@ export function StepPanel({
   runFromBusy: boolean;
   /** The workflow's own settings (its limits), shown while no step is selected (§102). */
   settings?: ReactNode;
+  /** The workflow's profile, where a "Send message" step's test goes (§124). */
+  profile?: string;
 }) {
   const { t } = useI18n();
   if (edge)
@@ -170,7 +178,9 @@ export function StepPanel({
   return (
     <div className="flex flex-col gap-3" data-testid="workflow-panel" data-node-id={node.id}>
       <div className="flex items-center gap-2">
-        <Badge tone="accent">{t(`workflows.kinds.${node.kind}`)}</Badge>
+        <Badge tone="accent">
+          {node.send ? t('workflows.send.title') : t(`workflows.kinds.${node.kind}`)}
+        </Badge>
         <span className="text-xs text-muted">{t(`workflows.kind_hints.${node.kind}`)}</span>
       </div>
       <IssueList issues={issues} problems={problems} t={t} />
@@ -200,11 +210,15 @@ export function StepPanel({
           <TemplateField
             draft={draft}
             node={node}
-            label={t('workflows.form.notify_text')}
+            label={t(node.send ? 'workflows.send.message' : 'workflows.form.notify_text')}
             update={update}
             testId="workflow-step-text"
           />
-          <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>
+          {node.send ? (
+            <SendForm node={node} profile={profile ?? 'default'} update={update} />
+          ) : (
+            <p className="text-xs text-muted">{t('workflows.form.notify_to')}</p>
+          )}
         </>
       )}
       {node.kind === 'approval' && (
@@ -230,6 +244,7 @@ export function StepPanel({
       )}
 
       <Connections draft={draft} node={node} dispatch={dispatch} />
+      <StepTest key={node.id} node={node} profile={profile ?? 'default'} />
 
       <div className="flex flex-wrap gap-2 border-t border-line pt-3">
         <Button
@@ -399,9 +414,36 @@ function ConditionForm({
   const parts = splitCondition(node.input ?? '');
   const [raw, setRaw] = useState(parts === null);
   const earlier = upstreamOf(draft, node.id);
+  const several = (
+    <Switch
+      checked={!!node.rules}
+      onChange={(next) =>
+        update({ rules: next ? { match: 'all', items: [firstRule(node.input)] } : null })
+      }
+      label={t('workflows.form.rules_toggle')}
+      testId="workflow-condition-rules"
+    />
+  );
+  if (node.rules) {
+    return (
+      <>
+        {several}
+        <RulesForm
+          rules={node.rules}
+          suggestions={[
+            ...TRIGGER_PATHS,
+            'input',
+            ...earlier.map((step) => `steps.${step.id}.output`),
+          ]}
+          onChange={(rules) => update({ rules })}
+        />
+      </>
+    );
+  }
   if (raw || !parts) {
     return (
       <>
+        {several}
         <Field
           label={t('workflows.form.condition_text')}
           hint={t('workflows.form.condition_raw_hint')}
@@ -428,6 +470,7 @@ function ConditionForm({
   const suggestions = ['input', ...earlier.map((step) => `steps.${step.id}.output`)];
   return (
     <>
+      {several}
       <Field
         label={t('workflows.form.condition_path')}
         hint={t('workflows.form.condition_path_hint')}
@@ -488,6 +531,146 @@ function ConditionForm({
         <code dir="ltr">{node.input}</code> — {t('workflows.form.condition_routes_hint')}
       </p>
     </>
+  );
+}
+
+/** What a run a trigger started can read about its event (§123). */
+const TRIGGER_PATHS = [
+  'trigger.event',
+  'trigger.task_id',
+  'trigger.event_id',
+  'trigger.body.history_items.0.field',
+  'trigger.body.history_items.0.after.status',
+];
+
+/** A condition's several rules: all must hold, or any one (§123). */
+export function RulesForm({
+  rules,
+  suggestions,
+  onChange,
+}: {
+  rules: Rules;
+  suggestions: string[];
+  onChange: (rules: Rules) => void;
+}) {
+  const { t } = useI18n();
+  const [focused, setFocused] = useState<number | null>(null);
+  const setRule = (index: number, patch: Partial<Rule>) =>
+    onChange({
+      ...rules,
+      items: rules.items.map((rule, at) => {
+        if (at !== index) return rule;
+        const next = { ...rule, ...patch };
+        if (UNARY.has(next.operator)) next.value = null;
+        else if (next.value === null) next.value = '';
+        return next;
+      }),
+    });
+  return (
+    <div className="flex flex-col gap-2" data-testid="workflow-rules">
+      <Field label={t('workflows.form.rules_match')}>
+        {() => (
+          <Select
+            value={rules.match}
+            onValueChange={(value) =>
+              onChange({ ...rules, match: value === 'any' ? 'any' : 'all' })
+            }
+            options={[
+              { value: 'all', label: t('workflows.form.rules_all') },
+              { value: 'any', label: t('workflows.form.rules_any') },
+            ]}
+            label={t('workflows.form.rules_match')}
+            testId="workflow-rules-match"
+          />
+        )}
+      </Field>
+      <ol className="flex flex-col gap-2">
+        {rules.items.map((rule, index) => (
+          <li
+            key={index}
+            className="flex flex-col gap-1 rounded-md border border-line p-2"
+            data-testid="workflow-rule"
+          >
+            <Input
+              value={rule.path}
+              onChange={(event) => setRule(index, { path: event.target.value })}
+              onFocus={() => setFocused(index)}
+              aria-label={t('workflows.form.condition_path')}
+              placeholder="trigger.event"
+              dir="ltr"
+              data-testid="workflow-rule-path"
+            />
+            {focused === index && (
+              <span className="flex flex-wrap gap-1">
+                {suggestions.map((path) => (
+                  <Button
+                    key={path}
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => setRule(index, { path })}
+                    data-testid="workflow-rule-suggestion"
+                  >
+                    <code dir="ltr">{path}</code>
+                  </Button>
+                ))}
+              </span>
+            )}
+            <span className="flex gap-1">
+              <span className="min-w-0 flex-1">
+                <Select
+                  value={rule.operator}
+                  onValueChange={(value) =>
+                    setRule(index, { operator: (value ?? '==') as Operator })
+                  }
+                  options={OPERATORS.map((operator) => ({
+                    value: operator,
+                    label: t(`workflows.form.operators.${OPERATOR_KEY[operator]}`),
+                  }))}
+                  label={t('workflows.form.condition_operator')}
+                  testId="workflow-rule-operator"
+                />
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={t('workflows.form.rules_remove')}
+                tooltip={t('workflows.form.rules_remove')}
+                disabled={rules.items.length === 1}
+                onClick={() =>
+                  onChange({ ...rules, items: rules.items.filter((_, at) => at !== index) })
+                }
+                data-testid="workflow-rule-remove"
+              >
+                ✕
+              </Button>
+            </span>
+            {!UNARY.has(rule.operator) && (
+              <Input
+                value={rule.value ?? ''}
+                onChange={(event) => setRule(index, { value: event.target.value })}
+                aria-label={t('workflows.form.condition_value')}
+                dir="auto"
+                data-testid="workflow-rule-value"
+              />
+            )}
+          </li>
+        ))}
+      </ol>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() =>
+          onChange({
+            ...rules,
+            items: [...rules.items, { path: 'trigger.event', operator: '==', value: '' }],
+          })
+        }
+        data-testid="workflow-rule-add"
+      >
+        {t('workflows.form.rules_add')}
+      </Button>
+      <p className="text-xs text-muted">{t('workflows.form.rules_hint')}</p>
+    </div>
   );
 }
 

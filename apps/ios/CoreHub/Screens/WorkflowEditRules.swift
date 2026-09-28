@@ -179,6 +179,41 @@ enum WorkflowEditRules {
         )
     }
 
+    /// A condition's several rules (DECISIONS §123), as lines to read: made through the model's
+    /// own JSON so the words match the contract (`path operator "value"`). The phone shows them
+    /// and keeps them untouched when it saves; they are edited on the web.
+    static func ruleLines(_ rules: WorkflowRules?) -> (match: String, lines: [String]) {
+        guard let rules,
+              let data = try? JSONEncoder().encode(rules),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return ("all", []) }
+        let items = object["items"] as? [[String: Any]] ?? []
+        let lines = items.map { item -> String in
+            let path = item["path"] as? String ?? ""
+            let op = item["operator"] as? String ?? ""
+            if let value = item["value"] as? String { return "\(path) \(op) \"\(value)\"" }
+            return "\(path) \(op)"
+        }
+        return (object["match"] as? String == "any" ? "any" : "all", lines)
+    }
+
+    /// A "Send message" step's targets as lines to read (§124): `telegram -100…`,
+    /// `conversation "Reports"`. The phone keeps them untouched when it saves.
+    static func sendLines(_ send: WorkflowSend) -> [String] {
+        send.targets.map { target in
+            switch target.platform {
+            case "telegram": return "telegram \(target.chatId ?? "")"
+            case "core_hub": return "conversation \"\(target.title ?? target.sessionId ?? "")\""
+            default: return target.platform
+            }
+        }
+    }
+
+    /// A trigger's address on the hub the phone is signed in to.
+    static func triggerURL(hub: String, path: String) -> String {
+        (hub.hasSuffix("/") ? String(hub.dropLast()) : hub) + path
+    }
+
     /// Saving waits for a name and for the hub's check to find no problem.
     static func canSave(_ draft: Draft, validation: WorkflowValidation?) -> Bool {
         !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (validation?.valid ?? true)

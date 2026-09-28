@@ -14,10 +14,15 @@ import { useI18n } from '../i18n/context.js';
 import { useMeta } from '../hub/queries.js';
 import {
   agentPageFromPath,
+  brandRowIds,
   navigation,
+  pathIsUnder,
+  railIds,
   routeOf,
+  sidebarGroups,
   termKey,
   visibleEntries,
+  type Destination,
 } from '../navigation/manifest.js';
 import { useRealtime } from '../realtime/context.js';
 import { RoomList } from '../rooms/RoomList.js';
@@ -26,7 +31,9 @@ import { SettingsNav, settingsIdFromPath } from '../settings/SettingsNav.js';
 import { AgentBackRow, AgentNav } from '../agents/AgentNav.js';
 import {
   destinationIcons,
+  groupIcons,
   IconArrowStart,
+  IconChevron,
   IconGlobe,
   IconSearch,
   IconSettings,
@@ -55,6 +62,7 @@ import {
 import { useNoticeStream } from '../notify/queries.js';
 import { useDesktopEffects } from '../desktop/effects.js';
 import { foldShortcutAria, foldShortcutLabel } from './sidebarFold.js';
+import { useSidebarGroups } from './sidebarGroups.js';
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
 /** The last page outside Settings, for the sidebar's way back (per tab, not per device). */
@@ -93,7 +101,15 @@ export function Sidebar({
   const location = useLocation();
   const navigate = useNavigate();
   const role = user?.role ?? 'member';
-  const rail = visibleEntries(navigation.rail, role);
+  const rail = visibleEntries(railIds(), role);
+  /**
+   * Beside the fold toggle, not in the rail: Search (owner, 2026-09-28, DECISIONS §126).
+   * Folded, the brand row has room for the toggle alone, so Search comes back as a row at its
+   * place in the rail — right below New chat.
+   */
+  const inBrandRow = new Set(folded ? [] : brandRowIds());
+  const groups = sidebarGroups();
+  const groupState = useSidebarGroups();
   const segments = visibleEntries(navigation.segments, role);
   const stored = (() => {
     try {
@@ -172,10 +188,108 @@ export function Sidebar({
     />
   ) : undefined;
   const userName = user?.display_name ?? user?.username ?? '';
+  // Inside Settings and an agent's pages the rail gives way to a row back, and Search with it.
+  const brandEntries =
+    settingsId === null && agentPage === null ? rail.filter((d) => inBrandRow.has(d.id)) : [];
+  const brandAction =
+    brandEntries.length > 0 || foldToggle ? (
+      <span className="flex items-center gap-1">
+        {brandEntries.map((d) => {
+          const Icon = destinationIcons[d.id] ?? IconSearch;
+          return (
+            <Tooltip key={d.id} label={t(termKey(d.id))}>
+              <NavLink
+                to={routeOf(d.id)}
+                onClick={onNavigate}
+                data-nav-id={d.id}
+                data-testid={`brand-${d.id}`}
+                className="ch-btn ch-btn-ghost ch-btn-sm"
+                data-icon-only="true"
+                aria-label={t(termKey(d.id))}
+              >
+                <Icon size={18} />
+              </NavLink>
+            </Tooltip>
+          );
+        })}
+        {foldToggle}
+      </span>
+    ) : undefined;
+  const railRow = (d: Destination, index: number) => {
+    const Icon = destinationIcons[d.id] ?? IconSearch;
+    return (
+      <SidebarRow
+        key={d.id}
+        icon={<Icon size={18} />}
+        label={t(termKey(d.id))}
+        emphasis={index === 0 ? 'primary' : 'normal'}
+        render={({ className, children }) => (
+          <NavLink to={routeOf(d.id)} onClick={onNavigate} data-nav-id={d.id} className={className}>
+            {children}
+          </NavLink>
+        )}
+      />
+    );
+  };
+  /**
+   * The rail in order, with each group's entries under its heading at the place of its first
+   * entry (DECISIONS §126). A press on the heading closes the group so the chats list gets the
+   * room; closed while the page is one of its entries, the heading is marked as the place.
+   */
+  const railRows = (() => {
+    const drawn = new Set<string>();
+    const rows: ReturnType<typeof railRow>[] = [];
+    rail.forEach((d, index) => {
+      if (inBrandRow.has(d.id) || drawn.has(d.id)) return;
+      const group = groups.find((g) => g.items.includes(d.id));
+      if (!group) {
+        drawn.add(d.id);
+        rows.push(railRow(d, index));
+        return;
+      }
+      const members = visibleEntries(group.items, role);
+      members.forEach((m) => drawn.add(m.id));
+      const open = groupState.isOpen(group.id);
+      const here = members.some((m) => pathIsUnder(location.pathname, m.id));
+      const GroupIcon = groupIcons[group.id] ?? IconSearch;
+      const listId = `sidebar-group-${group.id}`;
+      rows.push(
+        <div key={`group-${group.id}`} className="ch-sidebar-subgroup" data-open={open}>
+          <SidebarRow
+            icon={<GroupIcon size={18} />}
+            label={t(`nav.${group.title}`)}
+            trailing={
+              folded ? undefined : (
+                <IconChevron size={14} className="ch-sidebar-chevron" aria-hidden="true" />
+              )
+            }
+            render={({ className, children }) => (
+              <button
+                type="button"
+                className={`${className}${!open && here ? ' active' : ''}`}
+                aria-expanded={open}
+                aria-controls={listId}
+                aria-current={!open && here ? 'true' : undefined}
+                data-group-id={group.id}
+                data-testid={`sidebar-group-${group.id}`}
+                onClick={() => groupState.toggle(group.id)}
+              >
+                {children}
+              </button>
+            )}
+          />
+          <div id={listId} className="ch-sidebar-subrows" hidden={!open} role="group">
+            {open && members.map((m) => railRow(m, rail.indexOf(m)))}
+          </div>
+        </div>,
+      );
+    });
+    return rows;
+  })();
 
   return (
     <SidebarFrame label={t('shell.sidebar')} folded={folded}>
-      <SidebarBrand mark={<CoreHubMark size={28} />} name={t('app.name')} action={foldToggle} />
+      <SidebarBrand mark={<CoreHubMark size={28} />} name={t('app.name')} action={brandAction} />
 
       {/* Slim by design (NAVIGATION §1): starting a chat, finding one, the agents, tasks,
           schedules, and the list. Everything configured once lives on a page inside
@@ -200,29 +314,7 @@ export function Sidebar({
           />
         </SidebarGroup>
       ) : (
-        <SidebarGroup testId="rail">
-          {rail.map((d, index) => {
-            const Icon = destinationIcons[d.id] ?? IconSearch;
-            return (
-              <SidebarRow
-                key={d.id}
-                icon={<Icon size={18} />}
-                label={t(termKey(d.id))}
-                emphasis={index === 0 ? 'primary' : 'normal'}
-                render={({ className, children }) => (
-                  <NavLink
-                    to={routeOf(d.id)}
-                    onClick={onNavigate}
-                    data-nav-id={d.id}
-                    className={className}
-                  >
-                    {children}
-                  </NavLink>
-                )}
-              />
-            );
-          })}
-        </SidebarGroup>
+        <SidebarGroup testId="rail">{railRows}</SidebarGroup>
       )}
 
       {settingsId === null && agentPage === null && folded && (

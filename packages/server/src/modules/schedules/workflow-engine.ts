@@ -44,15 +44,34 @@
  * restart continues it exactly where it stopped.
  */
 import type { FastifyBaseLogger } from 'fastify';
-import { ConditionError, evaluate, parseCondition, render, type Context } from './expr.js';
+import {
+  ConditionError,
+  evaluate,
+  evaluateRules,
+  hasRules,
+  parseCondition,
+  render,
+  rulesText,
+  type Context,
+} from './expr.js';
 import { NO_LIMITS, dollars, duration, microUsdOf, moneyOfMicro } from './limits.js';
+import {
+  hasSend,
+  resultOf,
+  splitMessage,
+  targetKey,
+  telegramSend,
+  type SendResult,
+} from './send.js';
 import type {
   WorkflowBudgetUse,
   WorkflowDefinition,
   WorkflowEdge,
   WorkflowLimits,
   WorkflowNode,
+  WorkflowSend,
 } from './schema.js';
+import type { Sealer } from './trigger-desk.js';
 import type {
   NodeRunRow,
   SchedulesService,
@@ -91,8 +110,225 @@ export interface TurnCost {
   priced: boolean;
 }
 
+/**
+ * Where a "Send message" step's words go (DECISIONS §124), lent by the composition root:
+ * Telegram through the profile's own bot, and a Core Hub conversation through `sessions`.
+ */
+export interface MessagePorts {
+  /** The Hermes profile's `TELEGRAM_BOT_TOKEN`; `null` when it has no bot. */
+  telegramToken(scope: Scope): string | null;
+  /** Telegram's Bot API origin (a test hub points it at a fake). */
+  telegramApi: string;
+  fetch: typeof fetch;
+  /**
+   * Post the words into a conversation. When it no longer exists, a new one is made under
+   * `title` with `agentId` and the words go there (`recreated`).
+   */
+  post(
+    scope: RunScope,
+    input: { sessionId: string | null; title: string | null; agentId: string | null; text: string },
+  ): Promise<{ sessionId: string; messageId: string; recreated: boolean; title: string | null }>;
+}
+
+/** What a send remembers so a step tried again does not send twice; `null` sends every time. */
+export interface SentMemory {
+  seen(target: string, part: number): string | null;
+  keep(target: string, part: number, messageId: string): void;
+}
+
+/**
+ * Send the words to every target of a "Send message" step (or of its test): each target on
+ * its own, a failure of one never stopping another, and the result says exactly what went.
+ */
+export async function deliverSend(
+  messages: MessagePorts | null | undefined,
+  scope: RunScope,
+  send: WorkflowSend,
+  text: string,
+  memory: SentMemory | null,
+  moved: (from: string | null, to: { sessionId: string; title: string | null }) => void,
+): Promise<{ result: SendResult; notes: string[] }> {
+  const delivered: Array<{ target: string; ids: string[] }> = [];
+  const failures: Array<{ target: string; reason: string }> = [];
+  const notes: string[] = [];
+  for (const target of send.targets) {
+    const key = targetKey(target);
+    if (!messages) {
+      failures.push({ target: key, reason: 'this hub cannot send messages' });
+      continue;
+    }
+    if (target.platform === 'telegram') {
+      const chat = (target.chat_id ?? '').trim();
+      const token = messages.telegramToken(scope);
+      if (!chat) {
+        failures.push({ target: key, reason: 'no chat id' });
+        continue;
+      }
+      if (!token) {
+        failures.push({
+          target: key,
+          reason: 'this profile has no Telegram bot (TELEGRAM_BOT_TOKEN in its .env)',
+        });
+        continue;
+      }
+      const ids: string[] = [];
+      let failed: string | null = null;
+      const parts = splitMessage(text);
+      for (let part = 0; part < parts.length; part += 1) {
+        const before = memory?.seen(key, part) ?? null;
+        if (before) {
+          ids.push(before);
+          continue;
+        }
+        const answer = await telegramSend(
+          messages.fetch,
+          messages.telegramApi,
+          token,
+          chat,
+          parts[part]!,
+        );
+        if (!answer.ok) {
+          failed =
+            parts.length > 1
+              ? `part ${part + 1} of ${parts.length}: ${answer.reason}`
+              : answer.reason;
+          break;
+        }
+        memory?.keep(key, part, answer.messageId);
+        ids.push(answer.messageId);
+      }
+      if (failed) failures.push({ target: key, reason: failed });
+      else delivered.push({ target: key, ids });
+      continue;
+    }
+    if (target.platform === 'core_hub') {
+      const before = memory?.seen(key, 0) ?? null;
+      if (before) {
+        delivered.push({ target: key, ids: [before] });
+        continue;
+      }
+      try {
+        const posted = await messages.post(scope, {
+          sessionId: target.session_id ?? null,
+          title: target.title ?? null,
+          agentId: target.agent_id ?? null,
+          text,
+        });
+        memory?.keep(key, 0, posted.messageId);
+        if (posted.recreated || posted.sessionId !== (target.session_id ?? null)) {
+          moved(target.session_id ?? null, { sessionId: posted.sessionId, title: posted.title });
+          if (target.session_id) {
+            notes.push(
+              `The conversation "${posted.title ?? ''}" no longer existed: a new one with the same title was made, the message was posted there, and the step now sends to it.`,
+            );
+          }
+        }
+        delivered.push({ target: `core_hub:${posted.sessionId}`, ids: [posted.messageId] });
+      } catch (error) {
+        failures.push({
+          target: key,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      continue;
+    }
+    failures.push({ target: key, reason: `this hub cannot send to "${target.platform}"` });
+  }
+  return { result: resultOf(delivered, failures), notes };
+}
+
+/** What trying one step on its own did (`WorkflowStepTestResult`, §127). */
+export interface StepTestResult {
+  rendered: string | null;
+  answer: boolean | null;
+  output: string | null;
+  error: string | null;
+  executed: boolean;
+}
+
+/**
+ * One step tried with a sample (§127): nothing is saved and no run is made. A condition
+ * answers; a template is rendered; an agent step runs a real turn only when asked to; a
+ * "Send message" step is only rendered — its own "Send test message" is what sends.
+ */
+export async function testStep(
+  ports: WorkflowPorts,
+  scope: RunScope,
+  node: WorkflowNode,
+  ctx: Context,
+  execute: boolean,
+): Promise<StepTestResult> {
+  const base: StepTestResult = {
+    rendered: null,
+    answer: null,
+    output: null,
+    error: null,
+    executed: false,
+  };
+  let rendered: string | null = null;
+  try {
+    if (node.kind === 'condition') {
+      rendered = hasRules(node.rules) ? rulesText(node.rules) : (node.input ?? '');
+      const answer = hasRules(node.rules)
+        ? evaluateRules(node.rules, ctx)
+        : evaluate(parseCondition(rendered), ctx);
+      return { ...base, rendered, answer, output: String(answer), executed: true };
+    }
+    rendered = render(node.input ?? '', ctx);
+    if (node.kind === 'delay') {
+      const seconds = Number(rendered.trim());
+      if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_DELAY_SECONDS) {
+        return {
+          ...base,
+          rendered,
+          error: `"${rendered}" is not 0 to ${MAX_DELAY_SECONDS} seconds`,
+        };
+      }
+      return { ...base, rendered, output: String(seconds) };
+    }
+    if (node.kind !== 'agent' || !execute) return { ...base, rendered };
+    if (!node.agent_id) return { ...base, rendered, error: 'this step names no agent' };
+    if (!rendered.trim())
+      return { ...base, rendered, error: 'this step has no prompt for the agent' };
+    if (!ports.agentTurn) return { ...base, rendered, error: 'this hub cannot run an agent' };
+    const turn = await ports.agentTurn(scope, {
+      agentId: node.agent_id,
+      prompt: rendered,
+      title: `${node.title || node.id} (test)`,
+      model: node.model ?? null,
+      provider: node.provider ?? null,
+    });
+    return {
+      ...base,
+      rendered,
+      output: turn.output,
+      error:
+        turn.status === 'succeeded' ? null : (turn.error ?? `the agent's run ended ${turn.status}`),
+      executed: true,
+    };
+  } catch (error) {
+    return {
+      ...base,
+      rendered,
+      error:
+        error instanceof ConditionError
+          ? error.reason
+          : error instanceof Error
+            ? error.message
+            : String(error),
+    };
+  }
+}
+
 /** What the engine needs from the rest of the hub. Composed in `modules/index.ts`. */
 export interface WorkflowPorts {
+  /** Where a "Send message" step's words go (§124); absent, such a step fails saying so. */
+  messages?: MessagePorts | null;
+  /**
+   * The hub's data key ring, lent to seal an inbound trigger's secret (§123). Absent, a
+   * trigger cannot store a secret and every delivery is refused.
+   */
+  sealer?: Sealer | null;
   /** One whole agent turn; `null` when this hub composes no sessions. */
   agentTurn:
     | ((
@@ -299,6 +535,8 @@ export class WorkflowEngine {
       steps?: Record<string, { output: unknown }>;
       /** This run's limits (`limits.ts` → `runLimits`); the workflow's when not given. */
       limits?: WorkflowLimits;
+      /** A run a trigger's delivery started: the trigger and the event's ids (§123). */
+      event?: { triggerId: string; eventId: string | null; taskId: string | null };
     },
   ): WorkflowRunRow {
     const run = service.createWorkflowRun(scope, workflow, {
@@ -307,6 +545,7 @@ export class WorkflowEngine {
       triggerRef: options.triggerRef ?? null,
       scheduleId: options.scheduleId ?? null,
       ...(options.limits ? { limits: options.limits } : {}),
+      ...(options.event ? { event: options.event } : {}),
     });
     const state: Live = {
       cancelled: false,
@@ -473,6 +712,8 @@ export class WorkflowEngine {
     let unhandled: string | null = null;
     let stoppedBy: StoppedBy | null = null;
     let steps = ran.size;
+    // A condition that said no with nothing to follow: the event was not one to act on (§123).
+    let filtered = false;
 
     /** After a step: its output is readable, its edges fire; `false` ends the run. */
     const advance = (node: WorkflowNode, result: StepResult): boolean => {
@@ -484,8 +725,15 @@ export class WorkflowEngine {
       }
       ctx.steps[node.id] = { output: result.output };
       const edges = outgoing.get(node.id) ?? [];
+      let followed = 0;
       for (const edge of edges) {
-        if (edge.route === 'always' || edge.route === result.route) queue.push(edge.to);
+        if (edge.route === 'always' || edge.route === result.route) {
+          queue.push(edge.to);
+          followed += 1;
+        }
+      }
+      if (node.kind === 'condition' && result.ok && result.route === 'failure' && followed === 0) {
+        filtered = true;
       }
       // A condition's "no" is an answer, not a failure. A failed step that nothing
       // handles ends the run with its own words.
@@ -558,6 +806,7 @@ export class WorkflowEngine {
         steps: summarize(ctx.steps),
         ...state.budget.output(),
         stopped_by: stoppedBy as StoppedBy | null,
+        ...(filtered && !failed ? { filtered: true } : {}),
       },
       finishedAt: now,
     });
@@ -568,6 +817,45 @@ export class WorkflowEngine {
       stopped_by: stoppedBy as StoppedBy | null,
     });
     this.announceFinished(run, { status: failed ? 'failed' : 'succeeded', error: failed });
+    if (failed) await this.alertFailure(service, scope, run, failed);
+  }
+
+  /**
+   * A run failed: whoever its workflow says is told (§127) — the run owner's inbox, and the
+   * targets of its alert (Telegram, a conversation), sent once for the run.
+   */
+  private async alertFailure(
+    service: SchedulesService,
+    scope: RunScope,
+    run: WorkflowRunRow,
+    error: string,
+  ): Promise<void> {
+    const alert = (run.definitionSnapshot as WorkflowDefinition).onFailure;
+    if (!alert) return;
+    const name = service.workflowById(run.workflowId)?.name ?? 'Workflow';
+    const text = `${name}: the run failed.\n${error}`;
+    try {
+      if (alert.inbox && this.ports.notice) {
+        this.ports.notice(scope, { title: `${name}: run failed`, body: error });
+      }
+      if (alert.send && hasSend(alert.send)) {
+        const runKey = service.rootRunOf(run);
+        await deliverSend(
+          this.ports.messages,
+          scope,
+          alert.send,
+          text,
+          {
+            seen: (target, part) => service.sentPart(runKey, '__on_failure', target, part),
+            keep: (target, part, id) =>
+              service.recordSent(run, { runKey, nodeKey: '__on_failure', target, part }, id),
+          },
+          () => undefined,
+        );
+      }
+    } catch (failure) {
+      this.log.warn({ err: failure, workflowRunId: run.id }, 'workflow: failure alert failed');
+    }
   }
 
   private async step(
@@ -578,7 +866,12 @@ export class WorkflowEngine {
     ctx: Context,
     state: Live,
   ): Promise<StepResult> {
-    const rendered = node.kind === 'condition' ? (node.input ?? '') : render(node.input ?? '', ctx);
+    const rendered =
+      node.kind === 'condition'
+        ? hasRules(node.rules)
+          ? rulesText(node.rules)
+          : (node.input ?? '')
+        : render(node.input ?? '', ctx);
     const row = service.startStep(scope, run.id, node, { input: rendered });
     this.emit(scope.profile, 'step.started', {
       workflow_run_id: run.id,
@@ -703,8 +996,8 @@ export class WorkflowEngine {
       },
     };
 
-    const work = this.perform(scope, node, rendered, ctx, state, control).catch((error: unknown) =>
-      fail(error instanceof Error ? error.message : String(error)),
+    const work = this.perform(service, run, scope, node, rendered, ctx, state, control).catch(
+      (error: unknown) => fail(error instanceof Error ? error.message : String(error)),
     );
     let result = await Promise.race([work, tripped]);
     for (const timer of timers) clearTimeout(timer);
@@ -753,7 +1046,66 @@ export class WorkflowEngine {
     return result;
   }
 
+  /**
+   * A "Send message" step (§124): the words to each target, each part remembered by the run
+   * (a rerun counts as its first run), the node and the target, so trying again sends only
+   * what did not go. Every target failing fails the step; any failure, or a conversation made
+   * again, is also said in the run owner's inbox.
+   */
+  private async send(
+    service: SchedulesService,
+    run: WorkflowRunRow,
+    scope: RunScope,
+    node: WorkflowNode,
+    send: WorkflowSend,
+    rendered: string,
+  ): Promise<StepResult> {
+    const text = rendered.trim();
+    if (!text) return fail('the message has no words');
+    const runKey = service.rootRunOf(run);
+    const memory: SentMemory = {
+      seen: (target, part) => service.sentPart(runKey, node.id, target, part),
+      keep: (target, part, id) =>
+        service.recordSent(run, { runKey, nodeKey: node.id, target, part }, id),
+    };
+    const { result, notes } = await deliverSend(
+      this.ports.messages,
+      scope,
+      send,
+      text,
+      memory,
+      (from, to) => service.repointConversation(run.workflowId, node.id, from, to),
+    );
+    const title = node.title || 'Send message';
+    const said = [
+      ...notes,
+      ...result.failures.map((failure) => `${failure.target}: ${failure.reason}`),
+    ];
+    if (said.length > 0 && this.ports.notice) {
+      try {
+        this.ports.notice(scope, {
+          title: result.status === 'failed' ? `${title}: not sent` : title,
+          body: said.join('\n'),
+        });
+      } catch (error) {
+        this.log.warn({ err: error, workflowRunId: run.id }, 'workflow: send notice failed');
+      }
+    }
+    if (result.status === 'failed') {
+      return {
+        ...fail(
+          result.failures.map((failure) => `${failure.target}: ${failure.reason}`).join('; ') ||
+            'not sent',
+        ),
+        output: result,
+      };
+    }
+    return succeed(result);
+  }
+
   private async perform(
+    service: SchedulesService,
+    run: WorkflowRunRow,
     scope: RunScope,
     node: WorkflowNode,
     rendered: string,
@@ -765,7 +1117,10 @@ export class WorkflowEngine {
       case 'condition': {
         let answer: boolean;
         try {
-          answer = evaluate(parseCondition(rendered), ctx);
+          // Several rules when the step has them (§123), else the one comparison.
+          answer = hasRules(node.rules)
+            ? evaluateRules(node.rules, ctx)
+            : evaluate(parseCondition(rendered), ctx);
         } catch (error) {
           return fail(error instanceof ConditionError ? error.reason : String(error));
         }
@@ -793,6 +1148,7 @@ export class WorkflowEngine {
         return succeed(seconds);
       }
       case 'notify': {
+        if (hasSend(node.send)) return this.send(service, run, scope, node, node.send, rendered);
         if (!this.ports.notice) return fail('this hub has no inbox to write to');
         const text = rendered.trim();
         if (!text) return fail('the notice has no words');

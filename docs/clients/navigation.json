@@ -178,6 +178,18 @@
     "linked_hubs": {
       "en": "Linked hubs",
       "ar": "المراكز المرتبطة"
+    },
+    "workflows": {
+      "en": "Workflows",
+      "ar": "سير العمل"
+    },
+    "tools": {
+      "en": "Tools",
+      "ar": "الأدوات"
+    },
+    "secrets": {
+      "en": "Secrets",
+      "ar": "الأسرار"
     }
   },
   "destinations": [
@@ -305,6 +317,18 @@
       "note": "Cron jobs and workflows with status badges."
     },
     {
+      "id": "workflows",
+      "title": "workflows",
+      "module": "workflows",
+      "level": "app",
+      "entry": {
+        "kind": "rail"
+      },
+      "roles": ["member"],
+      "surfaces": ["web", "desktop"],
+      "note": "Every workflow of every profile the person may enter, each drawn and run on its canvas (DECISIONS §52). Its own page since 2026-09-28 (owner): until then a tab of Schedules, whose old address (`/schedules?section=workflows…`) still opens it. Web and desktop for now; listed in `railExtra`, not `rail`, so the phone apps that do not have it yet still match `rail` exactly (DECISIONS §126)."
+    },
+    {
       "id": "settings",
       "title": "settings",
       "module": "auth",
@@ -376,6 +400,18 @@
         "kind": "settings-tab"
       },
       "roles": ["member"]
+    },
+    {
+      "id": "secrets",
+      "title": "secrets",
+      "module": "models",
+      "level": "settings",
+      "entry": {
+        "kind": "settings-tab"
+      },
+      "roles": ["owner"],
+      "surfaces": ["web", "desktop"],
+      "note": "The owner's alone, on web and desktop (owner's request 2026-09-28, DECISIONS §125): the names of every secret the hub stores or knows of — provider keys, channel tokens in the Hermes profiles' .env files, MCP credentials, webhook secrets — grouped by kind and profile, one value revealed at a time, hidden again after 30 seconds, copyable, each reveal in the audit log. The account password is asked again every time the page is opened (a step-up grant, never kept past the page). Anyone else has no entry, and the hub refuses them."
     },
     {
       "id": "this_device",
@@ -615,6 +651,20 @@
     }
   ],
   "rail": ["new_chat", "search", "agent_manager", "tasks", "schedules"],
+  "railExtra": ["workflows"],
+  "brandRow": {
+    "$comment": "Rail entries that web and desktop draw as an icon in the sidebar's brand row, beside the fold toggle, instead of as a row (owner, 2026-09-28, DECISIONS §126). Folded into the rail of icons the brand row has room for the toggle alone, so each comes back as a row at its place in `rail` (Search right below New chat). Presentation only: the destination, its term and its route are unchanged, and the phones still draw it as a row.",
+    "surfaces": ["web", "desktop"],
+    "items": ["search"]
+  },
+  "sidebarGroups": {
+    "$comment": "Rail entries that web and desktop gather under one expandable heading (owner, 2026-09-28, DECISIONS §126). Not destinations: a group's `title` is a term, `items` are entries of `rail` or `railExtra` in the order shown, each in at most one group; members see only the items their role allows, and a group with none is not drawn. The heading opens and closes the group so the chats list gets the room; the choice is the device's (local storage), open by default. Closed while the current page is one of its items, the heading is marked as the current place. The phones keep `rail` as it is until they adopt it.",
+    "tools": {
+      "title": "tools",
+      "surfaces": ["web", "desktop"],
+      "items": ["agent_manager", "tasks", "workflows", "schedules"]
+    }
+  },
   "segments": ["chat", "rooms"],
   "footer": ["settings"],
   "settingsTabs": [
@@ -624,6 +674,7 @@
     "display",
     "notifications",
     "privacy",
+    "secrets",
     "this_device",
     "about"
   ],
@@ -683,10 +734,10 @@
     }
   },
   "profileScope": {
-    "$comment": "Profiles on each page (ADR 0016, owner 2026-09-24). Not destinations. `selector`: the top profile selector (topBarChips.workspace once the footer chip moves to the top bar) is always one concrete profile — the one the person is in; the app opens on it, new chats are made in it, per-profile configuration pages edit it; it never offers `All` and never filters a list. `listFilter`: the chats list's own filter, `All profiles` (the default on every entry into the app) or one profile; hidden for someone with one profile; it and the selector never move each other. `alwaysAll`: pages that always show every profile the person may enter (the hub decides which), with no profile filter at all — search, tasks and schedules (stage 2: a new task or schedule is made in the selector's profile; acting on an existing one uses the item's own profile). Items on a list that shows more than one profile carry a badge of their profile, and open in their own profile without moving the selector.",
+    "$comment": "Profiles on each page (ADR 0016, owner 2026-09-24). Not destinations. `selector`: the top profile selector (topBarChips.workspace once the footer chip moves to the top bar) is always one concrete profile — the one the person is in; the app opens on it, new chats are made in it, per-profile configuration pages edit it; it never offers `All` and never filters a list. `listFilter`: the chats list's own filter, `All profiles` (the default on every entry into the app) or one profile; hidden for someone with one profile; it and the selector never move each other. `alwaysAll`: pages that always show every profile the person may enter (the hub decides which), with no profile filter at all — search, tasks, schedules and workflows (stage 2: a new task or schedule is made in the selector's profile; acting on an existing one uses the item's own profile). Items on a list that shows more than one profile carry a badge of their profile, and open in their own profile without moving the selector.",
     "selector": "concrete",
     "listFilter": ["chat"],
-    "alwaysAll": ["search", "tasks", "schedules"],
+    "alwaysAll": ["search", "tasks", "schedules", "workflows"],
     "stage2": ["tasks", "schedules"]
   },
   "surfaceRoutes": {
@@ -729,7 +780,9 @@
       "agent_plugins": "/agents/:agentId/plugins",
       "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
-      "global_agent": "/global-agent"
+      "global_agent": "/global-agent",
+      "workflows": "/workflows",
+      "secrets": "/settings/secrets"
     },
     "ios": {
       "new_chat": "/new",

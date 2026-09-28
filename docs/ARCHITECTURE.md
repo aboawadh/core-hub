@@ -58,7 +58,9 @@ agent.
   server. Agents keep their own state in their own homes; the hub stores
   references and transcripts it received, never the agent's private files.
 - Secrets are stored encrypted at rest, masked on every read (`[stored]`),
-  never logged, never returned to a client.
+  never logged, never returned to a client — with one exception: the owner's
+  Settings → Secrets (`secrets.reveal`), one value at a time, behind the
+  password asked again and an audit row per reveal (DECISIONS §125).
 - Every row that a client can show carries `created_at`, `updated_at`,
   `profile` (workspace scope) and `owner_id`.
 

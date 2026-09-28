@@ -180,7 +180,9 @@ describe('the sidebar folds into a rail of icons', () => {
       within(rail)
         .getAllByRole('link')
         .map((link) => link.getAttribute('data-nav-id')),
-    ).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'schedules']);
+    ).toEqual(['new_chat', 'search', 'agent_manager', 'tasks', 'workflows', 'schedules']);
+    // Folded, Search leaves the brand row (only the toggle fits) for the row below New chat.
+    expect(within(nav).queryByTestId('brand-search')).toBeNull();
     expect(within(rail).getByRole('link', { name: 'New chat' })).toBeTruthy();
     expect(within(rail).getByRole('link', { name: 'Search' })).toBeTruthy();
     // The segmented control and its list give way to two icons; the brand's name is gone.

@@ -188,6 +188,9 @@ export function createSessionsModule(options: SessionsModuleOptions = {}): HubMo
         },
         listen: (listener) => sessionsRealtimeFor(app.hub.io)?.listen(listener) ?? (() => false),
       });
+      posts.set(app, {
+        post: (scope, input) => serviceFor(app, app.log).postWorkflowMessage(scope, input),
+      });
       gates.set(app, {
         raise: (scope, input) => serviceFor(app, app.log).raiseWorkflowApproval(scope, input),
         cancel: (scope, workflowRunId) =>
@@ -367,6 +370,20 @@ export interface WorkflowApprovals {
   cancel(scope: { workspace: string; profile: string }, workflowRunId: string): number;
 }
 const gates = new WeakMap<FastifyInstance, WorkflowApprovals>();
+
+/** A workflow's "Send message" step posting into a conversation (DECISIONS §124). */
+export interface WorkflowMessages {
+  post(
+    scope: EngineScope,
+    input: { sessionId: string | null; title: string | null; agentId: string | null; text: string },
+  ): Promise<{ sessionId: string; messageId: string; recreated: boolean; title: string | null }>;
+}
+const posts = new WeakMap<FastifyInstance, WorkflowMessages>();
+
+/** `null` when this app composes no sessions module. */
+export function workflowMessagesFor(app: FastifyInstance): WorkflowMessages | null {
+  return posts.get(app) ?? null;
+}
 
 /** `null` when this app composes no sessions module. */
 export function workflowApprovalsFor(app: FastifyInstance): WorkflowApprovals | null {

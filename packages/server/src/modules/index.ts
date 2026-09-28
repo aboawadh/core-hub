@@ -56,6 +56,7 @@ import {
   registerHubToolsHandOver,
   registerHubToolsNotify,
   seedSkillLibraryOf,
+  telegramToken,
 } from './agents/index.js';
 import {
   ChannelSourceRefusal,
@@ -73,6 +74,7 @@ import {
   sessionHandOverFor,
   sessionTurnsFor,
   workflowApprovalsFor,
+  workflowMessagesFor,
   type ChannelSource,
 } from './sessions/index.js';
 import { registerRoomPorts, roomOfSeatFor, roomsModule, roomsServiceFor } from './rooms/index.js';
@@ -610,6 +612,29 @@ registerWorkflowPorts((app) => {
     noticePushPort(app),
   );
   return {
+    // An inbound trigger's secret is sealed with the hub's one data key ring (§123).
+    sealer: dataKeyRingFor(app),
+    // A "Send message" step (§124): Telegram through the profile's own bot (its Hermes
+    // `.env`, owner-approved), a conversation through `sessions`.
+    messages: {
+      telegramToken: (scope) => {
+        const root = hermesRuntimeFor(app).status().home;
+        const row = listWorkspacesFor(requireSqlite(app.hub.database), {
+          id: '',
+          role: 'owner',
+        }).find((each) => each.id === scope.workspace);
+        if (!root || !row) return null;
+        const home = profileHome(root, { slug: row.slug, isDefault: row.isDefault });
+        return home ? telegramToken(home) : null;
+      },
+      telegramApi: app.hub.config.telegramApiBase ?? 'https://api.telegram.org',
+      fetch: (input, init) => fetch(input, init),
+      post: async (scope, input) => {
+        const posts = workflowMessagesFor(app);
+        if (!posts) throw new Error('this hub composes no sessions module to post in');
+        return posts.post(scope, input);
+      },
+    },
     agentTurn: async (scope, input, control) => {
       if (!control) {
         const turn = sessionTurnsFor(app);

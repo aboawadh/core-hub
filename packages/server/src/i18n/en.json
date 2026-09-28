@@ -89,7 +89,10 @@
     "profile_replace_unpacking": "Unpacking the archive…",
     "profile_replace_moving": "Keeping the current default as {backup} and putting the archive in its place…",
     "profile_replace_done": "The archive is now the default profile; the previous one is kept as {backup}.",
-    "profile_replace_busy": "The default profile is already being replaced; wait for that import to finish."
+    "profile_replace_busy": "The default profile is already being replaced; wait for that import to finish.",
+    "step_up_wrong_password": "That password is not right.",
+    "step_up_required": "Enter your password again to open Secrets.",
+    "step_up_web_only": "This needs a sign-in from the web or desktop app."
   },
   "sessions": {
     "run_interrupted": "Stopped by the user.",

@@ -3,6 +3,7 @@ name = "corehub-push-relay"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 workers_dev = true
+preview_urls = false
 
 # `wrangler d1 create corehub-push-relay` prints the id. The deploy workflow fills it from the
 # repository variable PUSH_RELAY_D1_DATABASE_ID; a local deploy needs it pasted here.

@@ -32,7 +32,37 @@ export interface WfNode {
   skills: string[];
   input: string | null;
   approval_required: boolean;
+  /** A condition's several rules (DECISIONS §123); `null` answers from `input`. */
+  rules: Rules | null;
+  /** A notice that sends its words to Telegram and/or a conversation (§124); `null`: the inbox. */
+  send: Send | null;
   position: Position;
+}
+
+/** One place a "Send message" step's words go (`WorkflowSendTarget`). */
+export interface SendTarget {
+  platform: string;
+  chat_id?: string | null;
+  session_id?: string | null;
+  title?: string | null;
+  agent_id?: string | null;
+}
+
+export interface Send {
+  targets: SendTarget[];
+}
+
+/** One rule of a condition: a path, an operator, a value (`null` for `exists`/`empty`). */
+export interface Rule {
+  path: string;
+  operator: Operator;
+  value: string | null;
+}
+
+/** A condition's rules: all must hold, or any one. */
+export interface Rules {
+  match: 'all' | 'any';
+  items: Rule[];
 }
 
 export interface WfEdge {
@@ -48,6 +78,14 @@ export interface Draft {
   working_dir: string | null;
   nodes: WfNode[];
   edges: WfEdge[];
+  /** Who is told when a run fails (§127); absent until the workflow or the person sets it. */
+  on_failure?: FailureAlert | null;
+}
+
+/** The contract's `WorkflowFailureAlert`. */
+export interface FailureAlert {
+  inbox: boolean;
+  send: Send | null;
 }
 
 export type Selection = { type: 'node'; id: string } | { type: 'edge'; id: string } | null;
@@ -72,6 +110,7 @@ export type Action =
   | { type: 'load'; draft: Draft }
   | { type: 'rename'; name: string }
   | { type: 'describe'; description: string | null }
+  | { type: 'alert'; alert: FailureAlert | null }
   | { type: 'add'; kind: NodeKind; title: string; position?: Position; agentId?: string | null }
   | { type: 'move'; id: string; position: Position }
   | { type: 'nudge'; id: string; dx: number; dy: number }
@@ -141,6 +180,8 @@ export function newNode(
     skills: [],
     input: defaultInput(kind),
     approval_required: false,
+    rules: null,
+    send: null,
     position,
   };
 }
@@ -184,6 +225,8 @@ export function reducer(state: EditorState, action: Action): EditorState {
       return change({ ...draft, name: action.name });
     case 'describe':
       return change({ ...draft, description: action.description });
+    case 'alert':
+      return change({ ...draft, on_failure: action.alert });
     case 'select':
       return { ...state, selected: action.selection };
     case 'add': {
@@ -270,6 +313,7 @@ export interface WorkflowLike {
   name: string;
   description?: string | null;
   working_dir?: string | null;
+  on_failure?: unknown;
   nodes: readonly unknown[];
   edges: readonly unknown[];
 }
@@ -293,6 +337,8 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
       skills: Array.isArray(raw.skills) ? [...raw.skills] : [],
       input: raw.input ?? null,
       approval_required: raw.approval_required === true,
+      rules: raw.kind === 'condition' ? rulesOf(raw.rules) : null,
+      send: raw.kind === 'notify' ? sendOf(raw.send) : null,
       position: {
         x: Number(raw.position?.x ?? 0) || 0,
         y: Number(raw.position?.y ?? 0) || 0,
@@ -315,7 +361,17 @@ export function fromWorkflow(workflow: WorkflowLike): Draft {
     working_dir: workflow.working_dir ?? null,
     nodes,
     edges,
+    ...(workflow.on_failure !== undefined
+      ? { on_failure: failureAlertOf(workflow.on_failure) }
+      : {}),
   };
+}
+
+/** A saved failure alert, or `null` (§127). */
+export function failureAlertOf(value: unknown): FailureAlert | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { inbox?: unknown; send?: unknown };
+  return { inbox: raw.inbox === true, send: sendOf(raw.send) };
 }
 
 /** The drawing as the contract's `WorkflowWrite`: what `createWorkflow`/`updateWorkflow` take. */
@@ -335,9 +391,31 @@ export function toWrite(draft: Draft) {
       skills: [...node.skills],
       input: node.input,
       approval_required: node.kind === 'approval' ? false : node.approval_required,
+      // Only a condition has rules; with none it answers from `input` (§123).
+      rules:
+        node.kind === 'condition' && node.rules && node.rules.items.length > 0
+          ? { match: node.rules.match, items: node.rules.items.map((rule) => ({ ...rule })) }
+          : null,
+      // A notice with targets sends there instead of the inbox (§124).
+      send:
+        node.kind === 'notify' && node.send
+          ? { targets: node.send.targets.map((target) => ({ ...target })) }
+          : null,
       position: { x: node.position.x, y: node.position.y },
     })),
     edges: draft.edges.map((edge) => ({ ...edge })),
+    // Who is told when a run fails (§127): sent only once the drawing knows it.
+    ...(draft.on_failure !== undefined
+      ? {
+          on_failure:
+            draft.on_failure && (draft.on_failure.inbox || draft.on_failure.send?.targets.length)
+              ? {
+                  inbox: draft.on_failure.inbox,
+                  send: draft.on_failure.send?.targets.length ? draft.on_failure.send : null,
+                }
+              : null,
+        }
+      : {}),
   };
 }
 
@@ -609,4 +687,50 @@ export function placeRefusedFields(
     });
   }
   return { name, issues, general };
+}
+
+/** The rules a saved condition carries, or `null` (§123). Unknown operators are kept as text. */
+export function rulesOf(value: unknown): Rules | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { match?: unknown; items?: unknown };
+  if (!Array.isArray(raw.items)) return null;
+  const items: Rule[] = raw.items.flatMap((item: unknown) => {
+    if (!item || typeof item !== 'object') return [];
+    const { path, operator, value: ruleValue } = item as Record<string, unknown>;
+    return [
+      {
+        path: typeof path === 'string' ? path : '',
+        operator: (typeof operator === 'string' ? operator : '==') as Operator,
+        value: typeof ruleValue === 'string' ? ruleValue : null,
+      },
+    ];
+  });
+  return { match: raw.match === 'any' ? 'any' : 'all', items };
+}
+
+/** A rule to start from: the single comparison when there is one, else the trigger's event. */
+export function firstRule(input: string | null): Rule {
+  const parts = splitCondition(input ?? '');
+  if (parts && parts.path.trim() !== '') {
+    return {
+      path: parts.path,
+      operator: parts.operator,
+      value: UNARY.has(parts.operator) ? null : parts.value,
+    };
+  }
+  return { path: 'trigger.event', operator: '==', value: '' };
+}
+
+/** A saved notice's targets, or `null` (§124). Targets of a platform this client does not know are kept. */
+export function sendOf(value: unknown): Send | null {
+  if (!value || typeof value !== 'object') return null;
+  const targets = (value as { targets?: unknown }).targets;
+  if (!Array.isArray(targets)) return null;
+  return {
+    targets: targets.flatMap((target: unknown) =>
+      target && typeof target === 'object' && typeof (target as SendTarget).platform === 'string'
+        ? [{ ...(target as SendTarget) }]
+        : [],
+    ),
+  };
 }

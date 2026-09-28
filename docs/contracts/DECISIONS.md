@@ -3923,3 +3923,240 @@ dashboard's address and would send the browser to a path under `/api` the hub do
 asking the person to type the redirect URI; returning the token's expiry from `expires_in` without
 the file time (wrong after a restart); a `hub_url` taken without checking (anything but `http(s)`
 without credentials is `400`).
+
+## 123. Inbound webhook triggers start a workflow; a condition can hold several rules
+
+Owner's goal (2026-09-28): outside systems — ClickUp first — send events into a Core Hub
+workflow, the workflow filters them, and only the ones that matter reach an agent step. Generic
+for every hub. The details below are proposed — owner to confirm.
+
+**Triggers.** A workflow has any number of inbound triggers (`listWorkflowTriggers`,
+`createWorkflowTrigger`, `updateWorkflowTrigger`, `deleteWorkflowTrigger`), each a stable
+public address on the hub, `POST /api/v1/workflow-hooks/{workflow_trigger_id}`
+(`receiveWorkflowTrigger`, `security: []`, `x-scope: global`). A trigger has a preset that says
+how a delivery proves its sender: `clickup` (`X-Signature` = hex HMAC-SHA256 of the raw body),
+`github` (`X-Hub-Signature-256`), `generic_hmac` (a chosen header, hex or base64, an optional
+prefix) and `token` (the secret itself in a chosen header). The body is read raw, at most 1 MiB,
+the signature is checked over those bytes with a constant-time comparison (both sides hashed
+first), and only then is the JSON read. The secret may be stored later than the trigger is made
+(ClickUp makes it when the webhook is registered with the address); it is sealed with the hub's
+data key ring, never returned (`secret_stored`, the web shows `[stored]`), replaceable. Until one
+is stored every delivery is refused.
+
+**Receiving**, in order: signature (`401`, logged `signature_rejected` without the body), repeat
+(a stable key per preset — ClickUp: `webhook_id` and the sorted `history_items[].id`; else a
+delivery-id header; else the SHA-256 of the body — remembered 7 days; a repeat is `200
+duplicate`), the trigger's event allow-list (`200 filtered`, logged `filtered_out`), then the
+run is queued and the answer is `202` at once; the steps go on after it. The run acts as the
+trigger's owner in the trigger's profile; its `{{trigger.*}}` holds `body`, `event`, `event_id`,
+`task_id`, a short allow-list of headers (`-` written `_`, never a signature, token or secret),
+`delivery_id` and `test`. Runs carry the trigger, the delivery, `event_id` and `task_id`
+(additive optional fields of `WorkflowRun`, new columns of `workflow_runs`), and
+`listWorkflowRuns` takes `event_id` and `task_id`.
+
+**The delivery log** (`listWorkflowTriggerDeliveries`): one line per delivery, `received`,
+`duplicate`, `signature_rejected`, `filtered_out`, `run_started`, then `run_succeeded` or
+`run_failed` when the run ends (settled by the engine's end-of-run hook, and again when read,
+for a run a restart ended); 7 days and at most 500 lines per trigger; a 1000-character body
+preview with secret-looking fields masked. **Send test event** (`testWorkflowTrigger`) builds a
+sample for the preset (ClickUp: a task event about a made-up task), signs it with the stored
+secret and runs the whole receiving path; nothing leaves the hub. `409 secret_missing` without
+a secret.
+
+**Several rules.** `WorkflowNode.rules` (optional, nullable): `{ match: all | any, items: [{ path,
+operator, value }] }` with the single-line condition's operators. With at least one rule the
+step answers from them and `input` is not read; old workflows are unchanged. `operator` is a
+plain string in the contract (so every generated client can carry `==`), checked when the
+workflow is saved (`rule_operator_invalid`, `rule_path_invalid`, `rule_value_missing`,
+`rule_regex_invalid`). An app that does not know the field sends a condition node without it;
+`updateWorkflow` then keeps the rules the saved node had (`null` removes them), so an older
+phone cannot erase them. A run whose condition said no with nothing to follow ends `succeeded`
+with `WorkflowRun.filtered = true` — not failed, no alert — and its delivery line says
+`filtered`.
+
+**Clients.** The web editor's side panel has a Triggers section (sender, address with copy,
+secret, events, signature settings, test event, delivery log with a link to each run) and the
+condition form a rules editor; the runs view finds runs by task or event id and marks filtered
+ones. The phones list a workflow's triggers read-only with the address to copy, show a
+condition's rules read-only and keep them on save; editing rules and triggers on the phones is a
+follow-up. The ClickUp registration is described in `docs/guides/clickup-webhook-trigger.md`.
+
+Not used: `workflows.trigger_kind = 'event'` and `event_key` stay as they were (they name the
+hub's own realtime events, not an outside sender; a workflow may have several triggers).
+Rejected: re-serialising the parsed body to check its signature (other bytes than the sender
+signed); putting the secret in the address (it would be in every proxy log); new values in
+`RunTrigger.kind` (an older app would meet an enum value it does not know — the run says
+`api` and carries the new optional fields).
+
+## 124. A "Send message" step: Telegram through the profile's bot and a Core Hub conversation
+
+Owner's decision (2026-09-28): a workflow step sends a message to Telegram and/or a Core Hub
+conversation (the person picks either or both), Telegram directly through the Bot API with the
+profile's `TELEGRAM_BOT_TOKEN` from its Hermes `.env`. The details below are proposed — owner to
+confirm.
+
+**Shape.** The step is a `notify` node with a new optional field, `send: { targets: [...] }`,
+not a new `kind`: the generated Kotlin and Swift clients decode `WorkflowNode.kind` as a closed
+enum with no fallback, so a new value would make an older phone fail to load every workflow
+list that holds one. An older app sees a notice with the same words, and `updateWorkflow` keeps
+the saved node's `send` when such an app saves the node without the field (`null` removes it),
+as it does for §123's `rules`. A target's `platform` is a plain string (`telegram`,
+`core_hub`), so WhatsApp can be added later without an older app meeting an enum value it
+cannot read; an unknown platform is refused when the workflow is saved
+(`send_platform_unknown`), as are a Telegram target without a chat id and a conversation
+target that names none (`send_chat_missing`, `send_conversation_missing`, `send_no_target`).
+
+**Telegram.** `sendMessage` with the chat id (a group is `-100…`), the step's words rendered
+like any template. A text over 4096 UTF-16 units is split on paragraph, then line, then word
+boundaries (a single run longer than that is cut where it must, never inside a surrogate
+pair), sent in order. The token never reaches a log or a reason. A refusal is Telegram's own
+`description`; a profile without a bot is said as such.
+
+**Core Hub conversation.** The words are posted in the chosen conversation as its agent's
+message, announced live (`message.created`), so they show in every app. If the conversation was
+deleted, a new one with the same title and agent is made, the words go there, the node is
+pointed at it (the drawing's version is not bumped), and the run owner's inbox says so.
+
+**Never twice, never a false success.** Each part sent is written down (`workflow_sent_parts`,
+migration 0034) by the run it belongs to — a rerun from a step counts as the run it repeats —
+the node, the target and the part; a step tried again sends only what did not go. The step's
+output is `WorkflowSendResult`: `status` `sent` (every target took it), `partial` or `failed`,
+`message_ids`, `message_id`, `delivered_to` and each failure's reason; `sent` is never said
+without the platform's id. Every target failing fails the step; any failure (and a remade
+conversation) is also said in the run owner's inbox.
+
+**Test.** `schedules.testWorkflowSend` (`POST /workflows/send-test`) sends the given words to
+the given targets now; nothing is remembered, so pressing it twice sends twice. The web
+editor's palette has "Send message", whose form picks Telegram (chat id) and/or a conversation
+and has "Send test message". The phones show a send step's targets and keep them on save;
+editing them there is a follow-up. A test hub may point the Bot API elsewhere with the
+optional `COREHUB_TELEGRAM_API_BASE` (default `https://api.telegram.org`).
+
+Rejected: a new node kind (older phones would stop loading workflows); sending through Hermes's
+gateway (it would need Hermes up and a channel's own delivery rules, and the owner chose the Bot
+API); remembering by run id only (a rerun is a new run and would send again).
+
+## 125. Settings → Secrets: the owner sees the names of every secret and one value at a time, with the password asked again each time
+
+Owner's request (2026-09-28): a Secrets section in Settings, on web and desktop only, visible to the
+owner alone, that asks for the account password every time it is opened, and shows the secrets the
+hub holds — masked, one revealed at a time, hidden again after about 30 seconds, copyable, each
+reveal in the audit log.
+
+**This amends the ARCHITECTURE invariant** "secrets … never returned to a client": they are still
+never returned by any other operation, and `[stored]` stays their shape everywhere else; the one
+exception is `secrets.reveal`, for the owner, behind a step-up.
+
+**Step-up (`auth.stepUp`, `POST /auth/step-up`; `auth.endStepUp`, `DELETE`).** Body `{ password,
+purpose: secrets }` (`StepUpRequest`; `StepUpPurpose` is an enum so a later purpose is a contract
+change). Owner only (`x-roles: [owner]`), and only from a web sign-in session — an app token (a
+paired phone, an integration) is `403 web_session_required`, so a leaked integration token never
+opens a secret. A right password answers `StepUpGrant { grant, purpose, expires_at, ttl_seconds:
+300 }`: an opaque `su_…` string kept **in the hub's memory only**, by its SHA-256, bound to the
+person, the sign-in session (`app_tokens` row behind the JWT) and the purpose; a new step-up ends the
+session's earlier grant; `DELETE` ends it at once (the web calls it when the page is left); the clock
+and a restart end it too. A wrong password is `401` with `details.reason: wrong_password`, counts on
+the same per-address password lockout as sign-in (five in 15 minutes lock it for 15: `429` with
+`Retry-After`, sign-in included), and both outcomes are audit rows (`auth.step_up`,
+`auth.step_up_failed`) with the purpose and never the password. Answers are `Cache-Control:
+no-store`.
+
+**The list and the value (`secrets.list`, `secrets.reveal`, tag `secrets`).** Both `POST` with the
+grant in the body (no grant in a URL, nothing a cache keeps), owner only, web session only; no live
+grant of this session is `403` with `details.reason: step_up_required`, and the page asks for the
+password again. `SecretList.items` are `SecretEntry { id, kind, profile, label, name }` — never a
+value, never a hint of one — of the kinds `SecretKind`: `provider_key` (a key in the hub's encrypted
+store, listed once for its credential family with the providers that use it; `profile` null for a
+shared key), `channel` (a platform's secret variable in a Hermes profile's `.env`, the ones
+`channel-platforms.ts` declares secret), `mcp` (a credential in an MCP server's block, the ones the
+MCP pages show as `[stored]`: `env.X`, `headers.X`, `oauth.client_secret`, a top-level key),
+`webhook_out` (an outgoing webhook's signing secret; hub-wide) and `webhook_in` (a Hermes incoming
+webhook route's own secret). The id is a digest of where the secret sits, so `secrets.reveal`
+finds it by listing again and nothing a client sends is ever a path; an id that no longer matches is
+`404`. `SecretValue { id, value }` answers one value; every list (`secrets.listed`, with the count)
+and every reveal (`secrets.revealed`: who, kind, profile, label, name, when) is an audit row without
+the value. No value is written to a log line or an error. The routes live in `models` (the owner of
+"keys (secrets)"), which reads the other stores through their modules' public surfaces
+(`hermesSecretsFor` in `agents`, `webhookSecretsFor` in `notify`); the grant check is `auth`'s
+(`stepUpFor(io)`).
+
+**Clients.** Web and desktop: Settings → Secrets (`secrets`, a settings tab after Privacy, `roles:
+[owner]`, `surfaces: [web, desktop]`; the router sends anyone else home). Locked on every visit; the
+password leaves the page the moment the hub has it; the grant lives in the page's state only (no
+query cache, no storage) and a reload forgets it; the list is grouped by kind, then profile (the
+hub-wide ones first), values masked; showing one hides any other, and it hides itself after 30
+seconds; Copy fetches a hidden value (audited) and copies it without showing it; the grant running
+out (a countdown shows it) or refused locks the page again; a hub older than the page (`404`) is
+said in words. The phones do not call these operations; their generated clients simply gain them.
+
+Proposed — owner to confirm: five minutes for a grant; 30 seconds before a value hides; the kinds
+listed (push-sender credentials, stored encrypted by `devices`, are not listed yet); a value copied
+while hidden is audited as a reveal. Rejected: a "recently signed in" window instead of the password
+each time (the owner asked for every time); a grant stored in the database or a JWT claim (it would
+outlive the page and a restart); single-use grants (every reveal would ask for the password again);
+putting the grant in a header or query (a URL is logged, a header is easy to forward); showing the
+last four characters (a part of a secret without an audit row).
+
+## 126. The web and desktop sidebar: Search beside the fold toggle, and «Tools» around Agents, Tasks, Workflows and Schedules
+
+Owner's design, approved 2026-09-28 (web and desktop; the phones follow in their own change once he
+has seen it): the search icon sits next to the fold toggle at the top, and comes back as the row
+right below New chat when the sidebar is folded into its rail of icons. One expandable entry,
+«الأدوات» / "Tools", holds — in this order — Agents (owners and admins only, as before), Tasks,
+Workflows and Schedules. A press on it closes it so the chats list gets the room and opens it again;
+the choice is the device's (local storage, read inside try/catch, open by default), and while it is
+closed on one of its pages the heading is marked as the current place. Workflows leaves the
+Schedules page, where it was a tab, for a page and an entry of its own (`/workflows`), and the tab's
+old address (`/schedules?section=workflows…`) still lands there with the rest of it kept.
+
+**The navigation contract grows, and nothing a phone reads changes.** `docs/clients/navigation.json`
+gains the term `workflows` and `tools`; the destination `workflows` (`surfaces: web, desktop`,
+member, entry kind `rail`) listed in a new `railExtra` rather than in `rail`, because the Android
+parity test compares `rail` exactly and the phones do not have the page yet; `brandRow` (the rail
+entries web and desktop draw beside the fold toggle: `search`) and `sidebarGroups` (`tools` with its
+items) — presentation over the rail, not destinations. `rail` itself is unchanged. `nav:check`
+counts `railExtra` as a primary list and checks that every `brandRow` and group item is a rail entry,
+in one place only, on the group's surfaces, with a known title term. `profileScope.alwaysAll` gains
+`workflows` (the page lists every profile, as the tab did). The API contract does not change.
+
+Rejected: putting `workflows` in `rail` (every phone parity test would fail until the phones draw
+it); a Tools destination with its own page (it would be a hub page listing four links, the
+"settings inside settings" NAVIGATION rules out); remembering the group per account (it is about the
+room on this screen, like the fold); keeping Workflows as a tab too (two entries to one place).
+
+## 127. A run's phase, a workflow's failure alert, and one step tried with a sample
+
+Owner's goal (2026-09-28): the pieces of §123 and §124 put together into a flow a person can
+follow and trust — ClickUp → filter → agent → message. The details below are proposed — owner
+to confirm.
+
+**Phase.** `WorkflowRun.phase` (optional, a plain string so a later value never breaks an older
+app) says where a run is, worked out from its status and steps when it is read — nothing is
+stored: `received` (no step yet), `analyzing` (an agent step works before any approval),
+`needs_input` (waiting for a person), `approved` (an approval said yes and nothing has started
+since), `executing` (after an approval, or a step that is not an agent's), `completed`,
+`failed`. The web shows it on the run, the phones beside the run's status (with the task a
+trigger's run is about).
+
+**Failure alert.** `Workflow.on_failure` / `WorkflowWrite.on_failure` (optional,
+`WorkflowFailureAlert`): the run owner's inbox and/or a "Send message" step's targets
+(Telegram, a conversation), told the workflow's name and the run's error when a run ends
+`failed` (a step nothing handled, a limit that ran out). Stored in the definition like
+`limits`; left out of a save it stays, `null` removes it; its targets are checked like a send
+step's. Sent once per run (the §124 memory, under the node key `__on_failure`). Absent, nothing
+changes: a failed run tells nobody beyond its own record, as before.
+
+**Test this step.** `schedules.testWorkflowStep` (`POST /workflows/test-step`) tries one node on
+its own with a sample `input`, `trigger` and earlier `steps`: a condition answers yes or no
+(rules or the single line), a template is rendered, a delay is read, an agent step runs a real
+turn only with `execute: true`, and a "Send message" step is only rendered (its own test is what
+sends). Nothing is saved and no run is made. The web has it in every step's panel with a
+ClickUp-shaped sample event filled in.
+
+**Guide.** `docs/guides/clickup-agent-flow.md` (English): the agent's ClickUp MCP server with an
+include list of read-only tools, the flow drawn step by step, the webhook registered, and what to
+watch.
+
+Rejected: a stored `phase` column (it would be a second record of what the steps already say);
+alerting on every failed run by default (an older workflow would start sending notices nobody
+asked for).

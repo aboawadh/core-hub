@@ -83,4 +83,23 @@
     <string name="wfe_delete">Delete</string>
     <string name="wfe_model">Model (optional)</string>
     <string name="wfe_model_default">The agent\'s own model</string>
+    <string name="wfe_triggers">Triggers</string>
+    <string name="wfe_triggers_read_only">Addresses other services send events to. Add a trigger, its secret and its events on the web.</string>
+    <string name="wfe_trigger_off">Off</string>
+    <string name="wfe_trigger_copy">Copy the address</string>
+    <string name="wfe_trigger_secret_stored">A secret is stored.</string>
+    <string name="wfe_trigger_secret_missing">No secret yet: every delivery is refused.</string>
+    <string name="wfe_rules_all">Yes when every rule holds</string>
+    <string name="wfe_rules_any">Yes when any rule holds</string>
+    <string name="wfe_rules_read_only">These rules are kept as they are when you save here; edit them on the web.</string>
+    <string name="wfe_send_targets">Sends to</string>
+    <string name="wfe_send_read_only">A “Send message” step: its targets are kept as they are when you save here; change them on the web.</string>
+    <string name="wfe_phase_received">Received</string>
+    <string name="wfe_phase_analyzing">Analyzing</string>
+    <string name="wfe_phase_needs_input">Needs your answer</string>
+    <string name="wfe_phase_approved">Approved</string>
+    <string name="wfe_phase_executing">Executing</string>
+    <string name="wfe_phase_completed">Completed</string>
+    <string name="wfe_phase_failed">Failed</string>
+    <string name="wfe_run_task">Task %1$s</string>
 </resources>

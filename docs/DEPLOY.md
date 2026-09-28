@@ -38,6 +38,7 @@ sets:
 | `COREHUB_TASK_STUCK_MINUTES` | Optional. After how many minutes without any activity from its run a running task is marked **stuck** and its owner gets a notice (the task is not stopped). Default `30` (proposed); `0` switches the watchdog off. |
 | `COREHUB_WEB_TERMINAL` | Optional, **off by default**. `1` gives the owner — and only the owner — a shell on this host from Settings → Terminal (§3c). Read the risk first. |
 | `COREHUB_WEB_TERMINAL_IDLE_MINUTES` | Optional. A web terminal nobody types in closes after this many minutes. Default `15`. |
+| `COREHUB_TELEGRAM_API_BASE` | Optional. Where a workflow's "Send message" step reaches Telegram's Bot API. Default `https://api.telegram.org`; only a test hub changes it. |
 | `COREHUB_TRUST_PROXY` | Optional. Which reverse proxies may say who their client was (`X-Forwarded-For`). Unset: loopback and the private ranges, which fits Caddy/Traefik on the stack's Docker network and cloudflared on the same machine. A comma list of addresses/CIDRs, `false` for none, or a hop count (§3d). |
 | `COREHUB_MODELS_CATALOG_URL` | Optional. Where the hub reads the shared models catalogue every twelve hours (DECISIONS §110). Unset: the Core Hub repository's `catalog/models.json`, so model lists stay current without pulling a new image. An `https://` address of your own copy, or `off`. |
 | `COREHUB_CODEX_IMAGE_MODELS` | Optional. Extra ChatGPT-subscription image models to offer before the catalogue has them, comma-separated `gpt-image-…` names (§110). |

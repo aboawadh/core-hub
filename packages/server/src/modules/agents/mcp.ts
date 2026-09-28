@@ -163,6 +163,41 @@ export function listMcpServers(home: string): McpServer[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The values the MCP pages show as `[stored]`, each with where it sits in its server's block
+ * (`env.GITHUB_TOKEN`, `headers.Authorization`, `api_key`) — for the owner's step-up-guarded
+ * Settings → Secrets alone (DECISIONS §125). A config that cannot be read has none.
+ */
+export function mcpCredentials(
+  home: string,
+): Array<{ server: string; path: string; value: string }> {
+  let doc: Document;
+  try {
+    doc = load(home);
+  } catch {
+    return [];
+  }
+  const block = doc.toJS()?.[BLOCK] as Record<string, Record<string, unknown>> | undefined;
+  if (!block || typeof block !== 'object') return [];
+  const out: Array<{ server: string; path: string; value: string }> = [];
+  for (const [server, config] of Object.entries(block)) {
+    if (!isBlock(config)) continue;
+    const masked = mask(config);
+    for (const [key, value] of Object.entries(config)) {
+      const shown = masked[key];
+      if (isBlock(value) && isBlock(shown)) {
+        for (const [name, inner] of Object.entries(value)) {
+          if (shown[name] === STORED && typeof inner === 'string' && inner !== '')
+            out.push({ server, path: `${key}.${name}`, value: inner });
+        }
+      } else if (shown === STORED && typeof value === 'string' && value !== '') {
+        out.push({ server, path: key, value });
+      }
+    }
+  }
+  return out;
+}
+
 export function getMcpServer(home: string, name: string): McpServer | null {
   return listMcpServers(home).find((server) => server.name === name) ?? null;
 }

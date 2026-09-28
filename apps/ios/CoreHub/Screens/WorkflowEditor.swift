@@ -5,6 +5,7 @@
 // opens on the web's canvas, and one drawn there is edited here. Rules: WorkflowEditRules.swift.
 import CoreHubClient
 import SwiftUI
+import UIKit
 
 struct WorkflowEditorPage: View {
     /// The saved workflow, or nil for a new one.
@@ -23,6 +24,8 @@ struct WorkflowEditorPage: View {
     @State private var saving = false
     @State private var error: String?
     @State private var removing: String?
+    /// The workflow's inbound triggers (§123), shown read-only; empty on an older hub.
+    @State private var triggers: [WorkflowTrigger] = []
 
     init(original: Workflow?, profile: String, start: WorkflowEditRules.Draft? = nil, saved: @escaping (Workflow) -> Void) {
         self.original = original
@@ -93,6 +96,17 @@ struct WorkflowEditorPage: View {
             } footer: {
                 Text(l10n("workflow_editor.steps_hint"))
             }
+            if !triggers.isEmpty {
+                Section {
+                    ForEach(triggers, id: \.id) { trigger in
+                        TriggerRow(trigger: trigger, url: WorkflowEditRules.triggerURL(hub: hub, path: trigger.path))
+                    }
+                } header: {
+                    Text(l10n("workflow_editor.triggers.title"))
+                } footer: {
+                    Text(l10n("workflow_editor.triggers.read_only"))
+                }
+            }
         }
         .navigationTitle(original == nil ? l10n("workflow_editor.new") : l10n("workflow_editor.edit"))
         .navigationBarTitleDisplayMode(.inline)
@@ -104,6 +118,7 @@ struct WorkflowEditorPage: View {
             }
         }
         .task(id: draft) { await check() }
+        .task { await loadTriggers() }
         .alert(
             l10n("workflow_editor.remove_step_title"),
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
@@ -167,6 +182,18 @@ struct WorkflowEditorPage: View {
                 StatusDot(kind: problem ? .bad : .warn, label: l10n("workflow_editor.editor.issue_count", ["count": String(issues.count)]))
             }
         }
+    }
+
+    private var hub: String { app.credentials?.hubURL.absoluteString ?? "" }
+
+    /// The triggers of a saved workflow. An older hub has none to list: nothing is shown.
+    private func loadTriggers() async {
+        guard let id = original?.id else { return }
+        let profile = profile
+        let listed = try? await app.api.call {
+            try await SchedulesAPI.schedulesListWorkflowTriggers(xHubProfile: profile, workflowId: id, apiConfiguration: $0)
+        }
+        triggers = listed?.items ?? []
     }
 
     /// The hub checks the drawing a moment after each change.
@@ -342,7 +369,22 @@ struct WorkflowStepPage: View {
         case .delay:
             delaySection(index)
         case .notify:
-            templateSection(index, label: "workflow_editor.form.notify_text", footer: "workflow_editor.form.notify_to")
+            if let send = draft.nodes[index].send {
+                // A "Send message" step (§124): its words here, its targets shown and kept.
+                templateSection(index, label: "workflow_editor.send.message", footer: "workflow_editor.send.read_only")
+                Section {
+                    ForEach(Array(WorkflowEditRules.sendLines(send).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                            .environment(\.layoutDirection, .leftToRight)
+                            .accessibilityIdentifier("workflow.step.send_target")
+                    }
+                } header: {
+                    Text(l10n("workflow_editor.send.targets"))
+                }
+            } else {
+                templateSection(index, label: "workflow_editor.form.notify_text", footer: "workflow_editor.form.notify_to")
+            }
         case .approval:
             templateSection(index, label: "workflow_editor.form.approval_question", footer: "workflow_editor.form.approval_who")
         }
@@ -383,7 +425,22 @@ struct WorkflowStepPage: View {
     @ViewBuilder
     private func conditionSection(_ index: Int) -> some View {
         let parts = WorkflowEditRules.split(draft.nodes[index].input ?? "")
-        if rawCondition || parts == nil {
+        let rules = WorkflowEditRules.ruleLines(draft.nodes[index].rules)
+        if !rules.lines.isEmpty {
+            // Several rules (§123): shown and kept as they are; edited on the web.
+            Section {
+                ForEach(Array(rules.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                        .environment(\.layoutDirection, .leftToRight)
+                        .accessibilityIdentifier("workflow.step.rule")
+                }
+            } header: {
+                Text(l10n(rules.match == "any" ? "workflow_editor.rules.any" : "workflow_editor.rules.all"))
+            } footer: {
+                Text(l10n("workflow_editor.rules.read_only"))
+            }
+        } else if rawCondition || parts == nil {
             Section {
                 TextField(l10n("workflow_editor.form.condition_text"), text: Binding(
                     get: { draft.nodes[index].input ?? "" },
@@ -523,6 +580,50 @@ struct WorkflowStepPage: View {
             }
         } header: {
             Text(l10n("workflow_editor.editor.connections"))
+        }
+    }
+}
+
+
+/// One inbound trigger of a workflow (§123): its sender, its address to copy, and whether a
+/// secret is stored. Changed on the web.
+private struct TriggerRow: View {
+    let trigger: WorkflowTrigger
+    let url: String
+    @Environment(\.l10n) private var l10n
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.s2) {
+            HStack(spacing: Space.s1) {
+                Text(trigger.name).font(.system(size: FontSize.sizeMd, weight: .semibold))
+                StatusPill(text: l10n("workflow_editor.triggers.presets.\(trigger.preset.rawValue)"))
+                if !trigger.enabled { StatusPill(text: l10n("workflow_editor.triggers.off"), kind: .warn) }
+            }
+            HStack {
+                Text(url).font(.system(size: FontSize.sizeXs, design: .monospaced)).lineLimit(2).textSelection(.enabled)
+                    .accessibilityIdentifier("workflow.trigger.\(trigger.id).url")
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = url
+                    copied = true
+                } label: {
+                    Text(copied ? l10n("workflow_editor.triggers.copied") : l10n("workflow_editor.triggers.copy"))
+                        .font(.system(size: FontSize.sizeXs))
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("workflow.trigger.\(trigger.id).copy")
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            Text(trigger.secretStored ? l10n("workflow_editor.triggers.secret_stored") : l10n("workflow_editor.triggers.secret_missing"))
+                .font(.system(size: FontSize.sizeXs))
+                .foregroundStyle(Tone.textMuted)
+            if !trigger.events.isEmpty {
+                Text(trigger.events.joined(separator: ", "))
+                    .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                    .foregroundStyle(Tone.textMuted)
+                    .environment(\.layoutDirection, .leftToRight)
+            }
         }
     }
 }
