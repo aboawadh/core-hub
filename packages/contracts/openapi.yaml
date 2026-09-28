@@ -21803,7 +21803,9 @@ components:
           description: >-
             The newest stable version the hub knows of: the registry's answer to the last
             check (every six hours, and `agents.checkUpdate`), never older than
-            `pinned_version`. Asked, never installed on its own.
+            `pinned_version`. Asked, never installed on its own. For a Hermes the person
+            installed (`self_update`), Hermes's newest GitHub release (DECISIONS §132; hubs
+            before 2026-09-28 leave it null there); `null` for the image's Hermes.
         update_available:
           type: boolean
           description: '`latest_version` is newer than the installed `version`.'
@@ -21817,7 +21819,10 @@ components:
           type: boolean
           description: >-
             The hub installed this agent and its `version` is past `pinned_version` (an
-            update took a newer release). Clients say so: «أحدث من النسخة المختبرة».
+            update took a newer release). Clients say so: «أحدث من النسخة المختبرة». Since
+            2026-09-28 also true for an agent the person installed whose `version` is past
+            `tested_version` (a person's own Hermes newer than the one Core Hub was tested
+            with, which may not be supported yet).
         auto_update:
           type: boolean
           description: >-
@@ -21837,6 +21842,13 @@ components:
             does not install itself: Hermes, `0.21.3` (release v2026.9.14, the version the image
             pins and every real-Hermes test runs against). Absent when there is none, and from
             hubs older than 2026-09-27.
+        tested_version:
+          type: string
+          description: >-
+            For an agent the hub does not install (Hermes): the release Core Hub is tested with —
+            the one the image carries, against which every real-Hermes test passes (DECISIONS
+            §132). An update past it is one Core Hub was not tested with yet. Absent when there is
+            none, and from hubs older than 2026-09-28.
         below_minimum:
           type: boolean
           description: >-

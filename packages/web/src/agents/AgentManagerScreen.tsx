@@ -147,6 +147,11 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
     });
     if (yes) await act('update');
   };
+  // The newer Hermes its own updater would take, when one is known (`latest_version`, §132).
+  const hermesUpdate =
+    agent.install.self_update && agent.install.update_available
+      ? (agent.install.latest_version ?? null)
+      : null;
   // The card's chips: every agent page but Settings, which is the button in the footer.
   const menu = agentSections(agent, user?.role ?? 'member').filter(
     (d) => d.id !== 'agent_settings',
@@ -230,7 +235,43 @@ function AgentCard({ agent, jobs }: { agent: Agent; jobs: Record<string, Job> })
               minimum: agent.install.minimum_version,
             })}
           </p>
-          {agent.install.self_update && admin && (
+          {/* The update notice below carries the button when an update is known. */}
+          {agent.install.self_update && admin && !hermesUpdate && (
+            <Button
+              className="mt-2"
+              disabled={running}
+              onClick={() => void updateHermes()}
+              data-testid="agent-update-hermes"
+            >
+              {t('agents.update_hermes')}
+            </Button>
+          )}
+        </Notice>
+      )}
+      {/* A person's own Hermes past the release Core Hub is tested with (§132). */}
+      {agent.install.tested_version && agent.install.newer_than_tested && (
+        <Notice tone="warning" className="wrap-anywhere" testId="agent-hermes-newer-than-tested">
+          {t('agents.hermes_newer_than_tested', {
+            version: agent.install.version ?? '—',
+            tested: agent.install.tested_version,
+          })}
+        </Notice>
+      )}
+      {/* A newer Hermes release, for a Hermes its own updater updates (§119, §132). */}
+      {hermesUpdate && (
+        <Notice tone="info" className="wrap-anywhere" testId="agent-hermes-update">
+          <p>
+            {t('agents.hermes_update_available', {
+              version: hermesUpdate,
+              current: agent.install.version ?? '—',
+            })}
+          </p>
+          <p className="text-xs" data-testid="agent-hermes-update-tested">
+            {hermesUpdate === agent.install.tested_version
+              ? t('agents.hermes_update_tested')
+              : t('agents.hermes_update_untested', { tested: agent.install.tested_version ?? '—' })}
+          </p>
+          {admin && (
             <Button
               className="mt-2"
               disabled={running}
@@ -353,7 +394,8 @@ function VersionBadges({ agent }: { agent: Agent }) {
   const notes = versionNotes(agent.install);
   return (
     <>
-      {notes.update && (
+      {/* A Hermes its own updater updates says it in full on the card (`agent-hermes-update`). */}
+      {notes.update && !agent.install.self_update && (
         <Badge tone="info" testId="agent-update-available">
           {t(
             notes.updateUntested ? 'agents.update_available_untested' : 'agents.update_available',
@@ -363,7 +405,8 @@ function VersionBadges({ agent }: { agent: Agent }) {
           )}
         </Badge>
       )}
-      {notes.newerThanTested && (
+      {/* A person's own Hermes says it in full on the card (`agent-hermes-newer-than-tested`). */}
+      {notes.newerThanTested && !agent.install.tested_version && (
         <Badge tone="warning" testId="agent-newer-than-tested">
           {t('agents.newer_than_tested')}
         </Badge>

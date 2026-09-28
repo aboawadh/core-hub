@@ -310,9 +310,17 @@ its approval.
   "Command failed"), says why the gateway stopped or is still starting in Hermes's own last line,
   a chat turn that cannot reach it says the same, and long errors wrap on the card. Since
   2026-09-27 also **the oldest Hermes the hub works with** (DECISIONS §119, proposed — owner to
-  confirm): `0.21.3` (v2026.9.14, the image's pin); a person's own Hermes that is older is said on
+  confirm): `0.21.3` (v2026.9.14, the image's pin until 2026-09-28); a person's own Hermes that is older is said on
   its card without blocking anything, and an owner or admin can update it from there with
   Hermes's own `hermes update --yes` after a confirmation, then the hub restarts the Hermes it runs. Since
+  2026-09-28 (DECISIONS §132, proposed — owner to confirm) **the image carries Hermes v2026.9.24
+  (`0.21.5`)** and CI runs every real-Hermes suite against it and against the floor; a named
+  profile's `.env` holds every key it uses (Hermes 0.21.4+ reads nothing else for it); on one
+  gateway per host a named profile's webhook routes are answered by the root's listener; and a
+  person's own Hermes hears of Hermes's newer GitHub releases (update available, and whether Core
+  Hub was tested with it; `AgentInstall.tested_version`) and says when it is newer than the tested
+  release. Known: on 0.21.4+ a named profile with an allowlist ignores strangers instead of pairing
+  them (Hermes's own behaviour). A daily Hermes watch proposes the next pin. Since
   2026-09-25 also the **local helper** (ADR 0022, proposed): an MCP server in the app on
   127.0.0.1, off by default, token-protected, refusing browser requests; its permission screen in
   This device lists the live tools (list/read in shared folders; write only in folders shared as
@@ -1029,8 +1037,9 @@ Since 2026-09-28 the **desktop app's own hub** (local mode) has «نسيت كل�
 "Forgot password?" on its sign-in screen (DECISIONS §131; design approved, defaults proposed —
 owner to confirm): the operating system confirms the person (Touch ID or a Mac administrator's
 password, Windows Hello, polkit), the owner's username is shown in monospace, and a new password
-revokes every other sign-in, paired device and personal token of the owner, signs the app in and
-is audited. The hub accepts it only over the IPC channel of the app that started it — no HTTP
+ends the owner's sign-ins on other devices (web sessions, paired phones and computers, their push
+and live connections — personal tokens, provider keys, MCP, channels and Hermes are untouched),
+signs the app in and is audited. The hub accepts it only over the IPC channel of the app that started it — no HTTP
 route. The same channel signs the owner in without a password on that computer when This device
 → «الدخول دون كلمة مرور على هذا الحاسوب» is on (on for a new install, off for an existing one).
 Tested with the OS prompt faked (server, desktop unit and the desktop smoke run under Xvfb);

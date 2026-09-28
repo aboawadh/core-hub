@@ -517,15 +517,23 @@ export class AgentsService implements UpdatePolicyStore {
           })
           .where(eq(agents.id, row.id))
           .run();
-        if (managed && this.options.registry && entry.install.kind === 'npm') {
+        // Where this agent's releases are listed: npm for one the hub installed, GitHub for a
+        // Hermes the person installed and updates with its own updater (§132).
+        const source: { kind: 'npm' | 'github'; name: string } | null =
+          managed && entry.install.kind === 'npm'
+            ? { kind: 'npm', name: entry.install.package }
+            : entry.releases && this.selfUpdates(row)
+              ? { kind: 'github', name: entry.releases.github }
+              : null;
+        if (source && this.options.registry) {
           handle.progress(60, t('jobs.check_started', this.language));
           let latest: string | null;
           try {
-            latest = await this.options.registry.latest('npm', entry.install.package);
+            latest = await this.options.registry.latest(source.kind, source.name);
           } catch (error) {
             this.announce(this.loadAgent(row.id), scope);
             throw new HubError('service_unavailable', {
-              message: `could not ask the registry about ${entry.install.package}: ${
+              message: `could not ask the registry about ${source.name}: ${
                 error instanceof Error ? error.message : String(error)
               }`,
               details: { agent_id: row.id, reason: 'registry_unreachable' },
@@ -827,12 +835,28 @@ export class AgentsService implements UpdatePolicyStore {
     this.settledListeners.push(listener);
   }
 
-  /** Installed agents the hub itself installed and so can update (`update-policy.ts`). */
+  /**
+   * Installed agents the hub itself installed and so can update (`update-policy.ts`), and a
+   * Hermes the person installed, which its own updater updates (§119): its releases are looked
+   * up on GitHub (§132), never taken on their own (`autoUpdate` is always off for it).
+   */
   updateCandidates(): UpdateCandidate[] {
     const candidates: UpdateCandidate[] = [];
     for (const row of this.db.select().from(agents).where(isNull(agents.archivedAt)).all()) {
-      if (row.installState !== 'installed' || row.source !== 'managed') continue;
       const entry = this.catalog.find((candidate) => candidate.id === row.slug);
+      if (entry?.releases && this.selfUpdates(row)) {
+        candidates.push({
+          agentId: row.id,
+          slug: row.slug,
+          registry: 'github',
+          package: entry.releases.github,
+          pinned: entry.testedVersion ?? '0.0.0',
+          installed: row.version,
+          autoUpdate: false,
+        });
+        continue;
+      }
+      if (row.installState !== 'installed' || row.source !== 'managed') continue;
       if (!entry || entry.install.kind !== 'npm') continue;
       candidates.push({
         agentId: row.id,

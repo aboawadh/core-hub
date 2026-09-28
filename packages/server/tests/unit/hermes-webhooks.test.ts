@@ -12,17 +12,24 @@
  * - deleting the last route switches the listener off again.
  */
 import { createHmac } from 'node:crypto';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { authed, signedInHub, type TestHub } from './helpers.js';
 import {
   WEBHOOK_PORTS,
+  addWebhook,
+  disableUnusedListener,
   ensureWebhookListener,
   listWebhooks,
+  removeWebhook,
+  shareProfileWebhooks,
+  webhookListener,
+  webhookTarget,
 } from '../../src/modules/agents/hermes-webhooks.js';
 
 type Hub = TestHub & { token: string; userId: string };
@@ -325,5 +332,87 @@ describe('Hermes incoming webhooks (§97)', () => {
     mkdirSync(c, { recursive: true });
     const busy = async (port: number) => port !== WEBHOOK_PORTS.first + 2;
     expect(await ensureWebhookListener(c, [a, b], busy)).toBe(WEBHOOK_PORTS.first + 3);
+  });
+});
+
+describe('one gateway per host: named profiles’ routes in the root’s file (§132)', () => {
+  const tmp = () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'corehub-wh-share-'));
+    for (const name of ['sales', 'ops'])
+      mkdirSync(path.join(root, 'profiles', name), { recursive: true });
+    return root;
+  };
+  const free = async () => true;
+
+  it('copies each named profile’s routes as Hermes serves them, and only ever rewrites its copies', async () => {
+    const root = tmp();
+    try {
+      // The root's own route, and a name the root already uses.
+      writeFileSync(
+        path.join(root, 'webhook_subscriptions.json'),
+        JSON.stringify({
+          own: { secret: 's-own', prompt: 'x' },
+          'sales--deploys': { secret: 's', prompt: 'y' },
+        }),
+      );
+      const sales = path.join(root, 'profiles', 'sales');
+      const ops = path.join(root, 'profiles', 'ops');
+      const deploys = addWebhook(sales, { name: 'deploys', prompt: 'Deployed {repo}' });
+      addWebhook(ops, { name: 'alerts', prompt: 'Alert' });
+
+      const first = await shareProfileWebhooks(root, ['sales', 'ops'], free);
+      expect(first).toEqual({ changed: true, listenerSwitchedOn: true });
+      const subs = JSON.parse(readFileSync(path.join(root, 'webhook_subscriptions.json'), 'utf8'));
+      // Hermes's shape: the route under a name of its own, bound to its profile.
+      expect(subs['ops--alerts']).toMatchObject({ profile: 'ops', prompt: 'Alert' });
+      const salesKey = Object.keys(subs).find((key) => subs[key].corehub_route === 'deploys')!;
+      expect(salesKey).toMatch(/^corehub-[0-9a-f]{24}$/);
+      expect(subs[salesKey]).toMatchObject({ profile: 'sales', secret: deploys.secret });
+      expect(subs.own).toEqual({ secret: 's-own', prompt: 'x' });
+      expect(subs['sales--deploys']).toEqual({ secret: 's', prompt: 'y' });
+      expect(statSync(path.join(root, 'webhook_subscriptions.json')).mode & 0o777).toBe(0o600);
+      // The root's page lists only its own routes; its listener is on for the copies.
+      expect(listWebhooks(root).map((route) => route.name)).toEqual(['own', 'sales--deploys']);
+      expect(webhookListener(root).enabled).toBe(true);
+
+      // Unchanged: nothing written, the listener already on.
+      expect(await shareProfileWebhooks(root, ['sales', 'ops'], free)).toEqual({
+        changed: false,
+        listenerSwitchedOn: false,
+      });
+
+      // Delivery: the root's listener, under the profile's prefix and the copy's name.
+      expect(webhookTarget(root, ops, 'ops', 'alerts', true)).toMatchObject({
+        name: 'ops--alerts',
+        profile: 'ops',
+        listener: { enabled: true, port: webhookListener(root).port },
+      });
+      expect(webhookTarget(root, ops, 'ops', 'alerts', false)).toMatchObject({
+        name: 'alerts',
+        profile: null,
+      });
+      expect(webhookTarget(root, ops, 'ops', 'missing', true)).toBeNull();
+
+      // A route removed, and a profile gone: their copies go; the root's own stay, and so does
+      // its listener while it has a route of its own.
+      removeWebhook(ops, 'alerts');
+      expect((await shareProfileWebhooks(root, ['ops'], free)).changed).toBe(true);
+      const after = JSON.parse(readFileSync(path.join(root, 'webhook_subscriptions.json'), 'utf8'));
+      expect(Object.keys(after).sort()).toEqual(['own', 'sales--deploys']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the root’s listener on while it answers another profile’s route', async () => {
+    const root = tmp();
+    try {
+      addWebhook(path.join(root, 'profiles', 'sales'), { name: 'deploys', prompt: 'x' });
+      await shareProfileWebhooks(root, ['sales'], free);
+      expect(disableUnusedListener(root)).toBe(false);
+      expect(webhookListener(root).enabled).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -9,7 +9,7 @@
  * whichever profile somebody saved in, and each named Hermes profile's `.env` holds exactly
  * the keys that differ from the root's.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -414,12 +414,13 @@ describe("models: Hermes's default profile is not the last saver's", () => {
     }
   });
 
-  it("keeps the hub's keys out of a named profile's own .env, so a changed key is the key used", async () => {
+  it('writes the key a named profile uses into its own .env, so a changed key is the key used', async () => {
     const { fetchImpl } = twoProviders();
     const home = hermesHome();
     // A profile made as a copy of `default` carries a copy of its `.env` (Hermes's
-    // `--clone-from`), and Hermes reads a profile's `.env` before the process environment:
-    // an old key left there would win over the one the hub hands every profile.
+    // `--clone-from`), and Hermes reads a profile's `.env` before the process environment —
+    // from v2026.9.21 only that `.env` (DECISIONS §132): an old key there would win, and a key
+    // missing there is no key at all. So the current shared key is written in its place.
     const design = path.join(home, 'profiles', 'design');
     mkdirSync(design, { recursive: true });
     writeFileSync(
@@ -443,7 +444,7 @@ describe("models: Hermes's default profile is not the last saver's", () => {
       await addProvider(hub, 'anthropic', 'sk-ant-current');
       await drainJobs(hub.app);
       const env = parseEnv(readFileSync(path.join(design, '.env'), 'utf8'));
-      expect(env.has('ANTHROPIC_API_KEY')).toBe(false);
+      expect(env.get('ANTHROPIC_API_KEY')).toBe('sk-ant-current');
       expect(env.get('TELEGRAM_BOT_TOKEN')).toBe('keep-me');
       expect(readFileSync(path.join(design, '.env'), 'utf8')).toContain('# the design profile');
 
@@ -454,8 +455,27 @@ describe("models: Hermes's default profile is not the last saver's", () => {
       writeFileSync(path.join(fresh, '.env'), 'ANTHROPIC_API_KEY=sk-ant-stale-copy\n');
       modelsServiceFor(hub.app).prepareProfile(fresh);
       expect(
-        parseEnv(readFileSync(path.join(fresh, '.env'), 'utf8')).has('ANTHROPIC_API_KEY'),
-      ).toBe(false);
+        parseEnv(readFileSync(path.join(fresh, '.env'), 'utf8')).get('ANTHROPIC_API_KEY'),
+      ).toBe('sk-ant-current');
+
+      // A changed key reaches every profile's file on the save.
+      const rotated = await authed(hub, hub.token, {
+        method: 'GET',
+        url: '/api/v1/models/providers',
+      });
+      const anthropic = (
+        rotated.json() as { items: Array<{ id: string; slug: string }> }
+      ).items.find((item) => item.slug === 'anthropic')!;
+      const saved = await authed(hub, hub.token, {
+        method: 'PATCH',
+        url: `/api/v1/models/providers/${anthropic.id}`,
+        payload: { api_key: 'sk-ant-rotated' },
+      });
+      expect(saved.statusCode, saved.body).toBe(200);
+      await drainJobs(hub.app);
+      expect(
+        parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).get('ANTHROPIC_API_KEY'),
+      ).toBe('sk-ant-rotated');
     } finally {
       await hub.close();
     }
@@ -515,13 +535,16 @@ describe("models: a profile's own providers and the shared ones (decision §37)"
       expect(claudeCodeEnv(hub, defaultId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
 
       // Hermes: the shared key in the root and the process; Design's own in Design's `.env`,
-      // which Hermes reads first; nothing in Finance's.
+      // which Hermes reads first; the shared one in Finance's (a named profile's turn reads only
+      // its own `.env` from Hermes v2026.9.21, DECISIONS §132).
       const root = parseEnv(readFileSync(path.join(home, '.env'), 'utf8'));
       expect(root.get('ANTHROPIC_API_KEY')).toBe('sk-ant-shared-key');
       expect(processEnv.ANTHROPIC_API_KEY).toBe('sk-ant-shared-key');
       const designEnv = parseEnv(readFileSync(path.join(design, '.env'), 'utf8'));
       expect(designEnv.get('ANTHROPIC_API_KEY')).toBe('sk-ant-design-key');
-      expect(existsSync(path.join(finance, '.env'))).toBe(false);
+      expect(
+        parseEnv(readFileSync(path.join(finance, '.env'), 'utf8')).get('ANTHROPIC_API_KEY'),
+      ).toBe('sk-ant-shared-key');
 
       // The same preset twice in one scope is refused; its removal leaves the shared one.
       const twice = await authed(hub, hub.token, {
@@ -538,9 +561,10 @@ describe("models: a profile's own providers and the shared ones (decision §37)"
       });
       expect(removed.statusCode).toBe(204);
       expect(claudeCodeEnv(hub, designId)).toEqual({ ANTHROPIC_API_KEY: 'sk-ant-shared-key' });
+      // Design is back on the shared key, in its own file too.
       expect(
-        parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).has('ANTHROPIC_API_KEY'),
-      ).toBe(false);
+        parseEnv(readFileSync(path.join(design, '.env'), 'utf8')).get('ANTHROPIC_API_KEY'),
+      ).toBe('sk-ant-shared-key');
     } finally {
       await hub.close();
     }

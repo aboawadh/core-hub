@@ -47,6 +47,7 @@ export interface ContractAgent {
     update_available: boolean;
     pinned_version: string | null;
     newer_than_tested: boolean;
+    tested_version?: string;
     auto_update: boolean;
     auto_update_supported: boolean;
     checked_at: string | null;
@@ -162,12 +163,17 @@ export function serializeAgent(
       update_available:
         !!row.latestVersion && !!row.version && compareVersions(row.latestVersion, row.version) > 0,
       pinned_version: pinned,
-      // Past the pin the owner tested: said in the UI, never hidden (`update-policy.ts`).
+      // Past the pin the owner tested: said in the UI, never hidden (`update-policy.ts`). For an
+      // agent the person installed (Hermes), past the release the hub is tested with (§132).
       newer_than_tested:
-        row.source === 'managed' &&
-        !!pinned &&
-        !!row.version &&
-        compareVersions(row.version, pinned) > 0,
+        (row.source === 'managed' &&
+          !!pinned &&
+          !!row.version &&
+          compareVersions(row.version, pinned) > 0) ||
+        (!!entry?.testedVersion &&
+          row.source !== 'managed' &&
+          !!row.version &&
+          compareVersions(row.version.split('+')[0]!, entry.testedVersion) > 0),
       auto_update: row.autoUpdate,
       auto_update_supported: row.packageName !== null,
       // The agent keeps its own vendor account, and the hub can start its sign-in.
@@ -181,6 +187,7 @@ export function serializeAgent(
           }
         : {}),
       ...(options.selfUpdate ? { self_update: true } : {}),
+      ...(entry?.testedVersion ? { tested_version: entry.testedVersion } : {}),
       checked_at: iso(row.checkedAt),
       error: row.lastError,
     },

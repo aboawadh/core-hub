@@ -59,6 +59,7 @@ function memoryStorage(): Storage {
 const QWEN = '01J8QK3ZR2W7M5N4P6T8V9X0QW';
 const PI = '01J8QK3ZR2W7M5N4P6T8V9X0PI';
 const KIMI = '01J8QK3ZR2W7M5N4P6T8V9X0KM';
+const HERMES = '01J8QK3ZR2W7M5N4P6T8V9X0HR';
 
 function agent(id: string, name: string, over: Partial<Agent> = {}): Agent {
   return {
@@ -117,6 +118,26 @@ const AGENTS = [
       newer_than_tested: true,
       auto_update: true,
       auto_update_supported: true,
+    },
+  } as Partial<Agent>),
+  // A person's own Hermes (§119, §132): past the release Core Hub is tested with, and a newer
+  // release on GitHub that its own updater would take.
+  agent(HERMES, 'Hermes', {
+    kind: 'hermes',
+    install: {
+      source: 'user_cli',
+      version: '0.21.6',
+      error: null,
+      update_available: true,
+      latest_version: '0.22.0',
+      pinned_version: null,
+      newer_than_tested: true,
+      tested_version: '0.21.5',
+      minimum_version: '0.21.3',
+      below_minimum: false,
+      self_update: true,
+      auto_update: false,
+      auto_update_supported: false,
     },
   } as Partial<Agent>),
   // At the pin, nothing to say.
@@ -225,6 +246,19 @@ describe('version notes (pure)', () => {
   it('an agent the hub does not install has no tested version', () => {
     expect(versionNotes(install({ pinned_version: null })).tested).toBeNull();
   });
+
+  it("a person's own Hermes is measured against the release Core Hub is tested with", () => {
+    expect(
+      versionNotes(
+        install({
+          pinned_version: null,
+          tested_version: '0.21.5',
+          update_available: true,
+          latest_version: '0.21.6',
+        }),
+      ),
+    ).toMatchObject({ tested: '0.21.5', update: '0.21.6', updateUntested: true });
+  });
 });
 
 describe('the Agents page says when a version is newer than the tested one', () => {
@@ -241,6 +275,24 @@ describe('the Agents page says when a version is newer than the tested one', () 
     );
     expect(within(card('kimi-code')).queryByTestId('agent-update-available')).toBeNull();
     expect(within(card('kimi-code')).queryByTestId('agent-newer-than-tested')).toBeNull();
+  });
+
+  it("on a person's own Hermes: newer than tested, may not be supported, and an update to take", async () => {
+    mount('/agents', 'owner');
+    const cards = await screen.findAllByTestId('agent-card');
+    const hermes = cards.find((c) => c.getAttribute('data-agent-slug') === 'hermes')!;
+    expect(within(hermes).getByTestId('agent-hermes-newer-than-tested').textContent).toBe(
+      'This Hermes (0.21.6) is newer than 0.21.5, the version Core Hub is tested with. It may not be supported yet: some features may not work with it.',
+    );
+    const update = within(hermes).getByTestId('agent-hermes-update');
+    expect(update.textContent).toContain('Hermes 0.22.0 is available (this computer has 0.21.6).');
+    expect(within(update).getByTestId('agent-hermes-update-tested').textContent).toBe(
+      'Core Hub is not tested with this version yet (it is tested with 0.21.5); some features may not work with it.',
+    );
+    expect(within(update).getByTestId('agent-update-hermes')).toBeTruthy();
+    // Said once, in full: not again as the short badges.
+    expect(within(hermes).queryByTestId('agent-newer-than-tested')).toBeNull();
+    expect(within(hermes).queryByTestId('agent-update-available')).toBeNull();
   });
 
   it("on the agent's Settings page, with the tested version named", async () => {

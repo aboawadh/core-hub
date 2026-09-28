@@ -30,8 +30,20 @@
  * profile's listener on this machine. An outside service therefore needs only the hub's own
  * address — which has to be reachable from the internet — and no new port is opened on the host
  * (a Docker upgrade keeps working by replacing the image alone).
+ *
+ * **One gateway per host** (Hermes v2026.9.21, `0.21.4`, and later; DECISIONS §129, §132): the
+ * one gateway runs one webhook listener, the default profile's, and a named profile has none of
+ * its own. Hermes's own shape for it (`gateway/platforms/webhook.py` §_resolve_route,
+ * `hermes_cli/webhook.py` §_route_url, v2026.9.24): every route lives in the **root's**
+ * subscriptions file, a route of a named profile carries `profile: <name>`, and the listener
+ * answers it at `/p/<name>/webhooks/<route>` in that profile's scope. The hub keeps each profile's
+ * own file as its record, as before (a volume from an older Hermes keeps its routes), and on such a
+ * Hermes copies every named profile's routes into the root's file under a name of their own
+ * (`shareProfileWebhooks`), marked as its copies so it only ever rewrites or removes those, switches
+ * the root's listener on, and passes a delivery for a named profile to the root's listener under
+ * that prefix (`webhookTarget`). The public door does not change.
  */
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
@@ -70,6 +82,13 @@ export interface WebhookListener {
 }
 
 type Json = Record<string, unknown>;
+
+/** On a copy in the root's file (one gateway per host): the profile it was copied from. */
+const SHARED_FROM = 'corehub_profile';
+/** On a copy in the root's file: the route's name in its own profile. */
+const SHARED_NAME = 'corehub_route';
+
+const isShared = (route: Json) => typeof route[SHARED_FROM] === 'string';
 
 // ------------------------------------------------------------------ files
 
@@ -198,7 +217,8 @@ export function listWebhooks(home: string): HermesWebhookRoute[] {
       : {};
   const out = new Map<string, HermesWebhookRoute>();
   for (const [name, route] of Object.entries(readSubscriptions(home))) {
-    if (name in staticRoutes) continue;
+    // Another profile's route the hub copied here for one gateway per host: not this one's.
+    if (name in staticRoutes || isShared(route)) continue;
     const secret = route.secret ?? (globalSecret ? extra.secret : undefined);
     if (typeof secret !== 'string' || secret === '') continue;
     out.set(name, toRoute(name, route, false));
@@ -279,6 +299,8 @@ export async function ensureWebhookListener(
 /** Switches the listener off again once no route is left; its port stays written. */
 export function disableUnusedListener(home: string): boolean {
   if (listWebhooks(home).length > 0) return false;
+  // The root's listener also answers the named profiles' routes on one gateway per host.
+  if (Object.values(readSubscriptions(home)).some(isShared)) return false;
   const doc = loadConfig(home);
   if (!isMap(doc.getIn(['platforms', 'webhook']))) return false;
   if (doc.getIn(['platforms', 'webhook', 'enabled']) === false) return false;
@@ -377,13 +399,16 @@ export async function postToListener(
   headers: Record<string, string>,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = 15_000,
+  /** The named profile the root's listener answers for (one gateway per host, `webhookTarget`). */
+  profile: string | null = null,
 ): Promise<ListenerAnswer> {
   if (!listener.enabled || listener.port === null) throw new WebhookError('listener_off');
   const host = listener.host.includes(':') ? `[${listener.host}]` : listener.host;
+  const prefix = profile ? `/p/${encodeURIComponent(profile)}` : '';
   let response: Response;
   try {
     response = await fetchImpl(
-      `http://${host}:${listener.port}/webhooks/${encodeURIComponent(name)}`,
+      `http://${host}:${listener.port}${prefix}/webhooks/${encodeURIComponent(name)}`,
       {
         method: 'POST',
         headers,
@@ -430,4 +455,82 @@ export function testDelivery(
 
 function hmacHex(secret: string, body: Buffer): string {
   return createHmac('sha256', secret).update(body).digest('hex');
+}
+
+// ------------------------------------------------------------------ one gateway per host
+
+/**
+ * The name a named profile's route takes in the root's file: `<profile>--<route>` when that is a
+ * name Hermes takes and nobody else has, else one made from a hash of the two. Stable, so a copy
+ * is found again under the same name.
+ */
+export function sharedRouteKey(profile: string, name: string, taken: ReadonlySet<string>): string {
+  const plain = `${profile}--${name}`;
+  if (WEBHOOK_NAME.test(plain) && !taken.has(plain)) return plain;
+  const digest = createHash('sha256').update(`${profile}/${name}`).digest('hex');
+  return `corehub-${digest.slice(0, 24)}`;
+}
+
+/**
+ * Copies every named profile's routes into the root's subscriptions file, for a Hermes that runs
+ * one gateway per host (see the top of the file): each as `profile: <name>`, marked with where it
+ * came from, under `sharedRouteKey`. Copies of routes that are gone — or of profiles that are gone —
+ * are removed; the root's own routes are never touched, and a name the root uses for its own
+ * keeps it (the copy takes the hashed name). When any copy exists the root's listener is switched
+ * on; `listenerSwitchedOn` says it was off, so the one gateway must start again to listen.
+ */
+export async function shareProfileWebhooks(
+  root: string,
+  profiles: readonly string[],
+  isFree: (port: number) => Promise<boolean> = portFree,
+): Promise<{ changed: boolean; listenerSwitchedOn: boolean }> {
+  const current = readSubscriptions(root);
+  const own = new Set(Object.keys(current).filter((key) => !isShared(current[key]!)));
+  const wanted: Record<string, Json> = {};
+  const used = new Set(own);
+  for (const profile of [...profiles].sort()) {
+    const home = path.join(root, 'profiles', profile);
+    const subs = readSubscriptions(home);
+    for (const route of listWebhooks(home)) {
+      const raw = subs[route.name];
+      if (!raw || route.static) continue;
+      const key = sharedRouteKey(profile, route.name, used);
+      used.add(key);
+      wanted[key] = { ...raw, profile, [SHARED_FROM]: profile, [SHARED_NAME]: route.name };
+    }
+  }
+  const next: Record<string, Json> = {};
+  for (const [key, route] of Object.entries(current)) if (!isShared(route)) next[key] = route;
+  Object.assign(next, wanted);
+  const changed = JSON.stringify(next) !== JSON.stringify(current);
+  if (changed) writeSubscriptions(root, next);
+  let listenerSwitchedOn = false;
+  if (Object.keys(wanted).length > 0 && !webhookListener(root).enabled) {
+    const others = profiles.map((profile) => path.join(root, 'profiles', profile));
+    await ensureWebhookListener(root, others, isFree);
+    listenerSwitchedOn = true;
+  }
+  return { changed, listenerSwitchedOn };
+}
+
+/**
+ * Where a delivery for `name` in `profile` goes: the profile's own listener, or — on one gateway per
+ * host, for a named profile — the root's, under `/p/<profile>/` and the name of its copy there.
+ * `null` when the copy is not there yet (the next `shareProfileWebhooks` makes it).
+ */
+export function webhookTarget(
+  root: string,
+  home: string,
+  profile: string,
+  name: string,
+  sharedIngress: boolean,
+): { listener: WebhookListener; name: string; profile: string | null } | null {
+  if (!sharedIngress || profile === 'default' || path.resolve(home) === path.resolve(root)) {
+    return { listener: webhookListener(home), name, profile: null };
+  }
+  const copy = Object.entries(readSubscriptions(root)).find(
+    ([, route]) => route[SHARED_FROM] === profile && route[SHARED_NAME] === name,
+  );
+  if (!copy) return null;
+  return { listener: webhookListener(root), name: copy[0], profile };
 }

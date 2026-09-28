@@ -1,0 +1,132 @@
+name: Real Hermes suites (any release)
+
+# Every real-Hermes suite (`*.real.test.ts`) against an image built with a chosen Hermes release:
+# the same setup as ci.yml's `hermes-real` job (image with HERMES_REF, Hermes's source and a venv
+# of the same tag), with the tag as an input. The Hermes watch (hermes-watch.yml) calls it for a
+# release newer than the pin (DECISIONS §132). It uploads vitest's JSON report as the artifact
+# `hermes-real-report` so the caller can list the failing tests.
+#
+# `report-only: true` keeps the job green when the image does not build or a suite fails — a red
+# Hermes is news for the caller to report, not a broken run — and says what happened in `outcome`.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The Hermes Agent release tag to build into the image (e.g. v2026.9.30).'
+        required: true
+        type: string
+      report-only:
+        description: 'Succeed even when the image or a suite fails; read `outcome` instead.'
+        required: false
+        type: boolean
+        default: false
+      cache-scope:
+        description: 'A GitHub Actions cache scope to read Docker layers from (never written).'
+        required: false
+        type: string
+        default: hermes-real-pinned
+    outputs:
+      outcome:
+        description: '"passed", "failed" (a suite failed) or "no-image" (the image did not build).'
+        value: ${{ jobs.suites.outputs.outcome }}
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    name: Real Hermes suites (${{ inputs.ref }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      outcome: ${{ steps.outcome.outputs.outcome }}
+    steps:
+      - name: A Hermes tag, nothing else
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if ! printf '%s' "$REF" | grep -Eq '^v[0-9][0-9A-Za-z.-]*$'; then
+            echo "::error::Not a Hermes release tag: $REF"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v3
+      - name: The image with that Hermes
+        id: image
+        continue-on-error: ${{ inputs.report-only }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/server/Dockerfile
+          build-args: |
+            HERMES_REF=${{ inputs.ref }}
+          push: false
+          load: true
+          tags: core-hub:hermes-candidate
+          cache-from: type=gha,scope=${{ inputs.cache-scope }}
+      - name: Hermes's source and a venv of the same tag (kanban and cron grammar suites)
+        id: source
+        if: steps.image.outcome == 'success'
+        continue-on-error: ${{ inputs.report-only }}
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          set -eu
+          uv_version=$(sed -n 's/^ARG UV_VERSION=//p' packages/server/Dockerfile)
+          curl -LsSf "https://github.com/astral-sh/uv/releases/download/${uv_version}/uv-installer.sh" | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv python install 3.12
+          uv venv --python 3.12 "$RUNNER_TEMP/hermes/.venv"
+          git clone --depth 1 --branch "$REF" https://github.com/NousResearch/hermes-agent "$RUNNER_TEMP/hermes/src"
+          cd "$RUNNER_TEMP/hermes/src"
+          uv pip install --python "$RUNNER_TEMP/hermes/.venv/bin/python" -e ".[cron,mcp]" "aiohttp==3.14.3"
+          docker run --rm --entrypoint /opt/hermes/.venv/bin/hermes core-hub:hermes-candidate --version
+      - run: pnpm --filter @corehub/contracts build
+        if: steps.image.outcome == 'success'
+      - name: Every *.real.test.ts against the image
+        id: suites
+        if: steps.image.outcome == 'success'
+        continue-on-error: ${{ inputs.report-only }}
+        env:
+          COREHUB_HERMES_IMAGE: core-hub:hermes-candidate
+          HERMES_SRC: ${{ runner.temp }}/hermes/src
+        run: |
+          set -eu
+          export PATH="$RUNNER_TEMP/hermes/.venv/bin:$PATH"
+          cd packages/server
+          files=$(find src tests -name '*.real.test.ts' | sort)
+          # shellcheck disable=SC2086 # one argument per file
+          pnpm exec vitest run --project unit --maxWorkers=2 \
+            --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/vitest.json" $files
+      - name: What happened
+        id: outcome
+        if: always()
+        env:
+          IMAGE: ${{ steps.image.outcome }}
+          SUITES: ${{ steps.suites.outcome }}
+        run: |
+          if [ "$IMAGE" != success ]; then
+            outcome=no-image
+          elif [ "$SUITES" = success ]; then
+            outcome=passed
+          else
+            outcome=failed
+          fi
+          echo "outcome=$outcome" | tee -a "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hermes-real-report
+          path: ${{ runner.temp }}/vitest.json
+          if-no-files-found: ignore
+          retention-days: 14

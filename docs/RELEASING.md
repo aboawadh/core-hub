@@ -352,6 +352,45 @@ Microsoft Store package (**v1.1.0** does) gets its release without the `.msix`, 
 the Store package starts with a later version. For the Store, release a version made after this
 change (for example 1.1.1: bump the root `package.json`, `pnpm version:check --write`, merge, tag).
 
+## The Hermes watch (owner, 2026-09-28)
+
+*Never fall behind Hermes, never release something that breaks.* The image pins one Hermes
+Agent release, `HERMES_REF` in `packages/server/Dockerfile`, which must equal `HERMES_TESTED` in
+`packages/server/src/modules/agents/catalog/hermes-versions.ts` (`node scripts/hermes-watch.mjs
+current` fails otherwise); `HERMES_FLOOR` there is the oldest Hermes the hub still works with.
+CI's `hermes-real` job runs every real-Hermes suite (`*.real.test.ts`) against both on every
+pull request.
+
+**Every day** (04:41 UTC, or Actions → *Hermes watch* → *Run workflow*), `hermes-watch.yml` asks
+GitHub for NousResearch/hermes-agent's newest **stable** release (drafts and pre-releases never
+count) and compares it with the pin. When it is newer, it builds the image with that tag and runs
+every real-Hermes suite against it (`hermes-real-suites.yml`, the same setup as `hermes-real` with
+the tag as input), then:
+
+| Result | What the watch does |
+|---|---|
+| Every suite passes | Opens (or updates) one pull request **"Move the image to Hermes vX (Y)"** from `bot/hermes-<tag>`: the two pins moved, a change record, and the required checks started on it. **Never merged automatically** — the owner reviews and merges, then releases as usual. |
+| Any suite fails, or the image does not build | Opens (or updates) one issue **"Hermes <tag> is not supported yet"** (label `hermes-watch`) listing each failing test and linking the run. The image stays on its pin. Fix the hub version-aware (the floor must keep passing) and move the pin by pull request (`node scripts/hermes-watch.mjs bump --ref <tag> --version <x.y.z>`). |
+| The pin is the newest release | Closes the watch issue and any `bot/hermes-*` pull request still open. |
+
+It does not spam: a release whose pull request is already open is not tried again (a dispatched
+run with **force** tries it anyway), the bot branch is made once and never rewritten (commits the
+owner adds stay), there is only ever one watch issue (renamed to the newest failing release), a
+pull request the owner closed without merging is not reopened, and a newer passing release closes
+the older release's bot pull request. It uses `GITHUB_TOKEN` only, with each job's own minimal
+permissions. Opening pull requests needs *Settings → Actions → General → Allow GitHub Actions to
+create and approve pull requests* (already on for the code-map bot); without it the run fails
+with that hint and the move waits on its branch.
+
+**On every image release** (`release.yml`), before building, the step *The Hermes this image
+carries, and any newer one* prints one annotation (and the run summary): a notice when the image
+carries the newest Hermes, otherwise a warning naming the newer release and what the watch found —
+supported (its pull request) or not supported yet (its issue) — or that the watch has not tried
+it. It is only information: it never blocks, delays or changes the release, and the image is built
+from the pinned `HERMES_REF` whatever it says. Before tagging, read it (or run
+`node scripts/hermes-watch.mjs status --repo twuijri/core-hub` locally) and merge a green Hermes
+pull request first when you want the release to carry it.
+
 ## The download page (`site/`, GitHub Pages)
 
 **https://twuijri.github.io/core-hub/** — one static page, English first (owner, 2026-09-26) with an Arabic toggle,

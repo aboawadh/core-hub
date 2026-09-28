@@ -54,7 +54,14 @@ import {
   type GatewayRuntimeRecord,
   type GatewayStatus,
 } from './hermes-gateways.js';
-import { hermesProfileRunner, type ProfileRunner } from './hermes-profiles.js';
+// Hermes says why on its last line (`Error: Profile 'x' already exists …`).
+import {
+  hermesProfileRunner,
+  lastLine,
+  namedHermesProfiles,
+  type ProfileRunner,
+} from './hermes-profiles.js';
+import { shareProfileWebhooks } from './hermes-webhooks.js';
 import { resolveHermesPython, type PythonCommand } from './hermes-python.js';
 import {
   personalHermesRoot,
@@ -286,6 +293,9 @@ export class HermesRuntime {
       ...(options.gatewayRescanMs !== undefined ? { rescanMs: options.gatewayRescanMs } : {}),
       ...(options.whatsappBridge ? { whatsappBridge: options.whatsappBridge } : {}),
       ...(options.rescanProfiles ? { rescanProfiles: options.rescanProfiles } : {}),
+      // One gateway per host answers the named profiles' webhook routes from the root's file.
+      shareWebhooks: async (root) =>
+        (await shareProfileWebhooks(root, namedHermesProfiles(root))).listenerSwitchedOn,
       // On a Hermes that runs one gateway per host, the process below serves every profile.
       rootGateway: {
         status: () => ({
@@ -1278,14 +1288,3 @@ const defaultSpawner: Spawner = (command, args, options) => {
   });
   return child as unknown as SpawnedProcess;
 };
-
-/** Hermes says why on its last line (`Error: Profile 'x' already exists …`). */
-function lastLine(text: string): string {
-  return (
-    text
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .at(-1) ?? ''
-  );
-}

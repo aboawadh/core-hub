@@ -2291,6 +2291,15 @@ export const agentsModule = defineModule({
       },
       followChannels,
       root: (server) => contextOf(server).runtime.status().home,
+      // One gateway per host (DECISIONS §129, §132): its root listener answers every profile.
+      sharedIngress: (server) => {
+        const { runtime } = contextOf(server);
+        return (
+          runtime.status().mode === 'managed' &&
+          runtime.profileGateways.topology() === 'one-per-host'
+        );
+      },
+      shareWebhooks: (server) => contextOf(server).runtime.profileGateways.reconcile(),
     });
 
     /**

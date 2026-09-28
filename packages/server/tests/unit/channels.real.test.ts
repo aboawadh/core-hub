@@ -9,7 +9,8 @@
  * 1. Hermes's own config loader, in the container, reads every value where the hub wrote it —
  *    Discord's mentions, threads, allowed channels and home channel; Slack's pairing for strangers
  *    and flat replies; the per-platform display settings;
- * 2. the gateway the hub would start for the profile, `hermes -p desk gateway run`, starts the
+ * 2. the gateway the hub would start for the profile (`hermes -p desk gateway run`, or the root's
+ *    serving every profile from Hermes v2026.9.21 on — `hermes-real.ts`), starts the
  *    Discord and Slack adapters from the image's own libraries — nothing is installed (there is no
  *    network to install from) — and reports each platform in its state file.
  *
@@ -26,7 +27,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { activeChannels } from '../../src/modules/agents/channels.js';
 import { linkCredentials, platformSpec } from '../../src/modules/agents/channel-platforms.js';
 import { writeChannelSettings } from '../../src/modules/agents/channel-settings.js';
-import { readGatewayRecord } from '../../src/modules/agents/hermes-gateways.js';
+import { gatewayArgsFor, gatewayRecordFor } from './hermes-real.js';
 
 const image = process.env.COREHUB_HERMES_IMAGE;
 const HERMES = '/opt/hermes/.venv/bin/hermes';
@@ -182,10 +183,8 @@ describe.skipIf(!image)('Discord, Slack and Mattermost in a named profile (real 
         home,
         box,
         HERMES,
-        '-p',
-        'desk',
-        'gateway',
-        'run',
+        // The gateway the hub runs for «desk»: its own, or the root's that serves every profile.
+        ...gatewayArgsFor(image!, 'desk'),
       ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
@@ -193,15 +192,20 @@ describe.skipIf(!image)('Discord, Slack and Mattermost in a named profile (real 
     gateway.stderr?.on('data', (chunk) => (log += String(chunk)));
     await vi.waitFor(
       () => {
-        const record = readGatewayRecord(home);
-        expect(Object.keys(record?.platforms ?? {}).sort(), log.slice(-3000)).toEqual(
-          expect.arrayContaining(['discord', 'slack']),
-        );
+        const record = gatewayRecordFor(image!, root, 'desk');
+        const named = Object.keys(record?.platforms ?? {});
+        // One gateway per host records a served profile's platform once its adapter has come up
+        // or failed on its own terms; Slack's, with no network, ends in its own library's DNS
+        // error instead — which is it running from the image's library all the same.
+        const slackRan =
+          named.includes('slack') || /slack_sdk[\s\S]*auth_test|auth\.test/.test(log);
+        expect(named, log.slice(-3000)).toContain('discord');
+        expect(slackRan, log.slice(-3000)).toBe(true);
       },
       { timeout: 120_000, interval: 1000 },
     );
     // What the gateway says of each platform (no network: they cannot connect, and say why).
-    const record = readGatewayRecord(home)!;
+    const record = gatewayRecordFor(image!, root, 'desk')!;
     console.log(
       Object.entries(record.platforms)
         .map(([name, entry]) => `${name}: ${entry.state} ${entry.errorMessage ?? ''}`)
@@ -211,6 +215,13 @@ describe.skipIf(!image)('Discord, Slack and Mattermost in a named profile (real 
       const { writeFileSync } = await import('node:fs');
       writeFileSync(process.env.COREHUB_CHANNELS_REAL_LOG, log);
     }
-    expect(log).not.toMatch(/requirements not met|FeatureUnavailable|pip install|lazy.install/i);
+    // Nothing installed for a channel. (From v2026.9.21 Hermes's gateway also asks for boto3 for
+    // its Bedrock provider when it starts — `agent/bedrock_adapter.py` — which is no channel's.)
+    const lines = log.split('\n').filter((line) => !/bedrock|boto3/i.test(line));
+    const channelInstalls = lines.filter((line) =>
+      /requirements not met|FeatureUnavailable|lazy.install|Feature 'platform\./i.test(line),
+    );
+    expect(channelInstalls).toEqual([]);
+    expect(log).not.toMatch(/pip install[^\n]*(discord|slack|telegram|mattermost)/i);
   }, 150_000);
 });

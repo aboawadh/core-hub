@@ -35,6 +35,10 @@ describe.skipIf(!image)('Journey (real Hermes; set COREHUB_HERMES_IMAGE to run)'
   const containers: string[] = [];
 
   const work = path.join(home, 'profiles', 'work');
+  // A profile Hermes made has its identity files; from v2026.9.21 Hermes does not serve a
+  // `profiles/<name>` folder without one (`hermes_constants.named_profile_is_live`).
+  mkdirSync(work, { recursive: true });
+  writeFileSync(path.join(work, 'SOUL.md'), 'You are the work agent.\n');
   skill(work, 'research', 'web-research', 'related_skills: [summarize-pdf]\n');
   skill(work, 'research', 'summarize-pdf');
   skill(work, 'misc', 'never-used');

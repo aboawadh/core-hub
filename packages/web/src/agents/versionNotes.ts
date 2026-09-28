@@ -15,12 +15,13 @@ export interface VersionNotes {
   updateUntested: boolean;
   /** What is installed now is past the tested pin. */
   newerThanTested: boolean;
-  /** The tested pin, or null for an agent the hub does not install. */
+  /** The tested pin, or the tested release of an agent the person installed (Hermes); else null. */
   tested: string | null;
 }
 
 export function versionNotes(install: Agent['install']): VersionNotes {
-  const tested = install.pinned_version ?? null;
+  // A Hermes the person installed has no pin but a release Core Hub is tested with (§132).
+  const tested = install.pinned_version ?? install.tested_version ?? null;
   const update = install.update_available ? (install.latest_version ?? null) : null;
   return {
     update,
