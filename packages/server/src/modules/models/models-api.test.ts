@@ -5,7 +5,7 @@
  * The scripted `fetch` below is the only provider these tests ever talk to. A real key is
  * never needed; `models-live.test.ts` is the gated exception.
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -1144,8 +1144,9 @@ describe('models: one key, every agent (ADR 0010)', () => {
 
   it("declares the endpoint in every Hermes profile's config too, and nothing else there", async () => {
     // A conversation runs in its workspace's own Hermes profile (ADR 0014 stage 3), which
-    // reads its own `config.yaml`: a turn that names `corehub-groq` must find it there. The
-    // key is not copied — it reaches every profile through the process environment.
+    // reads its own `config.yaml`: a turn that names `corehub-groq` must find it there. The key
+    // goes into its own `.env` too: from Hermes v2026.9.21 a named profile's turn reads its
+    // keys from there only, not from the process environment (DECISIONS §132).
     const groqModels = scriptedFetch((url) =>
       url.startsWith('https://api.groq.com')
         ? { json: { data: [{ id: 'llama-3.3-70b-versatile' }] } }
@@ -1183,7 +1184,9 @@ describe('models: one key, every agent (ADR 0010)', () => {
       // The profile's own model is its own; the hub names a model on every turn.
       expect(config).toContain('default: its-own-model');
       expect(config).not.toContain('llama-3.3-70b-versatile');
-      expect(existsSync(path.join(design, '.env'))).toBe(false);
+      expect(readFileSync(path.join(design, '.env'), 'utf8')).toContain(
+        'GROQ_API_KEY=gsk-scripted',
+      );
     } finally {
       await hub.close();
     }

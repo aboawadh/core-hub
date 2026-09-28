@@ -343,8 +343,9 @@ describe('models: the image model reaches Hermes and the skills (§72)', () => {
         COREHUB_IMAGE_API_KEY: 'proxy-key',
       });
 
-      // The design profile inherits: same backend, its own entries kept, and no copy of the
-      // root's values in its `.env` (Hermes falls back on the process for those).
+      // The design profile inherits: same backend, its own entries kept, and the root's values
+      // in its own `.env` (from Hermes v2026.9.21 a named profile's turn reads only that file,
+      // DECISIONS §132).
       const designConfig = configOf(design) as {
         image_gen?: { provider?: string; fal?: unknown };
         plugins?: { enabled?: string[] };
@@ -353,7 +354,7 @@ describe('models: the image model reaches Hermes and the skills (§72)', () => {
       expect(designConfig.image_gen?.fal).toEqual({ model: 'fal-ai/flux' });
       expect(designConfig.plugins?.enabled).toEqual(['my-own-plugin', HERMES_IMAGE_PLUGIN.key]);
       expect(existsSync(path.join(imagePluginDir(design), '__init__.py'))).toBe(true);
-      expect(envOf(design).has('COREHUB_IMAGE_MODEL')).toBe(false);
+      expect(envOf(design).get('COREHUB_IMAGE_MODEL')).toBe('gemini-3.1-flash-image');
 
       // Its own choice: what differs from the root lands in its own `.env`.
       await chooseImage(hub, { provider_id: openai.id, model: 'gpt-image-1' }, 'design');

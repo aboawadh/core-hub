@@ -18,6 +18,13 @@
  *    one is approved and revoked through Hermes, the other is denied by the hub's edit of Hermes's
  *    pending file — and the default profile's list stays empty.
  *
+ * From Hermes v2026.9.21 (`0.21.4`) one gateway per host serves every profile (DECISIONS §129), so
+ * against such a Hermes (CI runs this against the floor and the pinned release, §132) steps 1 and
+ * 2 check the other shape: the hub starts only the default gateway, which serves «manger» and
+ * «reports» — «manger»'s channel is in its record, «reports»'s job fires in it — and each profile
+ * reads the key the hub wrote into its own `.env`, because such a Hermes gives a served profile
+ * nothing from the process environment (`agent/secret_scope.py`).
+ *
  * Name the image to run it; without one it is skipped:
  *
  *   COREHUB_HERMES_IMAGE=ghcr.io/twuijri/core-hub:latest pnpm --filter @corehub/server exec \
@@ -38,12 +45,20 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { capturingLogger, unreachableFetch } from './helpers.js';
-import { writeHermesRoute } from '../../src/modules/models/propagation.js';
+import { writeHermesEnv, writeHermesRoute } from '../../src/modules/models/propagation.js';
+import { imageHermesVersion, servesEveryProfileFromOneGateway } from './hermes-real.js';
+import {
+  addWebhook,
+  postToListener,
+  testDelivery,
+  webhookTarget,
+  type HermesWebhookRoute,
+} from '../../src/modules/agents/hermes-webhooks.js';
 import {
   HermesDashboard,
   type DashboardSpawner,
 } from '../../src/modules/agents/hermes-dashboard.js';
-import { readGatewayRecord } from '../../src/modules/agents/hermes-gateways.js';
+import { readGatewayRecord, readServedProfiles } from '../../src/modules/agents/hermes-gateways.js';
 import {
   approvePairing,
   denyPairing,
@@ -79,6 +94,30 @@ describe.skipIf(!image)(
     let provider: Server;
     let runtime: HermesRuntime;
     let dashboard: HermesDashboard;
+    const perHost = !!image && servesEveryProfileFromOneGateway(image);
+    let mangerRoute: HermesWebhookRoute;
+
+    /** A signed test delivery to «manger»'s route, where the hub's door passes it. */
+    const deliverToManger = async () => {
+      const target = webhookTarget(
+        root,
+        path.join(root, 'profiles', 'manger'),
+        'manger',
+        'deploys',
+        perHost,
+      );
+      if (!target) return null;
+      const delivery = testDelivery(mangerRoute, `real-${Date.now()}`, 'hello');
+      return postToListener(
+        target.listener,
+        target.name,
+        delivery.body,
+        delivery.headers,
+        fetch,
+        undefined,
+        target.profile,
+      ).catch(() => null);
+    };
 
     /** `hermes <args>` in the container; stopping it signals that very process inside. */
     const inBox = (
@@ -272,6 +311,11 @@ describe.skipIf(!image)(
         path.join(root, 'profiles', 'manger', 'config.yaml'),
         `${broken}platforms:\n  webhook:\n    enabled: true\n    extra:\n      port: ${WEBHOOK_PORT}\n      secret: e2e-webhook-secret\n`,
       );
+      // A webhook route in «manger», as the hub makes one (decision §97).
+      mangerRoute = addWebhook(path.join(root, 'profiles', 'manger'), {
+        name: 'deploys',
+        prompt: 'Say pong.',
+      });
       // «reports»: no channel at all, one job an agent scheduled there — made by Hermes's own
       // `hermes cron`.
       hermesOnce(['profile', 'create', 'reports', '--no-alias']);
@@ -290,7 +334,11 @@ describe.skipIf(!image)(
       ]);
 
       // A `hermes` on PATH so the runtime is `managed`; the spawner runs the image's instead.
-      writeFileSync(path.join(bin, 'hermes'), '#!/bin/sh\nexit 0\n');
+      // It says the image's version, as the real one does: the hub picks the topology from it.
+      writeFileSync(
+        path.join(bin, 'hermes'),
+        `#!/bin/sh\necho 'Hermes Agent v${imageHermesVersion(image!) ?? '0.0.0'}'\n`,
+      );
       chmodSync(path.join(bin, 'hermes'), 0o755);
       const state = {
         credentials: [],
@@ -314,7 +362,16 @@ describe.skipIf(!image)(
         fetchImpl: unreachableFetch,
         spawnImpl: gatewaySpawn,
         healthIntervalMs: 0,
-        prepareGateway: (_profile, home) => void writeHermesRoute(home, state),
+        // What the hub writes before a gateway serves a profile (`models` §prepareGateway): the
+        // route and the model, and the key in the profile's own `.env`.
+        prepareGateway: (_profile, home) => {
+          writeHermesRoute(home, state);
+          writeHermesEnv({
+            file: path.join(home, '.env'),
+            owned: [KEY_ENV],
+            values: { [KEY_ENV]: 'sk-real-test' },
+          });
+        },
       });
       runtime.setProviderEnv({ [KEY_ENV]: 'sk-real-test' });
 
@@ -349,61 +406,125 @@ describe.skipIf(!image)(
       }
     }, 120_000);
 
-    it("runs the default gateway and «manger»'s side by side, each answering through the custom provider", async () => {
-      expect(await runtime.start()).toBe('managed');
-      await vi.waitFor(
-        async () => {
-          expect(await healthy(DEFAULT_PORT)).toBe(true);
-          expect(await healthy(MANGER_PORT)).toBe(true);
-        },
-        { timeout: 240_000, interval: 2_000 },
-      );
-      expect(
-        runtime.gateways().map((gateway) => [gateway.profile, gateway.channels, gateway.cronJobs]),
-      ).toEqual([
-        ['default', [], 0],
-        ['manger', ['webhook'], 0],
-        ['reports', [], 1],
-      ]);
+    it.runIf(perHost)(
+      'runs one gateway that serves «manger» and «reports» too, answering through the custom provider',
+      async () => {
+        expect(await runtime.start()).toBe('managed');
+        await vi.waitFor(async () => expect(await healthy(DEFAULT_PORT)).toBe(true), {
+          timeout: 240_000,
+          interval: 2_000,
+        });
+        // The one gateway lists every profile it serves, and «manger»'s channel as its own.
+        await vi.waitFor(
+          () => {
+            const record = readGatewayRecord(root);
+            expect(record?.gatewayState).toBe('running');
+            expect(readServedProfiles(root)).toEqual(expect.arrayContaining(['manger', 'reports']));
+            // A named profile's webhook is the root listener's (`/p/manger/…`), not a platform of
+            // its own: the hub switched the root's on for it.
+            expect(Object.keys(record?.platforms ?? {})).toContain('webhook');
+          },
+          { timeout: 180_000, interval: 2_000 },
+        );
+        expect(
+          runtime
+            .gateways()
+            .map((gateway) => [gateway.profile, gateway.channels, gateway.cronJobs]),
+        ).toEqual([
+          // The root's listener, switched on for «manger»'s route.
+          ['default', ['webhook'], 0],
+          ['manger', ['webhook'], 0],
+          ['reports', [], 1],
+        ]);
+        // Every row follows the one process (here a `docker exec`, so not the pid Hermes records).
+        expect(new Set(runtime.gateways().map((gateway) => gateway.pid)).size).toBe(1);
+        // No gateway of its own: nothing holds a lock or writes a record in «manger»'s home.
+        expect(existsSync(path.join(root, 'profiles', 'manger', 'gateway.lock'))).toBe(false);
+        expect(readGatewayRecord(path.join(root, 'profiles', 'manger'))).toBeNull();
+        // The block the files lacked, written by the hub for the gateway that serves each one.
+        for (const home of [root, path.join(root, 'profiles', 'manger')]) {
+          expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(`${PROVIDER}:`);
+        }
+        // «manger»'s webhook route, copied by the hub into the root's file, is answered by the
+        // one gateway's listener under `/p/manger/` — Hermes accepts the signed delivery.
+        await vi.waitFor(async () => expect((await deliverToManger())?.status).toBe(202), {
+          timeout: 120_000,
+          interval: 2_000,
+        });
 
-      // Each wrote its own state file and holds its own lock: nothing shared, nothing refused.
-      await vi.waitFor(
-        () => {
-          const defaultRecord = readGatewayRecord(root);
-          const mangerRecord = readGatewayRecord(path.join(root, 'profiles', 'manger'));
-          expect(defaultRecord?.gatewayState).toBe('running');
-          expect(mangerRecord?.gatewayState).toBe('running');
-          expect(defaultRecord?.pid).toBeTruthy();
-          expect(defaultRecord?.pid).not.toBe(mangerRecord?.pid);
-        },
-        { timeout: 120_000, interval: 2_000 },
-      );
-      expect(existsSync(path.join(root, 'gateway.lock'))).toBe(true);
-      expect(existsSync(path.join(root, 'profiles', 'manger', 'gateway.lock'))).toBe(true);
-      // The block the files lacked, written by the hub before each start.
-      for (const home of [root, path.join(root, 'profiles', 'manger')]) {
-        expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(`${PROVIDER}:`);
-      }
+        const fromDefault = await ask(DEFAULT_PORT, runtime.apiKey()!);
+        expect(fromDefault, JSON.stringify(fromDefault)).toMatchObject({ status: 200 });
+        expect(fromDefault.text).toContain('pong');
+        expect(seen.length).toBeGreaterThanOrEqual(1);
+        expect(seen.every((request) => request.authorization === 'Bearer sk-real-test')).toBe(true);
+      },
+      420_000,
+    );
 
-      const fromDefault = await ask(DEFAULT_PORT, runtime.apiKey()!);
-      const fromManger = await ask(MANGER_PORT, 'm'.repeat(48));
-      expect(fromDefault, JSON.stringify(fromDefault)).toMatchObject({ status: 200 });
-      expect(fromManger, JSON.stringify(fromManger)).toMatchObject({ status: 200 });
-      expect(fromDefault.text).toContain('pong');
-      expect(fromManger.text).toContain('pong');
-      // Through the provider the hub named, with the key the hub handed the gateways.
-      expect(seen.length).toBeGreaterThanOrEqual(2);
-      expect(seen.every((request) => request.authorization === 'Bearer sk-real-test')).toBe(true);
+    it.skipIf(perHost)(
+      "runs the default gateway and «manger»'s side by side, each answering through the custom provider",
+      async () => {
+        expect(await runtime.start()).toBe('managed');
+        await vi.waitFor(
+          async () => {
+            expect(await healthy(DEFAULT_PORT)).toBe(true);
+            expect(await healthy(MANGER_PORT)).toBe(true);
+          },
+          { timeout: 240_000, interval: 2_000 },
+        );
+        expect(
+          runtime
+            .gateways()
+            .map((gateway) => [gateway.profile, gateway.channels, gateway.cronJobs]),
+        ).toEqual([
+          ['default', [], 0],
+          ['manger', ['webhook'], 0],
+          ['reports', [], 1],
+        ]);
 
-      const memory = execFileSync(
-        'docker',
-        ['stats', '--no-stream', '--format', '{{.MemUsage}}', box],
-        { encoding: 'utf8' },
-      ).trim();
-      console.log(`the container with three gateways: ${memory}; provider calls: ${seen.length}`);
-    }, 420_000);
+        // Each wrote its own state file and holds its own lock: nothing shared, nothing refused.
+        await vi.waitFor(
+          () => {
+            const defaultRecord = readGatewayRecord(root);
+            const mangerRecord = readGatewayRecord(path.join(root, 'profiles', 'manger'));
+            expect(defaultRecord?.gatewayState).toBe('running');
+            expect(mangerRecord?.gatewayState).toBe('running');
+            expect(defaultRecord?.pid).toBeTruthy();
+            expect(defaultRecord?.pid).not.toBe(mangerRecord?.pid);
+          },
+          { timeout: 120_000, interval: 2_000 },
+        );
+        expect(existsSync(path.join(root, 'gateway.lock'))).toBe(true);
+        expect(existsSync(path.join(root, 'profiles', 'manger', 'gateway.lock'))).toBe(true);
+        // The block the files lacked, written by the hub before each start.
+        for (const home of [root, path.join(root, 'profiles', 'manger')]) {
+          expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain(`${PROVIDER}:`);
+        }
 
-    it("fires «reports»'s scheduled job in its own gateway, with no channel there, and leaves the one kanban dispatcher to the default gateway", async () => {
+        // «manger»'s webhook route on its own listener.
+        expect((await deliverToManger())?.status).toBe(202);
+
+        const fromDefault = await ask(DEFAULT_PORT, runtime.apiKey()!);
+        const fromManger = await ask(MANGER_PORT, 'm'.repeat(48));
+        expect(fromDefault, JSON.stringify(fromDefault)).toMatchObject({ status: 200 });
+        expect(fromManger, JSON.stringify(fromManger)).toMatchObject({ status: 200 });
+        expect(fromDefault.text).toContain('pong');
+        expect(fromManger.text).toContain('pong');
+        // Through the provider the hub named, with the key the hub handed the gateways.
+        expect(seen.length).toBeGreaterThanOrEqual(2);
+        expect(seen.every((request) => request.authorization === 'Bearer sk-real-test')).toBe(true);
+
+        const memory = execFileSync(
+          'docker',
+          ['stats', '--no-stream', '--format', '{{.MemUsage}}', box],
+          { encoding: 'utf8' },
+        ).trim();
+        console.log(`the container with three gateways: ${memory}; provider calls: ${seen.length}`);
+      },
+      420_000,
+    );
+
+    it("fires «reports»'s scheduled job in the gateway that serves it, with no channel there, and leaves the one kanban dispatcher to the default gateway", async () => {
       const home = path.join(root, 'profiles', 'reports');
       const outputs = () => {
         try {
@@ -449,7 +570,8 @@ describe.skipIf(!image)(
       };
       await vi.waitFor(
         () => {
-          for (const profile of ['manger', 'reports']) {
+          // One gateway per host: there is no profile gateway to tell.
+          for (const profile of perHost ? [] : ['manger', 'reports']) {
             expect(logsOf(path.join(root, 'profiles', profile))).toMatch(
               /disabled via HERMES_KANBAN_DISPATCH_IN_GATEWAY/,
             );

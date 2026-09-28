@@ -3069,14 +3069,15 @@ export class ModelsService {
    *
    * - `config.yaml`: the endpoints (`providers:` blocks) of those providers — a turn that
    *   names `corehub-<slug>` finds it, with this profile's address when it has its own.
-   * - `.env`: Hermes reads a profile's `.env` **before** the process environment
-   *   (`agent/secret_scope.py` §get_secret), and the process environment is the root's —
-   *   Hermes loads the root `.env` into it at start. So for every variable the hub owns, the
-   *   profile's `.env` says what differs from the root: its own key (which then wins), the
-   *   shared key where the root has its own instead, or an empty value where the root has a
-   *   key this profile must not use. A variable whose value is the root's is left out — the
-   *   shared keys stay in one place. Every other line of the file is left as it is, and a
-   *   copy of `default` (`--clone-from`) loses the keys it copied that are not its own.
+   * - `.env`: every key this profile uses — its own, and the shared ones it has no own of —
+   *   and an empty value where the root has a key this profile must not use. Hermes reads a
+   *   profile's `.env` before the process environment (`agent/secret_scope.py` §get_secret),
+   *   and from v2026.9.21 (`0.21.4`) a turn in a named profile reads **only** that `.env`: its
+   *   secret scope no longer falls back on the process environment, which is the root's (the
+   *   shared keys used to be left out of a named profile's file and reached it from there;
+   *   DECISIONS §132). Written the same on every Hermes version. Every other line of the file is
+   *   left as it is, and a copy of `default` (`--clone-from`) loses the keys it copied that are
+   *   not its own.
    *
    * Called for every named profile on each save, right after the hub makes a profile, and
    * for one profile before each of its turns (`prepareProfile`), so a profile made later —
@@ -3120,9 +3121,9 @@ export class ModelsService {
       ];
       const values: Record<string, string> = {};
       for (const name of owned) {
-        if (ownValues[name] === rootValues[name]) continue;
+        if (ownValues[name] !== undefined) values[name] = ownValues[name];
         // Empty blocks the root's key: this profile has no key of that name to use.
-        values[name] = ownValues[name] ?? '';
+        else if (rootValues[name] !== undefined) values[name] = '';
       }
       const env = writeHermesEnv({ file: path.join(profileHome, '.env'), owned, values });
       if (written.dirty || env.dirty || plugin.length > 0) {

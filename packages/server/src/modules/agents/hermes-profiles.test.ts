@@ -82,6 +82,17 @@ describe("Hermes's profiles", () => {
     await expect(profiles.create('worker', { kind: 'blank' })).rejects.toThrow(
       new HermesProfileError("Error: Profile 'worker' already exists"),
     );
+
+    // Hermes v2026.9.21 and later: its process warning on stderr, the refusal on stdout.
+    answer = {
+      code: 1,
+      stdout: "Error: A profile named 'worker' already exists.\n",
+      stderr:
+        '[hermes] WARNING: this process is PID 1 with no init above it (entrypoint override?).\n',
+    };
+    await expect(profiles.create('worker', { kind: 'blank' })).rejects.toThrow(
+      new HermesProfileError("Error: A profile named 'worker' already exists."),
+    );
   });
 });
 

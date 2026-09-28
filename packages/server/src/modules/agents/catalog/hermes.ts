@@ -1,6 +1,7 @@
 // Hermes Agent — the base runtime (ADR 0006). It ships inside the image, so the hub never
 // installs or removes it; the entry exists so the registry, the adapters and the clients
 // all read Hermes from the same place as every other agent.
+import { HERMES_FLOOR } from './hermes-versions.js';
 import type { CatalogEntry } from './types.js';
 
 export const hermes: CatalogEntry = {
@@ -13,13 +14,14 @@ export const hermes: CatalogEntry = {
   protocolArgs: ['acp'],
   versionArgs: ['--version'],
   install: { kind: 'bundled' },
-  // The oldest Hermes the hub is known to work with: release v2026.9.14, the version the image
-  // pins (packages/server/Dockerfile `HERMES_REF`) and every `*.real.test.ts` runs against. The
-  // hub's own commands (`profile create --no-alias --clone-from`, `plugins … --no-enable`,
-  // `kanban`, the TUI gateway's `llm.oneshot`, `session.steer`, `command.dispatch`, the API
-  // server under `API_SERVER_KEY`) were read from that source; an older Hermes is not proven
-  // (a person's own install may be any age, `docs/changes/2026-09-27-…-existing-hermes.md`).
-  minimumVersion: '0.21.3',
+  // The oldest Hermes the hub is known to work with (`HERMES_FLOOR`, release v2026.9.14): every
+  // `*.real.test.ts` runs against it in CI beside the release the image carries (`HERMES_TESTED`,
+  // DECISIONS §132). The hub's own commands (`profile create --no-alias --clone-from`,
+  // `plugins … --no-enable`, `kanban`, the TUI gateway's `llm.oneshot`, `session.steer`,
+  // `command.dispatch`, the API server under `API_SERVER_KEY`) were read from that source; an
+  // older Hermes is not proven (a person's own install may be any age,
+  // `docs/changes/2026-09-27-…-existing-hermes.md`).
+  minimumVersion: HERMES_FLOOR.version,
   // Hermes's API server documents `GET /health` (docs/inspirations/hermes-agent.md §1).
   // Hermes does not take its keys from the process environment the hub spawns it with:
   // it reads its own `${HERMES_HOME}/.env`, which the hub writes (ADR 0010

@@ -25,6 +25,7 @@ import {
   removeWebhook,
   testDelivery,
   webhookListener,
+  webhookTarget,
   type HermesWebhookRoute,
 } from './hermes-webhooks.js';
 import { profileHome } from './profile-home.js';
@@ -42,6 +43,16 @@ export interface WebhookRouteHelpers {
   followChannels(request: FastifyRequest, profile: string): void;
   /** Hermes's root home, or null when the hub has no Hermes. */
   root(app: FastifyInstance): string | null;
+  /**
+   * The Hermes the hub runs serves every profile from one gateway (v2026.9.21 and later): a named
+   * profile's routes are answered by the root's listener (`hermes-webhooks.ts`). Absent: never.
+   */
+  sharedIngress?(app: FastifyInstance): boolean;
+  /**
+   * Copies the named profiles' routes to the root's file for that one gateway
+   * (`shareProfileWebhooks`), starting it again when its listener had to be switched on.
+   */
+  shareWebhooks?(app: FastifyInstance): Promise<void>;
   fetchImpl?: typeof fetch;
 }
 
@@ -102,6 +113,24 @@ export async function registerWebhookRoutes(
 ): Promise<void> {
   const fetchImpl = helpers.fetchImpl ?? fetch;
   const slugOf = (request: FastifyRequest) => request.workspace?.slug ?? 'default';
+  const shared = () => helpers.sharedIngress?.(app) ?? false;
+  /** A named profile's routes changed: on one gateway per host its copies in the root follow. */
+  const share = async (request: FastifyRequest, profile: string) => {
+    if (profile === 'default' || !shared()) return;
+    await helpers.shareWebhooks?.(app).catch((error: unknown) => {
+      request.log.warn(
+        { err: error, profile },
+        'agents: webhook routes not shared with the gateway',
+      );
+    });
+  };
+  /** Where a delivery goes (`webhookTarget`); a copy not made yet reads as a listener that is down. */
+  const targetOf = (home: string, profile: string, name: string) => {
+    const root = helpers.root(app) ?? home;
+    const target = webhookTarget(root, home, profile, name, shared());
+    if (!target) throw new WebhookError('listener_down');
+    return target;
+  };
 
   /** The homes of the profiles other than `home`, whose listeners' ports are taken. */
   const othersOf = (home: string): string[] => {
@@ -119,9 +148,13 @@ export async function registerWebhookRoutes(
       const { home, profile } = helpers.toolHome(request, params.agent_id as string);
       try {
         const listener = webhookListener(home);
-        const health = listener.enabled
-          ? helpers.listenerStatus(request, profile, home)
-          : { status: 'offline', error: null };
+        // One gateway per host: the root's listener answers this profile's routes.
+        const root = helpers.root(app);
+        const health = !listener.enabled
+          ? { status: 'offline', error: null }
+          : profile !== 'default' && shared() && root
+            ? helpers.listenerStatus(request, 'default', root)
+            : helpers.listenerStatus(request, profile, home);
         return {
           listener: {
             enabled: listener.enabled,
@@ -167,6 +200,7 @@ export async function registerWebhookRoutes(
         // A listener switched on now needs its gateway to start again; a route added to one
         // that listens is read on the next POST.
         if (!wasOn) helpers.followChannels(request, profile);
+        await share(request, profile);
         request.log.info({ profile, webhook: route.name }, 'agents: webhook route created');
         return toWire(route, slugOf(request));
       } catch (error) {
@@ -178,11 +212,12 @@ export async function registerWebhookRoutes(
   defineRoute(app, deps, {
     operationId: 'agents.deleteWebhook',
     status: 204,
-    handler: (request, { params }) => {
+    handler: async (request, { params }) => {
       const { home, profile } = helpers.toolHome(request, params.agent_id as string);
       try {
         removeWebhook(home, params.route_name as string);
         if (disableUnusedListener(home)) helpers.followChannels(request, profile);
+        await share(request, profile);
         request.log.info({ profile, webhook: params.route_name }, 'agents: webhook route deleted');
         return null;
       } catch (error) {
@@ -194,7 +229,7 @@ export async function registerWebhookRoutes(
   defineRoute(app, deps, {
     operationId: 'agents.testWebhook',
     handler: async (request, { params }) => {
-      const { home } = helpers.toolHome(request, params.agent_id as string);
+      const { home, profile } = helpers.toolHome(request, params.agent_id as string);
       const route = findWebhook(home, params.route_name as string);
       if (!route) throw notFound({ resource: 'webhook' });
       const delivery = testDelivery(
@@ -203,12 +238,15 @@ export async function registerWebhookRoutes(
         'Hello from the Core Hub webhook test',
       );
       try {
+        const target = targetOf(home, profile, route.name);
         return await postToListener(
-          webhookListener(home),
-          route.name,
+          target.listener,
+          target.name,
           delivery.body,
           delivery.headers,
           fetchImpl,
+          undefined,
+          target.profile,
         );
       } catch (error) {
         return webhookFault(error);
@@ -251,7 +289,16 @@ export async function registerWebhookRoutes(
         }
         let answer;
         try {
-          answer = await postToListener(webhookListener(home), name, body, headers, fetchImpl);
+          const target = targetOf(home, workspace.isDefault ? 'default' : workspace.slug, name);
+          answer = await postToListener(
+            target.listener,
+            target.name,
+            body,
+            headers,
+            fetchImpl,
+            undefined,
+            target.profile,
+          );
         } catch (error) {
           return webhookFault(error);
         }

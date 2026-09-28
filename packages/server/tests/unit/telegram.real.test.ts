@@ -6,7 +6,8 @@
  * model's thinking», «answer in groups only when mentioned»). Hermes's Telegram adapter is pointed
  * at a fake Bot API on this host (`platforms.telegram.extra.base_url`, Hermes's own key for a
  * local Bot API server — written by this test only). Then the gateway the hub would start for
- * the profile, `hermes -p tgbot gateway run`:
+ * the profile — `hermes -p tgbot gateway run` on a Hermes older than v2026.9.21, the root's
+ * `hermes gateway run` serving every profile from it on (`hermes-real.ts`, DECISIONS §129):
  *
  * 0. installs python-telegram-bot on first start, as it does in the hub's image (which ships no
  *    messaging extras): Hermes's lazy install into the data volume
@@ -31,7 +32,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { activeChannels, linkTelegram, writeEnvValue } from '../../src/modules/agents/channels.js';
-import { readGatewayRecord } from '../../src/modules/agents/hermes-gateways.js';
+import {
+  gatewayArgsFor,
+  gatewayRecordFor,
+  servesEveryProfileFromOneGateway,
+} from './hermes-real.js';
 import { writeTelegramSettings } from '../../src/modules/agents/telegram-settings.js';
 import { isMap, parseDocument } from 'yaml';
 import { writeFileSync } from 'node:fs';
@@ -160,7 +165,12 @@ describe.skipIf(!image)(
       linkTelegram(home, {
         token: TOKEN,
         bot: { id: String(BOT.id), username: BOT.username, name: BOT.first_name },
-        allowedUsers: ['111222333'],
+        // One gateway per host (Hermes v2026.9.21 and later) decides a stranger's DM from the
+        // default profile's settings, not the served profile's (`gateway/authz_mixin.py`
+        // §_get_unauthorized_dm_behavior, v2026.9.24): with an allowlist in a named profile it
+        // ignores strangers instead of pairing them, whatever that profile says. Without one it
+        // pairs, which is what this checks there (a known limitation, DECISIONS §132).
+        allowedUsers: servesEveryProfileFromOneGateway(image!) ? [] : ['111222333'],
       });
       writeTelegramSettings(home, { show_reasoning: true, require_mention: true });
       // This test only: Telegram is the scripted one, reached directly.
@@ -192,7 +202,6 @@ describe.skipIf(!image)(
         `TELEGRAM_BOT_TOKEN=${TOKEN}`,
       );
 
-      // What the hub's supervisor runs for a named profile (`hermes-gateways.ts`).
       gateway = spawn(
         'docker',
         [
@@ -203,14 +212,17 @@ describe.skipIf(!image)(
           'HERMES_KANBAN_DISPATCH_IN_GATEWAY=false',
           '-e',
           'PYTHONUNBUFFERED=1',
+          // A test-only switch the profile's `.env` also carries; one gateway per host reads
+          // `HERMES_TELEGRAM_*` from its own environment only (`agent/secret_scope.py`).
+          '-e',
+          'HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=true',
           '-w',
           home,
           box,
           HERMES,
-          '-p',
-          'tgbot',
-          'gateway',
-          'run',
+          // What the hub runs for «tgbot»: its own gateway, or the root's that serves every
+          // profile (`hermes-gateways.ts`, DECISIONS §129).
+          ...gatewayArgsFor(image!, 'tgbot'),
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
@@ -219,7 +231,7 @@ describe.skipIf(!image)(
 
       await vi.waitFor(
         () => {
-          const record = readGatewayRecord(home);
+          const record = gatewayRecordFor(image!, root, 'tgbot');
           expect(record?.platforms.telegram?.state, log.slice(-3000)).toBe('connected');
         },
         { timeout: Number(process.env.COREHUB_TG_REAL_WAIT ?? 150_000), interval: 1000 },

@@ -196,6 +196,12 @@ export interface ProfileGatewaysOptions {
   rescanProfiles?: (root: string) => Promise<unknown>;
   /** Called when the topology becomes one gateway per host. */
   onTopology?: (topology: GatewayTopology, reason: string) => void;
+  /**
+   * One gateway per host: the named profiles' webhook routes are copied to the root's file before
+   * it serves them (`hermes-webhooks.ts` §shareProfileWebhooks). Resolves true when the root's
+   * listener had to be switched on, so the root gateway starts again to listen.
+   */
+  shareWebhooks?: (root: string) => Promise<boolean>;
 }
 
 const BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000] as const;
@@ -814,8 +820,25 @@ export class ProfileGateways {
       this.gateways.delete(name);
     }
     const root = this.options.root();
-    if (root && !this.closed) await this.bringRootToServe(this.channelProfiles(root), false);
+    if (root && !this.closed) {
+      const profiles = this.channelProfiles(root);
+      if (await this.shareWebhooks(root)) await this.options.rootGateway?.restart();
+      else await this.bringRootToServe(profiles, false);
+    }
     this.changed();
+  }
+
+  /** `shareWebhooks`, never throwing: a route that cannot be copied costs only that route. */
+  private async shareWebhooks(root: string): Promise<boolean> {
+    try {
+      return (await this.options.shareWebhooks?.(root)) ?? false;
+    } catch (error) {
+      this.options.log.warn(
+        { err: error },
+        "hermes: could not give the gateway the named profiles' webhook routes",
+      );
+      return false;
+    }
   }
 
   /** A channel or setting of `profile` changed: the root gateway takes it now. */
@@ -825,7 +848,9 @@ export class ProfileGateways {
     const home = path.join(root, 'profiles', profile);
     if (namedHermesProfiles(root).includes(profile)) this.prepareQuietly(profile, home);
     this.rootRestartedFor = null;
-    await this.bringRootToServe(this.channelProfiles(root), true);
+    const profiles = this.channelProfiles(root);
+    if (await this.shareWebhooks(root)) await this.options.rootGateway?.restart();
+    else await this.bringRootToServe(profiles, true);
     this.changed();
   }
 

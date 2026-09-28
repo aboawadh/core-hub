@@ -225,12 +225,20 @@ function isDirectory(target: string): boolean {
 }
 
 /** Hermes says why on its last line (`Error: Profile 'x' already exists …`). */
-function lastLine(text: string): string {
-  const lines = text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return lines.at(-1) ?? '';
+/**
+ * Hermes's reason: the last line it printed, leaving out its own process warnings
+ * (`[hermes] WARNING: …` — from v2026.9.21 the PID 1 warning of a `docker run --entrypoint
+ * hermes`, printed to stderr while the refusal goes to stdout). `''` when there is nothing else,
+ * so a caller reads the other stream next.
+ */
+export function lastLine(text: string): string {
+  return (
+    text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !/^\[hermes\] WARNING\b/.test(line))
+      .at(-1) ?? ''
+  );
 }
 
 /**

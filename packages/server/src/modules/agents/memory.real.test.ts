@@ -116,18 +116,22 @@ function scriptedModel(): http.Server {
   });
 }
 
-/** What the hub's provider propagation writes into every profile: the route, never the key. */
+/**
+ * A route of the shape the hub's provider propagation writes into every profile, never the key.
+ * Not named `corehub-…`: the hub owns those blocks and takes out one it has no provider for when
+ * the profile is made below (that is what failed here on every Hermes before 2026-09-28).
+ */
 function configFor(port: number): string {
   return [
     'providers:',
-    '  corehub-fake:',
-    '    name: corehub-fake',
+    '  scripted-fake:',
+    '    name: scripted-fake',
     `    base_url: http://127.0.0.1:${port}/v1`,
     '    key_env: COREHUB_FAKE_KEY',
     '    api_mode: chat_completions',
     'model:',
     '  default: fake-1',
-    '  provider: corehub-fake',
+    '  provider: scripted-fake',
     '',
   ].join('\n');
 }
