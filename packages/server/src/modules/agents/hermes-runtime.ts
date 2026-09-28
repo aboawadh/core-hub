@@ -749,6 +749,16 @@ export class HermesRuntime {
         (await readVersion([binary, '--version'], { env })).version);
     const version = await read(hermes, this.cliEnv()).catch(() => null);
     await this.profileGateways.noteVersion(version);
+    // Updated in place to a Hermes with one gateway per host while its gateway runs with the
+    // person's host lock: it moves to this home's own, or the person's gateway is refused.
+    if (
+      this.profileGateways.topology() === 'one-per-host' &&
+      !this.lockIsolated &&
+      this.child &&
+      this.personalInstall()
+    ) {
+      await this.restartRootGateway();
+    }
   }
 
   /**
@@ -928,12 +938,17 @@ export class HermesRuntime {
       return this.mode;
     }
     this.mode = 'managed';
+    // Beside a person's own Hermes the version is read first: a Hermes with one gateway per
+    // host must not take the person's host lock even for a moment (`gatewayLockEnv`).
+    const personal = this.personalInstall();
+    const probed = personal ? this.probeTopology().catch(() => undefined) : null;
+    if (probed) await probed;
     this.launch(binary);
     this.scheduleHealth();
     // Every named profile with a channel to answer on or a job to fire gets its gateway at
     // boot too — once Hermes's version says whether it runs one gateway per host, when the
     // default one serves them all — and the set is checked again from then on.
-    void this.probeTopology()
+    void (probed ?? this.probeTopology())
       .then(() => this.profileGateways.reconcile())
       .catch((error: unknown) => {
         this.log.warn({ err: error }, 'hermes: could not start the profile gateways');

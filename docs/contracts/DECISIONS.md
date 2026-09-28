@@ -4225,8 +4225,9 @@ started a gateway per profile).
 - **Beside a person's own Hermes.** The hub's home is a Hermes root of its own, so on a
   one-gateway-per-host Hermes the gateway and every Hermes command of the hub get
   `HERMES_GATEWAY_LOCK_DIR=<home>/gateway-locks` when the person's `~/.hermes` is not the hub's
-  home. Their gateway and the hub's then each own their home. Never on an older Hermes and never
-  in the image.
+  home. Their gateway and the hub's then each own their home. There the version is read before the
+  gateway's first start, so it never holds the person's host lock even for a moment. Never on an
+  older Hermes and never in the image.
 
 Rejected: `gateway.standalone: true` per profile (Hermes calls it a temporary shim to be
 removed); `--force` (Hermes's escape from its own safety check); attaching to the person's gateway

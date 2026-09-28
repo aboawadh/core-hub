@@ -800,16 +800,24 @@ describe('the runtime on a Hermes with one gateway per host', () => {
     await runtime.stop();
   });
 
-  it("on 0.21.5 beside a person's own Hermes, the start after the version is read has its own host lock", async () => {
+  it("on 0.21.5 beside a person's own Hermes, reads the version first and starts with its own host lock", async () => {
     const { root, of, runtime } = await managed({
       inherited: { HOME: personalHome() },
       version: '0.21.5',
     });
-    await vi.waitFor(() => expect(runtime.profileGateways.topology()).toBe('one-per-host'));
-    // The version is read after the first start; the next start uses it.
-    await runtime.restart();
-    await vi.waitFor(() => expect(of('default')).toHaveLength(2));
-    expect(of('default')[1]?.env.HERMES_GATEWAY_LOCK_DIR).toBe(path.join(root, 'gateway-locks'));
+    expect(runtime.profileGateways.topology()).toBe('one-per-host');
+    expect(of('default')).toHaveLength(1);
+    expect(of('default')[0]?.env.HERMES_GATEWAY_LOCK_DIR).toBe(path.join(root, 'gateway-locks'));
+    await runtime.stop();
+  });
+
+  it("never moves the host lock on 0.21.3, even beside a person's own Hermes", async () => {
+    const { of, runtime } = await managed({
+      inherited: { HOME: personalHome() },
+      version: '0.21.3',
+    });
+    expect(of('default')[0]?.env.HERMES_GATEWAY_LOCK_DIR).toBeUndefined();
+    expect(runtime.cliEnv().HERMES_GATEWAY_LOCK_DIR).toBeUndefined();
     await runtime.stop();
   });
 });

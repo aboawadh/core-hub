@@ -50,9 +50,11 @@ DECISIONS §129 (مقترح — بانتظار تأكيد المالك):
   جديد، ولا تُكرَّر للمجموعة نفسها إلا إذا غيّر أحد شيئًا أو ضغط «إعادة التشغيل».
 - **بجانب Hermes الخاص بالمستخدم**: home المركز جذر Hermes مستقل، فعلى Hermes الأحدث تأخذ
   البوابة وكل أوامر Hermes التي يشغّلها المركز `HERMES_GATEWAY_LOCK_DIR=<home>/gateway-locks`
-  حين يكون `~/.hermes` غير home المركز. يحدث ذلك من الإصدار، أو فورًا بعد أول خروج 75 بهذه
-  الكلمات ثم تُشغَّل البوابة مجددًا فورًا (بلا حالة خطأ). لا يحدث أبدًا على Hermes أقدم ولا في
-  الصورة (home واحد).
+  حين يكون `~/.hermes` غير home المركز. في هذه الحالة يُقرأ الإصدار **قبل** أول تشغيل للبوابة
+  كي لا تأخذ قفل المستخدم ولو لحظة (فتُرفض بوابته هو)، وإن حُدِّث Hermes في مكانه والبوابة تعمل
+  بالقفل العام تُعاد بالقفل المعزول. وإن لم يُعرف الإصدار فأول خروج 75 بهذه الكلمات يعزل القفل
+  وتُشغَّل البوابة مجددًا فورًا (بلا حالة خطأ). لا يحدث أبدًا على Hermes أقدم ولا في الصورة
+  (home واحد).
 - مرفوض: `gateway.standalone: true` لكل بروفايل (يسميه Hermes حلًا مؤقتًا سيُزال)، و`--force`
   (تجاوز فحص الأمان في Hermes)، والارتباط ببوابة المستخدم (تخدم home آخر).
 
@@ -78,18 +80,15 @@ Hermes الأحدث.
   الجذرية، مقبض البوابة الجذرية، وعدم تكرار العملية في شاشة الأداء.
 - `packages/server/src/modules/agents/index.ts` — قناة في بروفايل مسمّى لم يظهرها Hermes بعد
   تُعرض «غير معروف» لا «تحتاج إعادة تشغيل» في الوضع الجديد.
-- الاختبارات: `hermes-gateways.test.ts` (+10)، `hermes-control.test.ts` (جديد، 4).
+- الاختبارات: `hermes-gateways.test.ts` (+11)، `hermes-control.test.ts` (جديد، 4).
 - `docs/contracts/DECISIONS.md` §129، `docs/STATUS.md`.
 
 ## الفحوص (الأوامر ونواتجها الفعلية)
 محليًا عبر mj-run (عاملان كحد أقصى):
 ```
-$ npx vitest run --maxWorkers=2 src/modules/agents/hermes-gateways.test.ts src/modules/agents/hermes-runtime.test.ts src/modules/agents/channels-gateway.routes.test.ts src/modules/agents/hermes-processes.test.ts
- Test Files  4 passed (4)
-      Tests  64 passed (64)
-$ npx vitest run --maxWorkers=2 src/modules/agents/hermes-control.test.ts
- Test Files  1 passed (1)
-      Tests  4 passed (4)
+$ npx vitest run --maxWorkers=2 src/modules/agents/hermes-gateways.test.ts src/modules/agents/hermes-runtime.test.ts src/modules/agents/channels-gateway.routes.test.ts src/modules/agents/hermes-processes.test.ts src/modules/agents/hermes-control.test.ts
+ Test Files  5 passed (5)
+      Tests  69 passed (69)
 $ pnpm lint
 All matched files use Prettier code style!
 rc=0
