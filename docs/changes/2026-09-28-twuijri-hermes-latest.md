@@ -102,7 +102,16 @@ node --test scripts/hermes-watch.test.mjs → pass 17, fail 0
 pnpm lint → All matched files use Prettier code style!   pnpm typecheck → exit 0
 contracts:lint OK · contracts:compat OK — no breaking change against v1.1.4 · check-clients OK · i18n:check OK
 ```
-CI: يُشغَّل عند فتح الطلب (#218).
+CI على الطلب #218 (الالتزام `a5ae3a11`، كل الفحوص خضراء):
+```
+pass | Real Hermes suites (floor)            ← كل *.real.test.ts على صورة بهرمز v2026.9.14
+pass | Real Hermes suites (pinned)           ← كل *.real.test.ts على صورة بهرمز v2026.9.24
+pass | Lint, typecheck, contracts, tests, build (gate)
+pass | Server unit tests (shard 1/3, 2/3, 3/3)
+pass | Web smoke journeys (Playwright against the real hub)
+pass | Desktop app smoke · Docker image builds and answers /health · db:generate + db:migrate
+pass | Android build, unit tests, lint · Build and test on the iOS simulator · Generate the Swift client
+```
 
 ## المخاطر والرجوع
 - كتابة المفاتيح المشتركة في `.env` كل بروفايل تكرّر المفتاح على القرص (نفس الـvolume ونفس
