@@ -45,6 +45,13 @@ describe('http composition', () => {
       headers: { 'accept-language': 'ar,en;q=0.5' },
     });
     expect(ar.json()).toEqual({ error: 'العنصر المطلوب غير موجود.', code: 'not_found' });
+    // A language the hub has no words for falls back to English, never to the raw key (ADR 0028).
+    const fr = await hub.app.inject({
+      method: 'GET',
+      url: '/api/v1/nope',
+      headers: { 'accept-language': 'fr-FR,fr;q=0.9' },
+    });
+    expect(fr.json()).toEqual({ error: 'The requested item does not exist.', code: 'not_found' });
   });
 
   it('mounts a documented 501 stub for every contract operation no module implements', async () => {

@@ -59,8 +59,9 @@ export function WorkspacesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <p className="text-xs text-muted">{t('workspaces.note')}</p>
+      {/* The buttons move under the note when a language's words need the room (ADR 0028). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs text-muted">{t('workspaces.note')}</p>
         <Button
           className="ms-auto"
           size="sm"
@@ -116,9 +117,11 @@ function WorkspaceCard({ workspace }: { workspace: Workspace }) {
     <Card tone="flat" padding="sm">
       <CardHeader
         title={
-          <span className="flex items-center gap-2">
-            <span dir="auto">{workspace.name}</span>
-            <span className="text-xs text-muted" dir="ltr">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate" dir="auto">
+              {workspace.name}
+            </span>
+            <span className="min-w-0 truncate text-xs text-muted" dir="ltr">
               {workspace.slug}
             </span>
             {isCurrent && <Badge tone="accent">{t('workspaces.current')}</Badge>}

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/context.js';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
+import { serverLocale } from '../i18n/index.js';
 import { Button, Notice } from '../ui/index.js';
 import {
   BrowserPushError,
@@ -96,7 +97,7 @@ export function BrowserPushSection({ environment }: { environment?: PushEnvironm
               void run(() =>
                 enableBrowserPush(client, env, {
                   publicKey: webPushKey,
-                  locale: language === 'en' ? 'en' : 'ar',
+                  locale: serverLocale(language),
                   userId,
                 }),
               )

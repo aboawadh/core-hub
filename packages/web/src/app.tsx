@@ -7,6 +7,7 @@ import { BrowserPushResume } from './devices/BrowserPushResume.js';
 import { SessionStore } from './auth/store.js';
 import { ThemeProvider, useTheme } from './design/theme.js';
 import { I18nProvider } from './i18n/context.js';
+import { shownLanguage } from './i18n/index.js';
 import { canOpen, legacyRedirect, navigation, routeOf } from './navigation/manifest.js';
 import { HOME_PATH, LOGIN_PATH, SETUP_PATH, routes } from './navigation/routes.js';
 import { RealtimeProvider } from './realtime/context.js';
@@ -60,7 +61,7 @@ const LEGACY_PREFIXES = Object.keys(navigation.legacyRoutes?.web ?? {}).filter(
 
 function Localised({ children }: { children: ReactNode }) {
   const { prefs } = useTheme();
-  return <I18nProvider language={prefs.language}>{children}</I18nProvider>;
+  return <I18nProvider language={shownLanguage(prefs.language)}>{children}</I18nProvider>;
 }
 
 export interface AppProps {

@@ -1,36 +1,25 @@
 /**
  * The desktop app's own words: the first-run screen, the tray, the menu, the dialogs.
  * Everything inside the window after that is the web client's, in its own catalogue.
- * `pnpm i18n:check` holds `src/i18n/{ar,en}.json` to the same keys and placeholders.
+ * The languages come from the registry (locales/languages.json, ADR 0028); `pnpm i18n:check`
+ * holds Arabic and English to the same keys and placeholders and reports every other
+ * language's coverage. A key a language lacks falls back along its chain to English.
  */
-import ar from '../i18n/ar.json' with { type: 'json' };
-import en from '../i18n/en.json' with { type: 'json' };
+import { createTranslate, directionOfLanguage } from '@corehub/contracts/languages';
+import { CATALOGUES } from '../i18n/catalogues.js';
 import type { Language } from './config.js';
 
-type Catalogue = { [key: string]: string | Catalogue };
-const CATALOGUES: Record<Language, Catalogue> = { ar, en };
-
-function lookup(catalogue: Catalogue, key: string): string | undefined {
-  let node: string | Catalogue | undefined = catalogue;
-  for (const part of key.split('.')) {
-    if (!node || typeof node === 'string') return undefined;
-    node = node[part];
-  }
-  return typeof node === 'string' ? node : undefined;
-}
+const translateIn = createTranslate((code) => CATALOGUES[code]);
 
 export function translate(
   language: Language,
   key: string,
   params: Record<string, string | number> = {},
 ): string {
-  const text = lookup(CATALOGUES[language], key) ?? lookup(CATALOGUES.en, key) ?? key;
-  return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name: string) =>
-    name in params ? String(params[name]) : match,
-  );
+  return translateIn(language, key, params);
 }
 
-export const direction = (language: Language): 'rtl' | 'ltr' => (language === 'ar' ? 'rtl' : 'ltr');
+export const direction = (language: Language): 'rtl' | 'ltr' => directionOfLanguage(language);
 
 /**
  * A Latin value (an address, a version) inside an Arabic sentence, isolated so the bidi

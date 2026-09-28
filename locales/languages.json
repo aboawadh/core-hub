@@ -1,0 +1,63 @@
+{
+  "$schema": "./languages.schema.json",
+  "$comment": "The one list of UI languages (ADR 0028). Every client and the hub read it: the language pickers, <html lang/dir>, the fallback chain, Intl formatting. `pnpm i18n:new <code>` adds an entry and every platform's catalogue; `pnpm i18n:check` keeps them in step. Pseudo-locales are for tests only and never listed to a person.",
+  "languages": [
+    {
+      "code": "ar",
+      "englishName": "Arabic",
+      "nativeName": "العربية",
+      "direction": "rtl",
+      "status": "complete",
+      "required": true,
+      "fallback": ["en"],
+      "numerals": "latn"
+    },
+    {
+      "code": "en",
+      "englishName": "English",
+      "nativeName": "English",
+      "direction": "ltr",
+      "status": "complete",
+      "required": true,
+      "fallback": [],
+      "numerals": "latn"
+    }
+  ],
+  "pseudo": [
+    {
+      "code": "en-XA",
+      "base": "en",
+      "direction": "ltr",
+      "style": "accented",
+      "$comment": "About 40% longer, accented Latin, in brackets: finds hard-coded text, truncation and overflow."
+    },
+    {
+      "code": "ar-XB",
+      "base": "ar",
+      "direction": "rtl",
+      "style": "long-rtl",
+      "$comment": "Arabic stretched by about 40%: long right-to-left text."
+    },
+    {
+      "code": "zh-XC",
+      "base": "en",
+      "direction": "ltr",
+      "style": "cjk",
+      "$comment": "Full-width CJK: wide glyphs, no spaces to break at."
+    },
+    {
+      "code": "th-XD",
+      "base": "en",
+      "direction": "ltr",
+      "style": "tall",
+      "$comment": "Thai with stacked tone marks and Vietnamese-style diacritics: tall glyphs that clip under a tight line height."
+    },
+    {
+      "code": "en-XK",
+      "base": "en",
+      "direction": "ltr",
+      "style": "tagged",
+      "$comment": "English with each string's key appended in zero-width characters: measures the room of every label (pnpm i18n:limits --measure). Never a journey's locale."
+    }
+  ]
+}

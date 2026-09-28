@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../auth/context.js';
 import { useI18n } from '../i18n/context.js';
+import { serverLocale } from '../i18n/index.js';
 import { browserEnvironment, resumeBrowserPush, type PushEnvironment } from './browserPush.js';
 
 export function BrowserPushResume({ environment }: { environment?: PushEnvironment }) {
@@ -18,7 +19,7 @@ export function BrowserPushResume({ environment }: { environment?: PushEnvironme
   // The language at the moment of signing in is the one registered; changing it later is
   // not a sign-in.
   const locale = useRef<'ar' | 'en'>('ar');
-  locale.current = language === 'en' ? 'en' : 'ar';
+  locale.current = serverLocale(language);
   useEffect(() => {
     const before = seen.current;
     seen.current = userId;

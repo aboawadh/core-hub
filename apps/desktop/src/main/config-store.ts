@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { isUiLanguage } from '@corehub/contracts/languages';
 import { parseConfig, type DesktopConfig } from '../shared/config.js';
 
 export class ConfigStore {
@@ -47,12 +48,12 @@ export class ConfigStore {
 }
 
 /** The saved language, read before the app is ready (Chromium takes `--lang` only then). */
-export function parseConfigLanguage(dir: string): 'ar' | 'en' | null {
+export function parseConfigLanguage(dir: string): string | null {
   try {
     const raw = JSON.parse(readFileSync(path.join(dir, 'desktop.json'), 'utf8')) as {
       language?: unknown;
     };
-    return raw.language === 'ar' || raw.language === 'en' ? raw.language : null;
+    return isUiLanguage(raw.language) ? raw.language : null;
   } catch {
     return null;
   }

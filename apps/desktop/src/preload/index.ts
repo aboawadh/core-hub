@@ -103,7 +103,7 @@ if (location.protocol === 'file:') {
     installHermes: () => ipcRenderer.invoke(CHANNELS.welcomeInstallHermes),
     onInstallLog: (listener) => listen<string>(CHANNELS.welcomeInstallLog, listener),
     setLanguage: (language: Language) =>
-      ipcRenderer.invoke(CHANNELS.welcomeLanguage, language === 'ar' ? 'ar' : 'en'),
+      ipcRenderer.invoke(CHANNELS.welcomeLanguage, String(language)),
     onPrefill: (listener) => listen<string>(CHANNELS.welcomePrefill, listener),
   };
   contextBridge.exposeInMainWorld('corehubWelcome', welcome);

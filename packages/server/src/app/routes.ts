@@ -8,7 +8,7 @@ import {
   type ClientMethod,
   type OpenApiDocument,
 } from '@corehub/contracts';
-import { pickLanguage, type Language } from '../i18n/index.js';
+import { pickLanguage, pickUiLanguage, type Language, type UiLanguage } from '../i18n/index.js';
 import { HubError, notImplemented } from '../lib/errors.js';
 import type { HubModule } from '../lib/module.js';
 import type { HubDatabase } from './db.js';
@@ -21,7 +21,13 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** Workspace scope (ADR 0005). Defaults to `default` until auth enforces it. */
     hubProfile: string;
+    /** Arabic or English: what the hub's own sentences and stored locales are written in. */
     language: Language;
+    /**
+     * The registered UI language the request asked for (ADR 0028): error envelopes follow it,
+     * falling back along its chain to English for a key its catalogue lacks.
+     */
+    uiLanguage: UiLanguage;
   }
 }
 
@@ -58,20 +64,22 @@ export async function registerRoutes(
 ): Promise<RoutesReport> {
   app.decorateRequest('hubProfile', DEFAULT_PROFILE);
   app.decorateRequest('language', 'en');
+  app.decorateRequest('uiLanguage', 'en');
   app.addHook('onRequest', async (request) => {
     const header = request.headers[PROFILE_HEADER];
     request.hubProfile = (Array.isArray(header) ? header[0] : header)?.trim() || DEFAULT_PROFILE;
     request.language = pickLanguage(request.headers['accept-language']);
+    request.uiLanguage = pickUiLanguage(request.headers['accept-language']);
   });
 
   app.setNotFoundHandler((request, reply) => {
-    void reply.status(404).send(new HubError('not_found').toEnvelope(request.language));
+    void reply.status(404).send(new HubError('not_found').toEnvelope(request.uiLanguage));
   });
 
   app.setErrorHandler((error: unknown, request, reply) => {
     if (error instanceof HubError) {
       if (error.headers) void reply.headers(error.headers);
-      return reply.status(error.status).send(error.toEnvelope(request.language));
+      return reply.status(error.status).send(error.toEnvelope(request.uiLanguage));
     }
     const fastifyError = error as { validation?: unknown; statusCode?: number; message?: string };
     if (fastifyError.validation) {
@@ -79,7 +87,7 @@ export async function registerRoutes(
         .status(400)
         .send(
           new HubError('validation_failed', { details: fastifyError.validation }).toEnvelope(
-            request.language,
+            request.uiLanguage,
           ),
         );
     }
@@ -90,7 +98,7 @@ export async function registerRoutes(
     ) {
       return reply
         .status(fastifyError.statusCode)
-        .send(new HubError('bad_request').toEnvelope(request.language));
+        .send(new HubError('bad_request').toEnvelope(request.uiLanguage));
     }
     request.log.error({ err: error }, 'unhandled error');
     // The request id is the thread from the screen to the log line: a person can quote it,
@@ -99,7 +107,7 @@ export async function registerRoutes(
       .status(500)
       .send(
         new HubError('internal', { details: { request_id: String(request.id) } }).toEnvelope(
-          request.language,
+          request.uiLanguage,
         ),
       );
   });

@@ -1,0 +1,123 @@
+/* Languages (ADR 0028): what keeps a screen whole when a translation is longer, wider or
+   taller than Arabic and English. The pseudo-locale journeys (e2e/zzzzzzzzzzzzzzzzz-pseudo-
+   locales.spec.ts) walk every main screen in en-XA, ar-XB, zh-XC and th-XD and fail on a label
+   that spills, text cut without an ellipsis, a lone letter on a wrapped label's last line,
+   controls drawn over each other and a page that scrolls sideways. Nothing here changes a
+   label that already fits; no font file is bundled (the image and installers stay the size
+   they are): the stacks below name the fonts each system already has. */
+
+/* The font of each script, before the system's own fallback: Han characters are drawn
+   differently in Simplified and Traditional Chinese, Japanese and Korean, so each language
+   names its own; Thai and Devanagari get fonts whose marks have room. */
+:root:lang(zh),
+:root:lang(zh-Hans) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans SC', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei',
+    'Source Han Sans SC', system-ui, -apple-system, sans-serif;
+}
+:root:lang(zh-Hant),
+:root:lang(zh-TW),
+:root:lang(zh-HK),
+:root:lang(zh-MO) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans TC', 'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei',
+    'Source Han Sans TC', system-ui, -apple-system, sans-serif;
+}
+:root:lang(ja) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Hiragino Sans', 'Yu Gothic UI', Meiryo,
+    system-ui, -apple-system, sans-serif;
+}
+:root:lang(ko) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans KR', 'Noto Sans CJK KR', 'Apple SD Gothic Neo', 'Malgun Gothic',
+    system-ui, -apple-system, sans-serif;
+}
+:root:lang(th) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans Thai', 'Leelawadee UI', Thonburi, 'Noto Sans', system-ui, -apple-system,
+    sans-serif;
+}
+:root:lang(hi),
+:root:lang(mr),
+:root:lang(ne) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans Devanagari', 'Nirmala UI', 'Kohinoor Devanagari', 'Noto Sans', system-ui,
+    -apple-system, sans-serif;
+}
+:root:lang(he) {
+  --ch-font-sans:
+    'Segoe UI', 'Noto Sans Hebrew', 'Arial Hebrew', 'Noto Sans', system-ui, -apple-system,
+    sans-serif;
+}
+
+/* Scripts whose marks stack above and below the letters (Thai, Lao, Khmer, Burmese,
+   Devanagari, Vietnamese) need taller lines than Latin and Arabic, or the marks are cut. */
+:root:lang(th),
+:root:lang(lo),
+:root:lang(km),
+:root:lang(my),
+:root:lang(vi),
+:root:lang(hi),
+:root:lang(mr),
+:root:lang(ne) {
+  --ch-font-leading-tight: 1.45;
+  --ch-font-leading-normal: 1.75;
+  --ch-font-leading-relaxed: 1.9;
+  /* Tailwind's own `text-*` sizes carry a line height each: the same room for them. */
+  --text-xs--line-height: 1.6;
+  --text-sm--line-height: 1.6;
+  --text-base--line-height: 1.6;
+  --text-lg--line-height: 1.6;
+  --text-xl--line-height: 1.5;
+}
+
+/* A label that wraps never leaves one word — or one letter — alone on its last line (the
+   iPhone task-board title, PR #210). Only the break of the last line moves; a label that fits
+   on one line is untouched. */
+html {
+  text-wrap: pretty;
+}
+
+/* A badge shrinks with an ellipsis like every other single-line label instead of being cut by
+   the box that holds it; its full words are on hover (src/i18n/truncation.ts). */
+.ch-badge,
+.ch-badge-label {
+  min-inline-size: 0;
+}
+.ch-badge-label {
+  white-space: nowrap;
+}
+
+/* A label cut with an ellipsis is cut sideways only. `overflow: hidden` also cut the ink of
+   glyphs that reach below or above a tight line — Arabic descenders (ي ج ع) in a card title,
+   Thai and Vietnamese marks — so these clip the inline axis and let the block axis show. The
+   ellipsis and the layout are unchanged. */
+.truncate,
+.ch-btn-label,
+.ch-card-title,
+.ch-card-subtitle,
+.ch-badge-label,
+.ch-sidebar-row-label,
+.ch-segment-label,
+.ch-menu-choice-label,
+.ch-combo-name,
+.ch-combo-sub,
+.tool-chip,
+.tool-file,
+.file-tab-name,
+.files-name,
+.session-preview,
+.notice-body,
+.provider-facts dd,
+.skill-description,
+.run-status-step,
+.tool-group-names,
+.tool-preview,
+.slash-option-description,
+.trajectory-step-summary,
+.run-change-path,
+.subagent-goal {
+  overflow-x: clip;
+  overflow-y: visible;
+}

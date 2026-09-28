@@ -1,0 +1,53 @@
+name: New language / لغة جديدة
+description: Add Core Hub in your language. / أضف كور هب بلغتك.
+title: 'language: '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The steps are in `docs/guides/add-a-language.md`: `pnpm i18n:new <code>`, fill the strings, `pnpm i18n:check` and `pnpm i18n:limits`, then a pull request with `Closes #<this issue>`.
+        شكرًا لك. الخطوات في `docs/guides/add-a-language.md`: ‏`pnpm i18n:new <code>`، ثم املأ النصوص، ثم `pnpm i18n:check` و`pnpm i18n:limits`، ثم طلب دمج فيه `Closes #<رقم البلاغ>`.
+  - type: input
+    id: code
+    attributes:
+      label: Language code (BCP 47) / رمز اللغة
+      placeholder: fr, pt-BR, zh-Hant
+    validations:
+      required: true
+  - type: input
+    id: names
+    attributes:
+      label: Its name in English and in the language itself / اسمها بالإنجليزية وبلغتها
+      placeholder: French — Français
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Reading direction / اتجاه القراءة
+      options:
+        - Left to right / من اليسار إلى اليمين
+        - Right to left / من اليمين إلى اليسار
+    validations:
+      required: true
+  - type: input
+    id: fallback
+    attributes:
+      label: A language to fall back to before English (optional) / لغة يُرجع إليها قبل الإنجليزية (اختياري)
+      placeholder: zh-Hans for zh-Hant
+  - type: textarea
+    id: plan
+    attributes:
+      label: How much you will translate, and who reviews the wording / كم ستترجم، ومن يراجع الصياغة
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending / قبل الإرسال
+      options:
+        - label: The language is not already in `locales/languages.json`. / اللغة ليست مسجلة في `locales/languages.json`.
+          required: true
+        - label: Digits stay 0-9 in my language too (DECISIONS §113). / الأرقام تبقى 0-9 في لغتي أيضًا.
+          required: true

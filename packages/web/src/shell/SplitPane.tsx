@@ -1,5 +1,6 @@
 import { useCallback, useRef, type KeyboardEvent, type PointerEvent } from 'react';
 import { useI18n } from '../i18n/context.js';
+import { directionOf } from '../i18n/index.js';
 import { IconClose, IconPanel } from '../ui/icons.js';
 import { PANE_MIN, usePane } from './pane.js';
 
@@ -8,6 +9,7 @@ const STEP = 32;
 /** The divider is a keyboard-operable separator: arrows resize, Home collapses, End expands. */
 export function SplitPane() {
   const { t, language } = useI18n();
+  const rtl = directionOf(language) === 'rtl';
   const pane = usePane();
   const startX = useRef(0);
   const startWidth = useRef(0);
@@ -25,14 +27,14 @@ export function SplitPane() {
       if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
       const delta = event.clientX - startX.current;
       // The pane sits at the inline end: in LTR it grows when the divider moves left.
-      pane.setWidth(language === 'ar' ? startWidth.current + delta : startWidth.current - delta);
+      pane.setWidth(rtl ? startWidth.current + delta : startWidth.current - delta);
     },
-    [pane, language],
+    [pane, rtl],
   );
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      const grow = language === 'ar' ? 'ArrowRight' : 'ArrowLeft';
-      const shrink = language === 'ar' ? 'ArrowLeft' : 'ArrowRight';
+      const grow = rtl ? 'ArrowRight' : 'ArrowLeft';
+      const shrink = rtl ? 'ArrowLeft' : 'ArrowRight';
       if (event.key === grow) pane.setWidth(pane.width + STEP);
       else if (event.key === shrink) pane.setWidth(pane.width - STEP);
       else if (event.key === 'Home') pane.toggle();
@@ -40,7 +42,7 @@ export function SplitPane() {
       else return;
       event.preventDefault();
     },
-    [pane, language],
+    [pane, rtl],
   );
 
   if (!pane.content) return null;

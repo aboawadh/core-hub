@@ -103,9 +103,28 @@ jobs:
       - run: pnpm --filter @corehub/contracts build
       - run: pnpm --filter @corehub/server exec vitest run --project unit --shard=${{ matrix.shard }}/3
 
+  # ADR 0028: every translation against the room its label has, measured with the Noto fonts of
+  # its script (HarfBuzz). The fonts are installed here only: the image and installers carry none.
+  i18n-space:
+    name: Translations fit their labels (measured widths)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Noto fonts for Latin, Arabic, Hebrew, Thai, Devanagari and CJK
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-cjk
+      - run: pnpm i18n:limits
+
   gate:
     name: Lint, typecheck, contracts, tests, build
-    needs: [checks, server-tests]
+    needs: [checks, server-tests, i18n-space]
     # Always runs, so a failed or cancelled job above fails this required check instead of
     # skipping it (a skipped required check would count as passed).
     if: always()
@@ -116,9 +135,10 @@ jobs:
         env:
           CHECKS: ${{ needs.checks.result }}
           SERVER_TESTS: ${{ needs.server-tests.result }}
+          I18N_SPACE: ${{ needs.i18n-space.result }}
         run: |
-          echo "checks: $CHECKS, server-tests: $SERVER_TESTS"
-          test "$CHECKS" = success && test "$SERVER_TESTS" = success
+          echo "checks: $CHECKS, server-tests: $SERVER_TESTS, i18n-space: $I18N_SPACE"
+          test "$CHECKS" = success && test "$SERVER_TESTS" = success && test "$I18N_SPACE" = success
 
   web-e2e:
     name: Web smoke journeys (Playwright against the real hub)
@@ -133,6 +153,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @corehub/web exec playwright install --with-deps chromium
+      # The fonts the UI's stacks name (Noto Sans, Arabic, Thai, CJK — ADR 0028), so the
+      # pseudo-locale journeys see what a Linux desktop shows rather than the runner's fallbacks.
+      - name: Noto fonts
+        run: sudo apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-cjk
       - run: pnpm build
       - run: pnpm --filter @corehub/web test:e2e
       - uses: actions/upload-artifact@v4
@@ -141,6 +165,14 @@ jobs:
           name: playwright-report
           path: packages/web/playwright-report
           retention-days: 7
+      # ADR 0028: every main screen in each pseudo-locale, at desktop and phone width, pass or fail.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pseudo-locale-screens
+          path: packages/web/test-results/*pseudo-l*/*.png
+          if-no-files-found: ignore
+          retention-days: 14
 
   desktop:
     name: Desktop app smoke (Electron under Xvfb against the real hub)

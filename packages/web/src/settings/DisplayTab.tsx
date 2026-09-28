@@ -11,8 +11,11 @@ import {
   type DisplayPrefs,
 } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
-import { LANGUAGES } from '../i18n/index.js';
-import { Notice, Segmented, Switch } from '../ui/index.js';
+import { LANGUAGE_CHOICES, serverLocale } from '../i18n/index.js';
+import { Notice, Segmented, Select, Switch } from '../ui/index.js';
+
+/** Up to this many languages fit a segmented control; more are a list (ADR 0028). */
+const SEGMENTED_LANGUAGES = 3;
 
 export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
   const { t } = useI18n();
@@ -29,7 +32,9 @@ export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
     save.mutate({
       ...server,
       theme: next.theme,
-      locale: next.language,
+      // The contract's `locale` is Arabic or English; any other UI language stores the nearest
+      // of the two for the hub's own notices, and stays this browser's choice (ADR 0028).
+      locale: serverLocale(next.language),
       text_scale: next.textScale,
     });
   };
@@ -73,17 +78,33 @@ export function DisplayTab({ only }: { only?: Array<keyof DisplayPrefs> }) {
       {show('language') && (
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('display.language')}</legend>
-          <Segmented
-            className="self-start"
-            label={t('display.language')}
-            value={prefs.language}
-            onChange={(language) => change({ language: language as DisplayPrefs['language'] })}
-            options={LANGUAGES.map((language) => ({
-              value: language,
-              label: language === 'ar' ? 'العربية' : 'English',
-              itemProps: { 'data-testid': `language-${language}` },
-            }))}
-          />
+          {LANGUAGE_CHOICES.length <= SEGMENTED_LANGUAGES ? (
+            <Segmented
+              className="self-start"
+              label={t('display.language')}
+              value={prefs.language}
+              onChange={(language) => change({ language: language as DisplayPrefs['language'] })}
+              options={LANGUAGE_CHOICES.map((language) => ({
+                value: language.code,
+                label: language.nativeName,
+                itemProps: { 'data-testid': `language-${language.code}` },
+              }))}
+            />
+          ) : (
+            <div className="self-start">
+              <Select
+                label={t('display.language')}
+                title={null}
+                value={prefs.language}
+                onValueChange={(language) => language && change({ language })}
+                options={LANGUAGE_CHOICES.map((language) => ({
+                  value: language.code,
+                  label: language.nativeName,
+                }))}
+                testId="language-select"
+              />
+            </div>
+          )}
         </fieldset>
       )}
       {show('textScale') && (

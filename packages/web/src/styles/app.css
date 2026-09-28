@@ -8,6 +8,7 @@
 @import './kit.css';
 @import './chat.css';
 @import './screens.css';
+@import './languages.css';
 
 @theme inline {
   --color-bg: var(--ch-color-bg);

@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./languages": {
+      "types": "./dist/src/languages.d.ts",
+      "default": "./dist/src/languages.js"
     }
   },
   "files": [

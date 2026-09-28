@@ -77,7 +77,7 @@ export interface Formats {
   money(money: Money, estimated: boolean): string;
 }
 
-export function formatsFor(language: 'ar' | 'en'): Formats {
+export function formatsFor(language: string): Formats {
   const locale = intlLocale(language);
   const number = new Intl.NumberFormat(locale);
   const compact = new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 });

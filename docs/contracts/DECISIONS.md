@@ -4196,3 +4196,24 @@ left out). A target of a platform the phone does not know is kept as it is.
 Rejected: a canvas on the phone (a list of steps is what a phone screen holds; the drawing's
 positions are kept); a Tools destination with its own page (as in §126); keeping the Search row in
 the phone rail too (two entries to one place).
+
+## 130. Any registered UI language in `Accept-Language`; `Locale` stays Arabic and English
+Proposed 2026-09-28 (ADR 0028) — owner to confirm. **No change to the OpenAPI document.**
+
+The hub matches `Accept-Language` against the language registry (`locales/languages.json`): the
+best registered language by quality, then order (`zh-TW` finds `zh-Hant`, `pt-PT` finds `pt-BR`),
+and answers its `{ error, code }` envelopes in it, falling back along that language's chain to
+English for a message its catalogue lacks. It already accepted any header value; the documented
+`AcceptLanguage` enum stays `[ar, en]`, because widening a closed enum changes the phones'
+generated Kotlin and Swift types, which ADR 0027 forbids. A client may send a registered code
+beyond it; an older hub answers such a request in English, as it always did for an unknown tag.
+
+`Locale` (a person's stored `locale`, push registrations, `meta.locales`) stays `ar | en`. A web
+client in another language stores the nearest of the two — the first of Arabic and English on its
+fallback chain, English for most — for the hub's own notices, and keeps the chosen language in the
+browser as it keeps the display language. A per-person UI language on the hub is a later additive
+field. `@corehub/contracts`' TypeScript client takes `language?: string` (it was `'ar' | 'en'`); the
+wire is unchanged.
+
+Rejected: widening `Locale` or the header enum now (breaks the generated clients the phones ship
+with); a free-text `locale` (every client would have to cope with any string at once).

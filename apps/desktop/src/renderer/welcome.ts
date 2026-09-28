@@ -3,6 +3,7 @@
  * link. Plain DOM — this page shows before any hub is known, so it cannot be the web
  * client — and every string comes from the app's catalogue, in Arabic or English.
  */
+import { UI_LANGUAGES } from '@corehub/contracts/languages';
 import type { Language } from '../shared/config.js';
 import { direction, translate } from '../shared/i18n.js';
 import type {
@@ -69,22 +70,51 @@ function header(): HTMLElement {
     {},
     h('img', { src: './logo.svg', alt: '' }),
     h('h1', {}, t('welcome.title')),
-    h(
+    languageControl(),
+  );
+}
+
+/**
+ * Two languages: one link that switches to the other (its name in that language). More than
+ * two (locales/languages.json, ADR 0028): a list of every language, each in its own name.
+ */
+function languageControl(): HTMLElement {
+  const choose = (next: Language) => {
+    language = next;
+    void api.setLanguage(language);
+    render();
+  };
+  if (UI_LANGUAGES.length <= 2) {
+    const other = UI_LANGUAGES.find((each) => each.code !== language) ?? UI_LANGUAGES[0]!;
+    return h(
       'button',
       {
         class: 'link',
         type: 'button',
-        lang: language === 'ar' ? 'en' : 'ar',
+        lang: other.code,
         'data-testid': 'welcome-language',
-        onclick: () => {
-          language = language === 'ar' ? 'en' : 'ar';
-          void api.setLanguage(language);
-          render();
-        },
+        onclick: () => choose(other.code),
       },
       t('welcome.language'),
+    );
+  }
+  const select = h(
+    'select',
+    {
+      class: 'link',
+      'aria-label': t('welcome.language_label'),
+      'data-testid': 'welcome-language',
+      onchange: (event: Event) => choose((event.target as HTMLSelectElement).value),
+    },
+    ...UI_LANGUAGES.map((each) =>
+      h(
+        'option',
+        { value: each.code, lang: each.code, selected: each.code === language },
+        each.nativeName,
+      ),
     ),
   );
+  return select;
 }
 
 function chooseView(): HTMLElement[] {

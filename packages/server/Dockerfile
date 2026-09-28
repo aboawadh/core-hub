@@ -41,6 +41,8 @@ COPY packages/ui-tokens packages/ui-tokens
 COPY packages/web packages/web
 # The web client bundles the navigation manifest at build time (docs/clients/README.md).
 COPY docs/clients/navigation.json docs/clients/navigation.json
+# Every package reads the UI languages from the registry at build time (ADR 0028).
+COPY locales/languages.json locales/languages.json
 RUN pnpm build \
  && mkdir -p packages/server/drizzle packages/contracts/events
 
