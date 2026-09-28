@@ -38,7 +38,7 @@ struct AppLanguage: RawRepresentable, Hashable, Identifiable, Codable {
     /// The languages a key is looked up in: this one, its fallbacks, then English.
     var chain: [AppLanguage] {
         var out: [AppLanguage] = []
-        for code in [rawValue] + (base.info?.fallback ?? []) + [base.rawValue, "en"] {
+        for code in [rawValue, base.rawValue] + (base.info?.fallback ?? []) + ["en"] {
             if let language = AppLanguage(rawValue: code), !out.contains(language) { out.append(language) }
         }
         return out
