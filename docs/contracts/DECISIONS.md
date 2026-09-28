@@ -4337,3 +4337,61 @@ a per-launch secret over HTTP (the IPC channel already exists and is not a socke
 Hello covers Windows 10/11 with a PIN); a password-free default for existing installs (changes what
 people who already run the app have). Hubs in Docker are out of scope: recovery codes or a command
 inside the container are for the owner to choose later.
+
+## 132. The image carries the latest Hermes (v2026.9.24, `0.21.5`); every real-Hermes test runs on it and on the floor; a person's own Hermes hears of newer releases
+
+Proposed (2026-09-28) — the owner asked to move Core Hub to the latest Hermes Agent for 1.1.5 and
+never fall behind again. Owner to confirm. Additive contract change only (`AgentInstall.tested_version`).
+
+**The two Hermes releases the hub is proven against** live in one file,
+`packages/server/src/modules/agents/catalog/hermes-versions.ts`: `HERMES_FLOOR` (v2026.9.14,
+`0.21.3` — §119, unchanged) and `HERMES_TESTED` (v2026.9.24, `0.21.5`), which the image's
+`HERMES_REF` equals (`scripts/hermes-watch.mjs current`, checked by `pnpm scripts:test`). CI's
+`hermes-real` job builds the image at each of the two and runs **every** `*.real.test.ts` against it
+(a matrix, required through the gate); before this only the MCP OAuth suite ran in CI, against one
+Hermes.
+
+**What v2026.9.21–v2026.9.24 broke, and how the hub copes on both versions** (read in Hermes's MIT
+source at v2026.9.24, in our words):
+- **A named profile's turn reads its keys only from that profile's `.env`.** Its secret scope
+  (`agent/secret_scope.py`) no longer falls back on the process environment, which is where the
+  shared providers' keys reached a named profile (their names were left out of its `.env` when
+  equal to the root's). The hub now writes every key a profile uses into its own `.env` — its own,
+  and the shared ones it has no own of — and an empty value where it must not use the root's.
+  The same on every Hermes version; a changed key reaches every profile's file on the save.
+- **One gateway per host answers a named profile's webhook routes from the root's file.** Hermes's
+  shape: routes live in the default home's `webhook_subscriptions.json`, one of a named profile
+  carries `profile: <name>`, and the default listener answers it at `/p/<name>/webhooks/<route>`;
+  a named profile has no listener of its own. On such a Hermes (§129) the hub keeps each profile's
+  own file as its record (a volume from an older Hermes keeps its routes), copies every named
+  profile's routes into the root's file — marked as its copies, under `<profile>--<route>` or a
+  hashed name when that is taken — switches the root's listener on (the default profile's Channels
+  page then shows the webhook listener on), and passes a delivery for a named profile to the root's
+  listener under that prefix. The public door (`agents.receiveWebhook`) does not change.
+- Hermes's reason for a refusal skips its own `[hermes] WARNING: …` process lines (the PID 1
+  warning goes to stderr while the refusal goes to stdout).
+- Not the hub's to fix, said here: on one gateway per host, a named profile **with an allowlist**
+  no longer pairs strangers (Hermes decides a DM's `unauthorized_dm_behavior` from the default
+  profile's settings, `gateway/authz_mixin.py`); they are ignored. Without an allowlist pairing
+  works. And Hermes's gateway now asks for boto3 (its Bedrock provider) when it starts, installing
+  it into `/data/hermes-packages` when there is a network.
+
+**A person's own Hermes** (desktop local mode, a hub beside Hermes; §119): the hub looks up Hermes's
+newest stable GitHub release (NousResearch/hermes-agent; the version is read from the release's
+title, the tag is a date) on the six-hourly check and on `agents.checkUpdate` — only for a Hermes its
+own updater updates (`self_update`), never the image's, never installed on its own (`auto_update`
+stays off). `latest_version` / `update_available` then say it, and the Update button runs Hermes's
+own updater after the person confirms. `AgentInstall.tested_version` (new, optional) names
+`HERMES_TESTED`; `newer_than_tested` is also true for such a Hermes past it. The Hermes card says a
+newer Hermes may not be supported yet, and whether an available update is one Core Hub was tested
+with. GitHub unreachable: what was known stays.
+
+**Never behind again — the Hermes watch** (built beside this, docs/changes/2026-09-28-twuijri-hermes-watch.md):
+a daily workflow tries any newer Hermes release against every real-Hermes suite and opens a pull
+request moving `HERMES_TESTED` (green) or one issue listing the failures (red); never merged
+automatically. Every image release says which Hermes it carries and whether a newer one exists.
+
+Rejected: raising the floor (0.21.3 still passes every real suite); `gateway.standalone: true` per
+profile to keep webhooks per profile (a shim Hermes will remove, §129); writing the default
+profile's settings to restore pairing in named profiles (it would change the default profile's
+own channel behaviour).

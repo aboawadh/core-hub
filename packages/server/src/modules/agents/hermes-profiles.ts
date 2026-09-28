@@ -224,7 +224,6 @@ function isDirectory(target: string): boolean {
   }
 }
 
-/** Hermes says why on its last line (`Error: Profile 'x' already exists …`). */
 /**
  * Hermes's reason: the last line it printed, leaving out its own process warnings
  * (`[hermes] WARNING: …` — from v2026.9.21 the PID 1 warning of a `docker run --entrypoint
