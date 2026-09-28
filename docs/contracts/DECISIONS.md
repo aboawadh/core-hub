@@ -4197,7 +4197,7 @@ Rejected: a canvas on the phone (a list of steps is what a phone screen holds; t
 positions are kept); a Tools destination with its own page (as in §126); keeping the Search row in
 the phone rail too (two entries to one place).
 
-## 129. Any registered UI language in `Accept-Language`; `Locale` stays Arabic and English
+## 130. Any registered UI language in `Accept-Language`; `Locale` stays Arabic and English
 Proposed 2026-09-28 (ADR 0028) — owner to confirm. **No change to the OpenAPI document.**
 
 The hub matches `Accept-Language` against the language registry (`locales/languages.json`): the
