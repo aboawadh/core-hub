@@ -239,7 +239,11 @@ its approval.
   note shows only where the hub does not run Hermes (or an older hub). A WhatsApp card in «أنا»
   mode offers «عنوان الردود» / "Reply header": the agent's name or a typed title, previewed as a
   reply will start (DECISIONS §86). Hermes's card lists its
-  messaging gateways and their state. Since 2026-09-25 Discord, Slack, Matrix, Mattermost and
+  messaging gateways and their state. Since 2026-09-28 (DECISIONS §129, proposed — owner to
+  confirm) a Hermes of v2026.9.21 (`0.21.4`) or later, which allows one gateway per host serving
+  every profile, gets no gateway per named profile: the default one serves them all, each named
+  profile's row follows it, and a channel change there asks it to rescan; beside a person's own
+  Hermes the hub's gateway takes a host lock inside its own home. An older Hermes is unchanged. Since 2026-09-25 Discord, Slack, Matrix, Mattermost and
   Email link with plain setup steps, the check with the platform, the account named on the
   linked row, its own settings panel and Unlink; the other Hermes platforms with a generic form
   and a note that nothing there is checked. Since 2026-09-26 the page lists **only the linked
