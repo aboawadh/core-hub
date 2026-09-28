@@ -8,9 +8,15 @@ import { describe, it } from 'node:test';
 
 import {
   FILES,
+  botBranch,
   bumpTexts,
   compareVersions,
   failingTests,
+  findBumpPr,
+  findWatchIssue,
+  hermesStatus,
+  issueRef,
+  issueTitle,
   pickLatest,
   readPins,
   recordPath,
@@ -168,5 +174,82 @@ describe('the change record of the bot’s pull request', () => {
       recordPath('2026-09-30', 'v2026.9.30'),
       /^docs\/changes\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/,
     );
+  });
+});
+
+describe('what the watch left on GitHub, and the line a release prints', () => {
+  const tested = { ref: 'v2026.9.24', version: '0.21.5' };
+  const latest = { ref: 'v2026.9.30', version: '0.21.6' };
+
+  it('names the bot branch and the issue after the tag, and reads the tag back', () => {
+    assert.equal(botBranch('v2026.9.30'), 'bot/hermes-v2026.9.30');
+    assert.equal(issueTitle('v2026.9.30'), 'Hermes v2026.9.30 is not supported yet');
+    assert.equal(issueRef(issueTitle('v2026.9.30')), 'v2026.9.30');
+    assert.equal(issueRef('Hermes watch: v2026.9.30 fails'), null);
+    assert.equal(issueRef('Hermes main; rm -rf / is not supported yet'), null);
+  });
+
+  it('finds only the open pull request from this tag’s bot branch', () => {
+    const pulls = [
+      { number: 7, state: 'open', head: { ref: 'bot/hermes-v2026.9.28' }, html_url: 'u7' },
+      { number: 8, state: 'closed', head: { ref: 'bot/hermes-v2026.9.30' }, html_url: 'u8' },
+      { number: 9, state: 'open', head: { ref: 'bot/hermes-v2026.9.30' }, html_url: 'u9' },
+    ];
+    assert.deepEqual(findBumpPr(pulls, 'v2026.9.30'), { number: 9, url: 'u9' });
+    assert.equal(findBumpPr(pulls, 'v2026.10.1'), null);
+    assert.equal(findBumpPr([], 'v2026.9.30'), null);
+  });
+
+  it('finds the oldest open watch issue, never a pull request or another issue', () => {
+    const issues = [
+      {
+        number: 12,
+        state: 'open',
+        title: 'Hermes v2026.9.30 is not supported yet',
+        html_url: 'u12',
+      },
+      { number: 11, state: 'open', title: 'Something else', html_url: 'u11' },
+      {
+        number: 10,
+        state: 'open',
+        title: 'Hermes v2026.9.28 is not supported yet',
+        pull_request: {},
+        html_url: 'u10',
+      },
+      { number: 9, state: 'open', title: 'Hermes v2026.9.28 is not supported yet', html_url: 'u9' },
+    ];
+    assert.deepEqual(findWatchIssue(issues), { number: 9, url: 'u9', ref: 'v2026.9.28' });
+    assert.equal(findWatchIssue([issues[1], issues[2]]), null);
+  });
+
+  it('a notice when the image carries the newest Hermes', () => {
+    const status = hermesStatus({ latest: tested, tested, newer: false, pr: null, issue: null });
+    assert.equal(status.level, 'notice');
+    assert.match(status.text, /carries Hermes v2026\.9\.24 \(0\.21\.5\), the newest/);
+  });
+
+  it('a warning naming the newer release and the pull request when the watch found it supported', () => {
+    const pr = { number: 230, url: 'https://example.invalid/pull/230' };
+    const status = hermesStatus({ latest, tested, newer: true, pr, issue: null });
+    assert.equal(status.level, 'warning');
+    assert.match(status.text, /Hermes v2026\.9\.30 \(0\.21\.6\) is out/);
+    assert.match(status.text, /found v2026\.9\.30 supported/);
+    assert.match(status.text, /#230 moves the pin: https:\/\/example\.invalid\/pull\/230/);
+  });
+
+  it('a warning naming the issue when the watch found it not supported', () => {
+    const issue = { number: 231, url: 'https://example.invalid/issues/231', ref: 'v2026.9.30' };
+    const status = hermesStatus({ latest, tested, newer: true, pr: null, issue });
+    assert.equal(status.level, 'warning');
+    assert.match(status.text, /NOT supported yet/);
+    assert.match(status.text, /issue #231/);
+  });
+
+  it('says the watch has not tried a release its issue is not about', () => {
+    const issue = { number: 231, url: 'u', ref: 'v2026.9.28' };
+    const status = hermesStatus({ latest, tested, newer: true, pr: null, issue });
+    assert.equal(status.level, 'warning');
+    assert.match(status.text, /has not tried v2026\.9\.30 yet/);
+    assert.doesNotMatch(status.text, /#231/);
   });
 });

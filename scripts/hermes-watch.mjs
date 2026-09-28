@@ -15,8 +15,12 @@
 //       --run-url URL --body body.md [--summary summary.json] [--output $GITHUB_OUTPUT]
 //   node scripts/hermes-watch.mjs record --ref vX --version X.Y.Z --run-url URL --branch B
 //       --total N [--date YYYY-MM-DD]   → writes the change record of the bot's pull request
+//   node scripts/hermes-watch.mjs status [--repo owner/name] [--output file] [--annotate]
+//       [--step-summary file]  → the newer release (if any), the watch's open pull request for it
+//                                and its open issue, and the line a release prints (release.yml)
 //
-// `latest` reads GITHUB_TOKEN when it is set (a higher rate limit); the release list is public.
+// `latest` and `status` read GITHUB_TOKEN when it is set (a higher rate limit); the release list,
+// the pull requests and the issues of a public repository are public.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,7 +138,7 @@ export function reportBody({ latest, tested, floor, failed, total, runUrl }) {
       ...head,
       `**All ${total} tests passed.** This pull request moves the image's Hermes to ${latest.ref}.`,
       '',
-      'Before merging: CI runs the real-Hermes suites again on both the floor and the new pin (job `hermes-real`), and the change record for the move is still to be written (docs/changes/). Never merged automatically.',
+      'Before merging: CI runs the real-Hermes suites again on both the floor and the new pin (job `hermes-real`); the branch carries the change record of the move for the owner to complete. Never merged automatically.',
       '',
     ].join('\n');
   }
@@ -193,13 +197,82 @@ export function recordText({ latest, tested, floor, runUrl, branch, total }) {
   ].join('\n');
 }
 
+// ---- What the watch left on GitHub: its pull request and its issue ------------------------------
+
+/** The branch of the pull request that moves the pin to `ref`. */
+export const botBranch = (ref) => `bot/hermes-${ref}`;
+
+/** The title of the one issue the watch keeps open while the newest Hermes fails. */
+export const issueTitle = (ref) => `Hermes ${ref} is not supported yet`;
+
+/** The Hermes tag a watch issue is about, or null for any other title. */
+export function issueRef(title) {
+  const match = /^Hermes (v[0-9][0-9A-Za-z.-]*) is not supported yet$/.exec(String(title ?? ''));
+  return match ? match[1] : null;
+}
+
+/** The open watch pull request for `ref` among GitHub's pull requests (`GET …/pulls`). */
+export function findBumpPr(pulls, ref) {
+  const pr = (pulls ?? []).find(
+    (pull) => pull.state === 'open' && pull.head?.ref === botBranch(ref),
+  );
+  return pr ? { number: pr.number, url: pr.html_url } : null;
+}
+
+/** The open watch issue among GitHub's issues (`GET …/issues`, which lists pull requests too). */
+export function findWatchIssue(issues) {
+  const issue = (issues ?? [])
+    .filter((item) => !item.pull_request && item.state === 'open' && issueRef(item.title))
+    .sort((a, b) => a.number - b.number)[0];
+  return issue ? { number: issue.number, url: issue.html_url, ref: issueRef(issue.title) } : null;
+}
+
+/**
+ * The one line a release prints about Hermes (release.yml): which Hermes the image carries,
+ * whether a newer release exists, and what the watch found about it. `level` is the annotation.
+ */
+export function hermesStatus({ latest, tested, newer, pr, issue }) {
+  const carries = `This image carries Hermes ${tested.ref} (${tested.version})`;
+  if (!newer) {
+    return { level: 'notice', text: `${carries}, the newest Hermes release.` };
+  }
+  const out = `Hermes ${latest.ref} (${latest.version}) is out. ${carries}`;
+  if (pr) {
+    return {
+      level: 'warning',
+      text: `${out}; the Hermes watch found ${latest.ref} supported (every real-Hermes suite passed) and pull request #${pr.number} moves the pin: ${pr.url}`,
+    };
+  }
+  if (issue && issue.ref === latest.ref) {
+    return {
+      level: 'warning',
+      text: `${out}; the Hermes watch found ${latest.ref} NOT supported yet (real-Hermes suites fail), see issue #${issue.number}: ${issue.url}`,
+    };
+  }
+  return {
+    level: 'warning',
+    text: `${out}; the Hermes watch has not tried ${latest.ref} yet (run "Hermes watch" from the Actions tab).`,
+  };
+}
+
 function argsOf(argv) {
   const out = {};
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
-    if (key.startsWith('--')) out[key.slice(2)] = argv[(index += 1)];
+    if (!key.startsWith('--')) continue;
+    // A flag with no value (`--annotate`) is "true".
+    const next = argv[index + 1];
+    out[key.slice(2)] = next === undefined || next.startsWith('--') ? 'true' : argv[(index += 1)];
   }
   return out;
+}
+
+async function githubJson(pathname) {
+  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'core-hub-hermes-watch' };
+  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const response = await fetch(`https://api.github.com${pathname}`, { headers });
+  if (!response.ok) throw new Error(`GitHub answered ${response.status} for ${pathname}`);
+  return response.json();
 }
 
 const readFiles = () => ({
@@ -207,16 +280,7 @@ const readFiles = () => ({
   versions: readFileSync(path.join(ROOT, FILES.versions), 'utf8'),
 });
 
-async function fetchReleases() {
-  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'core-hub-hermes-watch' };
-  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  const response = await fetch(`https://api.github.com/repos/${HERMES_REPO}/releases?per_page=30`, {
-    headers,
-  });
-  if (!response.ok)
-    throw new Error(`GitHub answered ${response.status} for ${HERMES_REPO}'s releases`);
-  return response.json();
-}
+const fetchReleases = () => githubJson(`/repos/${HERMES_REPO}/releases?per_page=30`);
 
 /** `key=value` lines for `$GITHUB_OUTPUT`. */
 function writeOutput(file, values) {
@@ -311,7 +375,41 @@ async function main([command, ...rest]) {
     console.log(file);
     return 0;
   }
-  console.error('usage: hermes-watch.mjs current|latest|bump|report|record …');
+  if (command === 'status') {
+    const repo = args.repo ?? process.env.GITHUB_REPOSITORY;
+    if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo))
+      throw new Error('status needs --repo owner/name');
+    const { tested } = readPins(readFiles());
+    const result = verdict(pickLatest(await fetchReleases()), tested);
+    let pr = null;
+    if (result.newer) {
+      const owner = repo.split('/')[0];
+      const head = encodeURIComponent(`${owner}:${botBranch(result.latest.ref)}`);
+      pr = findBumpPr(
+        await githubJson(`/repos/${repo}/pulls?state=open&head=${head}`),
+        result.latest.ref,
+      );
+    }
+    // The issue is looked up even when nothing is newer: the watch closes one left behind.
+    const issue = findWatchIssue(
+      await githubJson(`/repos/${repo}/issues?state=open&per_page=100&sort=created&direction=desc`),
+    );
+    const status = hermesStatus({ ...result, pr, issue });
+    console.log(JSON.stringify({ ...result, pr, issue, status }));
+    writeOutput(args.output, {
+      newer: String(result.newer),
+      latest_ref: result.latest?.ref ?? '',
+      latest_version: result.latest?.version ?? '',
+      tested_ref: tested.ref,
+      pr_number: pr?.number ?? '',
+      issue_number: issue?.number ?? '',
+      issue_ref: issue?.ref ?? '',
+    });
+    if (args.annotate) console.log(`::${status.level} title=Hermes::${status.text}`);
+    if (args['step-summary']) appendFileSync(args['step-summary'], `${status.text}\n`);
+    return 0;
+  }
+  console.error('usage: hermes-watch.mjs current|latest|bump|report|record|status …');
   return 2;
 }
 

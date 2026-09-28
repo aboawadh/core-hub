@@ -1,0 +1,246 @@
+name: Hermes watch
+
+# Every day, look for a Hermes Agent release newer than the one the image pins (DECISIONS §132;
+# scripts/hermes-watch.mjs; docs/RELEASING.md "The Hermes watch"). Stable releases only: drafts
+# and pre-releases never count. When there is one, build the image with it and run every
+# real-Hermes suite (`*.real.test.ts`, hermes-real-suites.yml) against it:
+# - all green → open, or update, one pull request per release from `bot/hermes-<tag>` that moves
+#   the pin, with its change record, and start the required checks on it;
+# - any red → open, or update, the one issue "Hermes <tag> is not supported yet" listing the
+#   failing tests and linking the run.
+# It never merges, never pushes to main and never publishes. The run succeeds either way — a red
+# Hermes is news, not a broken hub. Runs are idempotent: a release that already has an open pull
+# request is not tried again (a dispatched run with `force` does), a branch is made once, the issue
+# is edited in place, and the issue is closed once the newest Hermes passes or is the pin.
+
+on:
+  schedule:
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Try the newer Hermes even when its pull request is already open.'
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: hermes-watch
+  cancel-in-progress: false
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  check:
+    name: A Hermes release newer than the pin?
+    if: github.repository == 'twuijri/core-hub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      newer: ${{ steps.status.outputs.newer }}
+      latest_ref: ${{ steps.status.outputs.latest_ref }}
+      latest_version: ${{ steps.status.outputs.latest_version }}
+      pr_number: ${{ steps.status.outputs.pr_number }}
+      issue_number: ${{ steps.status.outputs.issue_number }}
+      try: ${{ steps.try.outputs.try }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: The pinned Hermes, the newest release, and what the watch already left
+        id: status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          node scripts/hermes-watch.mjs current
+          node scripts/hermes-watch.mjs status --repo "$GITHUB_REPOSITORY" \
+            --output "$GITHUB_OUTPUT" --annotate --step-summary "$GITHUB_STEP_SUMMARY"
+      - name: Try it?
+        id: try
+        env:
+          NEWER: ${{ steps.status.outputs.newer }}
+          PR: ${{ steps.status.outputs.pr_number }}
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          if [ "$NEWER" != true ]; then
+            try=false
+          elif [ -n "$PR" ] && [ "$FORCE" != true ]; then
+            echo "Pull request #$PR already moves the pin; its own CI runs the real-Hermes suites."
+            try=false
+          else
+            try=true
+          fi
+          echo "try=$try" | tee -a "$GITHUB_OUTPUT"
+
+  try:
+    name: Real Hermes suites on the newer release
+    needs: check
+    if: needs.check.outputs.try == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/hermes-real-suites.yml
+    with:
+      ref: ${{ needs.check.outputs.latest_ref }}
+      report-only: true
+
+  # The newest Hermes is the pin (or passes, below): nothing is left for the issue to say.
+  settle-current:
+    name: The pin is the newest Hermes; close what the watch left open
+    needs: check
+    if: needs.check.outputs.newer == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # delete the branch of a superseded bot pull request
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Close the watch issue and any bot pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.check.outputs.issue_number }}
+          PINNED: ${{ needs.check.outputs.latest_ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "$ISSUE" ]; then
+            gh issue close "$ISSUE" --comment "The image now pins Hermes $PINNED, the newest release; closing."
+          fi
+          gh pr list --state open --base main --limit 200 --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("bot/hermes-")) | .number' \
+          | while read -r pr; do
+              gh pr close "$pr" --delete-branch \
+                --comment "The image now pins Hermes $PINNED, the newest release; this move is no longer needed."
+            done
+
+  report:
+    name: Open or update the pull request or the issue
+    needs: [check, try]
+    if: always() && needs.check.outputs.try == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push bot/hermes-<tag>
+      pull-requests: write # open or update the pin pull request
+      issues: write # open, update or close the watch issue
+      actions: write # start ci.yml and change-record.yml on the bot branch
+    env:
+      REF: ${{ needs.check.outputs.latest_ref }}
+      VERSION: ${{ needs.check.outputs.latest_version }}
+      ISSUE: ${{ needs.check.outputs.issue_number }}
+      OUTCOME: ${{ needs.try.outputs.outcome }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: hermes-real-report
+          path: ${{ runner.temp }}/report
+      - name: What the suites found
+        id: report
+        run: |
+          set -eu
+          echo "Suites: ${OUTCOME:-did not run}"
+          # A run whose image did not build, or whose suites never reported, is red: the report
+          # says so instead of listing tests.
+          results="$RUNNER_TEMP/report/vitest.json"
+          if [ "$OUTCOME" != passed ] && [ "$OUTCOME" != failed ]; then results=/nonexistent; fi
+          node scripts/hermes-watch.mjs report --results "$results" \
+            --ref "$REF" --version "$VERSION" --run-url "$RUN_URL" \
+            --body "$RUNNER_TEMP/body.md" --summary "$RUNNER_TEMP/summary.json" --output "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(jq -r .passed "$RUNNER_TEMP/summary.json")" = true ] && [ "$OUTCOME" = passed ]; then
+            echo "green=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Hermes watch::Hermes $REF ($VERSION) passes every real-Hermes suite; a pull request moves the pin."
+          else
+            echo "green=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Hermes watch::Hermes $REF ($VERSION) is not supported yet (real-Hermes suites fail); the image stays on its pin. See the issue."
+          fi
+
+      - name: Green — open or update the pull request that moves the pin
+        if: steps.report.outputs.green == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch="bot/hermes-$REF"
+          total=$(jq -r '.numTotalTests // 0' "$RUNNER_TEMP/report/vitest.json")
+          # The owner declined this release's move once (a closed, unmerged pull request): say so
+          # and leave it; a dispatched run after reopening it picks it up again.
+          declined=$(gh pr list --head "$branch" --base main --state closed --json number,mergedAt \
+            --jq 'map(select(.mergedAt == null)) | .[0].number // empty')
+          open=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -z "$open" ] && [ -n "$declined" ]; then
+            echo "::notice title=Hermes watch::Pull request #$declined for $REF was closed without merging; not reopening it."
+            exit 0
+          fi
+          # The branch is made once per release; a later run only refreshes the pull request's text
+          # (the owner may have added commits meanwhile).
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "$branch exists; leaving its commits as they are."
+          else
+            git switch --create "$branch"
+            node scripts/hermes-watch.mjs bump --ref "$REF" --version "$VERSION"
+            record=$(node scripts/hermes-watch.mjs record --ref "$REF" --version "$VERSION" \
+              --run-url "$RUN_URL" --branch "$branch" --total "$total")
+            git add packages/server/Dockerfile \
+              packages/server/src/modules/agents/catalog/hermes-versions.ts "$record"
+            git -c user.name=twuijri -c user.email=twuijri@gmail.com \
+              commit --message "chore(hermes): move the image to Hermes $REF ($VERSION)"
+            git push origin "HEAD:refs/heads/$branch"
+            # A push made with GITHUB_TOKEN starts no pull_request run; start the required checks.
+            gh workflow run ci.yml --ref "$branch"
+            gh workflow run change-record.yml --ref "$branch"
+          fi
+          title="Move the image to Hermes $REF ($VERSION)"
+          if [ -n "$open" ]; then
+            gh pr edit "$open" --body-file "$RUNNER_TEMP/body.md"
+            echo "Updated pull request #$open"
+          elif ! gh pr create --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"; then
+            echo "::error::Could not open the pull request. If GitHub Actions may not create pull requests here, the owner allows it once: Settings > Actions > General > Workflow permissions > 'Allow GitHub Actions to create and approve pull requests'. The move is on $branch meanwhile."
+            exit 1
+          fi
+          # An older release's bot pull request is superseded by this one.
+          gh pr list --state open --base main --limit 200 --json number,headRefName \
+          | jq -r --arg branch "$branch" \
+            '.[] | select((.headRefName | startswith("bot/hermes-")) and .headRefName != $branch) | .number' \
+          | while read -r pr; do
+              gh pr close "$pr" --delete-branch --comment "Superseded: Hermes $REF passes every real-Hermes suite and has its own pull request."
+            done
+          # The newest Hermes passes: the watch issue has nothing left to say.
+          if [ -n "$ISSUE" ]; then
+            gh issue close "$ISSUE" --comment "Hermes $REF passes every real-Hermes suite ($RUN_URL); the pin moves by pull request."
+          fi
+
+      - name: Red — open or update the issue that lists the failing tests
+        if: steps.report.outputs.green != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="Hermes $REF is not supported yet"
+          label=hermes-watch
+          if ! gh label list --limit 200 --json name --jq '.[].name' | grep -qx "$label"; then
+            gh label create "$label" --color d93f0b \
+              --description 'A newer Hermes release the hub does not pass yet (DECISIONS §132)' || label=bug
+          fi
+          # One issue at a time: an issue about an older release is renamed to the newest one.
+          if [ -n "$ISSUE" ]; then
+            gh issue edit "$ISSUE" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            echo "Updated issue #$ISSUE"
+          else
+            gh issue create --title "$title" --label "$label" --body-file "$RUNNER_TEMP/body.md"
+          fi
