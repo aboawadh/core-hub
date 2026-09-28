@@ -251,7 +251,8 @@ export function writeHermesEnv(plan: HermesEnvPlan): HermesWriteResult {
  * sibling keys the user set there.
  *
  * `choice` of null leaves the selection untouched: the hub never clears a model Hermes is
- * using just because this workspace has not chosen one.
+ * using just because this workspace has not chosen one. Where Hermes's scheduled jobs would
+ * not run on the selection, it is said again as `cron.*` (`applyCronModel`).
  */
 export function writeHermesModel(
   home: string,
@@ -367,19 +368,29 @@ function editHermesConfig(
   return result;
 }
 
-/** `model.default` + `model.provider`; null leaves Hermes's own selection alone. */
+/**
+ * `model.default` + `model.provider`, and the scheduled jobs' pair where Hermes needs it
+ * (`applyCronModel`); null leaves Hermes's own selection alone.
+ */
 function applyModel(
   document: YAML.Document,
   choice: HermesModelChoice | null,
   result: HermesWriteResult,
 ): void {
   if (!choice) return;
+  // The selection this write replaces: the scheduled jobs' pair follows it only while it
+  // still says the same, so it is read before anything below changes it.
+  const previous = {
+    provider: document.getIn(['model', 'provider']),
+    model: document.getIn(['model', 'default']),
+  };
   // A fresh install ships `model: ""` (an empty-string sentinel). Replace it with the
   // mapping Hermes itself upgrades it to, rather than setting a key inside a string.
   const current = document.get('model');
   if (typeof current === 'string' || current === null || current === undefined) {
     document.set('model', { default: choice.model, provider: choice.provider });
     result.changed.push('model.default', 'model.provider');
+    applyCronModel(document, previous, choice, result);
     return;
   }
   if (document.getIn(['model', 'default']) !== choice.model) {
@@ -397,6 +408,62 @@ function applyModel(
         result.removed.push(`model.${key}`);
       }
     }
+  }
+  applyCronModel(document, previous, choice, result);
+}
+
+/**
+ * `cron.model_provider` + `cron.model`: the same selection, said again for Hermes's scheduled
+ * jobs, because Hermes up to v2026.9.21 does not run them on `model.*` when it names a
+ * `providers:` block.
+ *
+ * A job that names no provider runs on a snapshot taken when it was created (MIT source
+ * `cron/jobs.py` §_compute_provider_model_snapshots). The snapshot keeps the *resolved*
+ * provider, and every `providers:` block resolves to `custom`; at run time `custom` alone is an
+ * endpoint with no address and no key. So every scheduled job on such a block fails with "No
+ * LLM provider configured" while chat on the same profile works, and `hermes cron resnap` takes
+ * the same snapshot again. `cron.model_provider` outranks the snapshot (`cron/scheduler.py`
+ * §_resolve_job_runtime — it is what Hermes's own log tells an operator to set), and v2026.9.24
+ * dropped the snapshot keeping that order (the job's own pin, then `cron.*`, then `model.*`), so
+ * the pair means the same on every Hermes the hub works with (DECISIONS §119).
+ *
+ * Written only where it is needed, and the hub's only while it follows the selection:
+ * - the selection names a `providers:` block and neither key is there — the case Hermes gets
+ *   wrong; a built-in provider snapshots under its own name and needs nothing here;
+ * - or the pair still says the selection this write replaces — written by the hub before, so it
+ *   follows, to a built-in provider too (jobs made on the block keep their `custom` snapshot).
+ * A pair somebody set apart (`hermes config set cron.model …`) is theirs and stays, as does a
+ * `cron` that is not a mapping. A job pinned with `hermes cron edit --provider` outranks both.
+ */
+function applyCronModel(
+  document: YAML.Document,
+  previous: { provider: unknown; model: unknown },
+  choice: HermesModelChoice,
+  result: HermesWriteResult,
+): void {
+  const provider = document.getIn(['cron', 'model_provider']);
+  const model = document.getIn(['cron', 'model']);
+  const absent = provider === undefined && model === undefined;
+  const following = !absent && provider === previous.provider && model === previous.model;
+  // `hasIn`, not a node check: a block `applyProviders` set in this same pass is still a plain
+  // object until the document is written.
+  const namesBlock = document.hasIn(['providers', choice.provider]);
+  if (!following && !(absent && namesBlock)) return;
+  const block = document.get('cron', true);
+  if (!YAML.isMap(block)) {
+    // Absent, or `cron:` with nothing under it (a null), becomes a real node — `setIn` cannot
+    // create one under a root that was made from an empty file. Anything else is not ours to
+    // reshape.
+    if (block !== undefined && !(YAML.isScalar(block) && block.value == null)) return;
+    document.set('cron', new YAML.YAMLMap());
+  }
+  if (provider !== choice.provider) {
+    document.setIn(['cron', 'model_provider'], choice.provider);
+    result.changed.push('cron.model_provider');
+  }
+  if (model !== choice.model) {
+    document.setIn(['cron', 'model'], choice.model);
+    result.changed.push('cron.model');
   }
 }
 
