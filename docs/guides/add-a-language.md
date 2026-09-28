@@ -2,8 +2,8 @@
 
 Core Hub is written in Arabic and English, and anyone can add another language (ADR 0028). You
 fill translation files; the language then appears in every language picker — web, desktop, the
-hub's messages and the terminal client, and on the phones once they join (phase 2) — in its own
-name, with its own reading direction. Nothing needs a code change.
+hub's messages, the terminal client, iPhone and Android (also in the phones' own per-app language
+settings) — in its own name, with its own reading direction. Nothing needs a code change.
 
 ## 1. Start the language
 
@@ -21,7 +21,8 @@ The code is a BCP 47 tag: a language (`fr`), optionally a script (`zh-Hant`) and
   its direction taken from your system (`--english-name`, `--native-name`, `--direction rtl` if they
   are missing or wrong);
 - writes `<code>.json` next to `en.json` in `packages/server/src/i18n`, `packages/cli/src/i18n`,
-  `packages/web/src/i18n` and `apps/desktop/src/i18n` — the English keys, every string empty;
+  `packages/web/src/i18n` and `apps/desktop/src/i18n`, and every area's `<area>.<code>.json` in
+  `apps/ios/CoreHub/i18n` and `apps/android/i18n` — the English keys, every string empty;
 - regenerates each platform's `catalogues.ts`.
 
 An empty string is not translated yet: that text keeps showing in English (or in your
@@ -33,6 +34,7 @@ each string you fill.
 Fill the empty strings. Keep, exactly as they are:
 
 - `{placeholders}` — every one the English has, and no new ones (`{count} files` → `{count} fichiers`);
+  on Android they read `%1$s`, `%2$d` (same rule);
 - text in `` `backticks` `` — commands and names a person types;
 - the number of lines.
 
@@ -62,7 +64,10 @@ English and as wide as the room; if it is wider than both, find shorter words or
 abbreviation — a cut label is worse.
 
 To see your language: `pnpm dev` and `pnpm web:dev`, then pick it in the sidebar's language menu or
-Settings → Display.
+Settings → Display. On the phones: the app's Display settings, or the system's per-app language
+(Android 13+: Settings → Apps → Core Hub → Language; iPhone: Settings → Core Hub → Language).
+Android's string resources are generated from `apps/android/i18n` at build time — nobody edits
+`strings.xml`.
 
 ## 4. Open a pull request
 

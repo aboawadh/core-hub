@@ -72,7 +72,7 @@ class ConnectViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    private fun language() = if (graph.prefs.effectiveLanguage.tag == "ar") "ar" else "en"
+    private fun language() = graph.prefs.effectiveLanguage.hubLocale
 
     fun signIn(username: String, password: String) {
         val hub = _state.value.hub ?: return

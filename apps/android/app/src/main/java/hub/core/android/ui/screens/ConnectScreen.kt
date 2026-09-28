@@ -94,9 +94,9 @@ fun ConnectScreen(pendingPairing: PairingRequest?, onPairingHandled: () -> Unit)
             actions = {
                 val lang = graph.prefs.effectiveLanguage
                 HubIconButton(
-                    Lucide.Globe, stringResource(R.string.shell_language) + ": " + (if (lang == AppLanguage.AR) "English" else "العربية"),
+                    Lucide.Globe, stringResource(R.string.shell_language) + ": " + AppLanguage.next(lang).info.nativeName,
                     {
-                        graph.prefs.language = if (lang == AppLanguage.AR) AppLanguage.EN else AppLanguage.AR
+                        graph.prefs.language = AppLanguage.next(lang)
                         (context as? android.app.Activity)?.recreate()
                     },
                     kind = IconKind.Glass, modifier = Modifier.testTag("sign_in.language"),

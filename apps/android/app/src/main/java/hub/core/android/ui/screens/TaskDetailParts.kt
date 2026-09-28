@@ -1,6 +1,7 @@
 package hub.core.android.ui.screens
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -204,7 +205,7 @@ fun CommentsPart(comments: List<Comment>, onSend: suspend (String) -> Boolean) {
         comments.forEach { comment ->
             Custom(Modifier.testTag("task.comment")) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(comment.author.name, Modifier.weight(1f), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted, maxLines = 1)
+                    Text(comment.author.name, Modifier.weight(1f), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(localTime(comment.createdAt), fontSize = FontTokens.sizeXs.sp, color = t.textFaint)
                 }
                 MarkdownView(comment.content, Modifier.fillMaxWidth())

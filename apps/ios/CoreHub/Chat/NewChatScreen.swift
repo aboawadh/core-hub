@@ -189,11 +189,10 @@ struct NewChatScreen: View {
 /// text.
 enum Starters {
     static func suggestions(_ language: AppLanguage) -> [String] {
-        switch language {
-        case .ar:
+        // Seed content in Arabic and English only: any other language gets English.
+        if language.base == .ar {
             return ["اشرح لي بنية هذا المشروع وأين أبدأ", "اقرأ الملفات في مجلد العمل ولخّص ما تجده", "اكتب اختبارًا يفشل للسلوك الذي أصفه لك"]
-        case .en:
-            return ["Explain this project’s structure and where to start", "Read the files in the working folder and summarise them", "Write a failing test for the behaviour I describe"]
         }
+        return ["Explain this project’s structure and where to start", "Read the files in the working folder and summarise them", "Write a failing test for the behaviour I describe"]
     }
 }

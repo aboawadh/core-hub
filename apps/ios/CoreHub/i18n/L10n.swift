@@ -1,28 +1,94 @@
-// Every string a person reads comes from i18n/ar.json or i18n/en.json (the same keys, checked
-// by `pnpm i18n:check` and L10nTests). The app has its own language setting, so the catalogue
-// is read here rather than through the system's localisation, and switching is immediate.
+// Every string a person reads comes from the catalogues in i18n/ — `<lang>.json` and each area's
+// `<area>.<lang>.json` — one set per language of the registry (locales/languages.json, ADR 0028,
+// generated into Generated/Languages.swift). Arabic and English hold every key (`pnpm i18n:check`,
+// L10nTests); a key another language lacks comes from its fallback chain and then English, never
+// the bare key. The app has its own language setting, so the catalogue is read here rather than
+// through the system's localisation, and switching is immediate.
 import Foundation
 import SwiftUI
 
-enum AppLanguage: String, CaseIterable, Identifiable, Codable {
-    case ar
-    case en
+/// A UI language of the registry. Arabic and English are always there (`.ar`, `.en`).
+struct AppLanguage: RawRepresentable, Hashable, Identifiable, Codable {
+    let rawValue: String
+
+    /// A registered language (or a test-only pseudo-locale); nil for anything else.
+    init?(rawValue: String) {
+        guard Languages.all.contains(where: { $0.code == rawValue })
+            || Languages.pseudo.contains(where: { $0.code == rawValue }) else { return nil }
+        self.rawValue = rawValue
+    }
+
+    private init(known: String) { rawValue = known }
+
+    static let ar = AppLanguage(known: "ar")
+    static let en = AppLanguage(known: "en")
+
+    /// Every language a person can choose, in the registry's order (never a pseudo-locale).
+    static var allCases: [AppLanguage] { Languages.all.map { AppLanguage(known: $0.code) } }
 
     var id: String { rawValue }
-    var isRTL: Bool { self == .ar }
+    var info: LanguageInfo? { Languages.all.first { $0.code == rawValue } }
+    var pseudo: PseudoLocale? { Languages.pseudo.first { $0.code == rawValue } }
+    /// How the language names itself (the pickers).
+    var nativeName: String { info?.nativeName ?? rawValue }
+    var isRTL: Bool { info?.rtl ?? pseudo?.rtl ?? false }
     var layoutDirection: LayoutDirection { isRTL ? .rightToLeft : .leftToRight }
+    /// The language a pseudo-locale borrows its words from, or this one.
+    var base: AppLanguage { pseudo.flatMap { AppLanguage(rawValue: $0.base) } ?? self }
+    /// The languages a key is looked up in: this one, its fallbacks, then English.
+    var chain: [AppLanguage] {
+        var out: [AppLanguage] = []
+        for code in [rawValue, base.rawValue] + (base.info?.fallback ?? []) + ["en"] {
+            if let language = AppLanguage(rawValue: code), !out.contains(language) { out.append(language) }
+        }
+        return out
+    }
     /// The locale every number, date, size and percentage is formatted in: Latin digits (123) in
-    /// both languages, also in Arabic (owner, 2026-09-26, DECISIONS §113). Arabic words, plural
-    /// forms and RTL stay.
-    var locale: Locale { Locale(identifier: rawValue).latinDigits }
+    /// every language, also in Arabic (owner, 2026-09-26, DECISIONS §113). Words, plural forms and
+    /// RTL stay.
+    var locale: Locale { Locale(identifier: base.rawValue).latinDigits }
+
+    /// The registered language for a BCP 47 tag: the exact tag, with its likely script
+    /// (`zh-TW` → `zh-Hant`), the bare language, then any variant of it.
+    static func match(_ tag: String) -> AppLanguage? {
+        let codes = allCases.map(\.rawValue)
+        let lower = tag.replacingOccurrences(of: "_", with: "-").lowercased()
+        if let exact = codes.first(where: { $0.lowercased() == lower }) { return AppLanguage(known: exact) }
+        let parts = lower.split(separator: "-").map(String.init)
+        guard let language = parts.first else { return nil }
+        let region = parts.dropFirst().first { $0.count == 2 }
+        var script = parts.dropFirst().first { $0.count == 4 }
+        if script == nil, language == "zh" { script = ["tw", "hk", "mo"].contains(region ?? "") ? "hant" : "hans" }
+        var candidates: [String] = []
+        if let script, let region { candidates.append("\(language)-\(script)-\(region)") }
+        if let script { candidates.append("\(language)-\(script)") }
+        if let region { candidates.append("\(language)-\(region)") }
+        candidates.append(language)
+        for candidate in candidates {
+            if let found = codes.first(where: { $0.lowercased() == candidate }) { return AppLanguage(known: found) }
+        }
+        return codes.first { $0.lowercased().split(separator: "-").first.map(String.init) == language }
+            .map { AppLanguage(known: $0) }
+    }
 
     /// The phone's own language when it is one of ours, else Arabic (Arabic first, DESIGN.md).
+    /// iOS's per-app language (Settings → Core Hub → Language) comes first in this list.
     static var preferred: AppLanguage {
         for code in Locale.preferredLanguages {
-            if code.hasPrefix("en") { return .en }
-            if code.hasPrefix("ar") { return .ar }
+            if let found = match(code) { return found }
         }
         return .ar
+    }
+
+    /// The contract's `Locale` (`ar` | `en`) nearest to this language: the hub's own words and
+    /// the `Accept-Language` of the operations that document only those two (DECISIONS §130).
+    var hubLocale: String { chain.first { $0 == .ar || $0 == .en }?.rawValue ?? "en" }
+
+    /// What the one-press language switch goes to: the other of two languages, else the next.
+    var next: AppLanguage {
+        let all = AppLanguage.allCases
+        guard let at = all.firstIndex(of: self) else { return .ar }
+        return all[(at + 1) % all.count]
     }
 }
 
@@ -49,17 +115,32 @@ struct L10n {
 
     init(_ language: AppLanguage, bundle: Bundle = .main) {
         self.language = language
-        self.table = L10n.load(language, bundle: bundle)
+        // English first, then each language of the chain over it: the nearest one wins.
+        var merged: [String: String] = [:]
+        for each in language.base.chain.reversed() {
+            merged.merge(L10n.load(each, bundle: bundle).filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }) { _, new in new }
+        }
+        if let pseudo = language.pseudo {
+            merged = merged.mapValues { Pseudo.transform($0, style: pseudo.style) }
+        }
+        self.table = merged
     }
 
-    /// The text for `key` with `{name}` placeholders filled; the key itself when missing, so a
-    /// gap is visible instead of silent.
+    /// The text for `key` with `{name}` placeholders filled; the key itself when no language of
+    /// the chain has it, so a gap is visible instead of silent. A plural form (`….few`) a
+    /// language lacks reads its `….other`.
     func t(_ key: String, _ params: [String: String] = [:]) -> String {
-        var text = table[key] ?? key
+        var text = table[key] ?? pluralOther(key) ?? key
         for (name, value) in params {
             text = text.replacingOccurrences(of: "{\(name)}", with: value)
         }
         return text
+    }
+
+    private func pluralOther(_ key: String) -> String? {
+        guard let dot = key.lastIndex(of: "."),
+              ["zero", "one", "two", "few", "many"].contains(String(key[key.index(after: dot)...])) else { return nil }
+        return table[String(key[..<dot]) + ".other"]
     }
 
     func callAsFunction(_ key: String, _ params: [String: String] = [:]) -> String {
@@ -68,14 +149,21 @@ struct L10n {
 
     func has(_ key: String) -> Bool { table[key] != nil }
 
+    /// A language's name in a picker: Arabic and English in the catalogue's own words, any other
+    /// language in its own name from the registry (ADR 0028).
+    func name(of language: AppLanguage) -> String {
+        has("shell.language_\(language.rawValue)") ? t("shell.language_\(language.rawValue)") : language.nativeName
+    }
+
     var keys: Set<String> { Set(table.keys) }
 
     /// The product's name in this language (from product.ts, not the catalogue).
-    var productName: String { language == .ar ? Product.nameAr : Product.name }
+    var productName: String { language.base == .ar ? Product.nameAr : Product.name }
 
     private static var cache: [String: [String: String]] = [:]
     private static let lock = NSLock()
 
+    /// One language's own catalogue, without its fallbacks.
     static func load(_ language: AppLanguage, bundle: Bundle) -> [String: String] {
         let cacheKey = "\(bundle.bundlePath)#\(language.rawValue)"
         lock.lock()

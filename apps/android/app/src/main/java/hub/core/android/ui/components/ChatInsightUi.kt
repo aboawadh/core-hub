@@ -334,7 +334,7 @@ fun RunRow(run: Run) {
             run.model?.let {
                 Text(it.substringAfterLast('/'), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis, modifier = Modifier.weight(1f))
             } ?: Box(Modifier.weight(1f))
-            Text(localTime(run.startedAt ?: run.createdAt), fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1)
+            Text(localTime(run.startedAt ?: run.createdAt), fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Text(runDetails(run, now, live), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
         if (run.status == hub.core.client.model.RunStatus.FAILED) {

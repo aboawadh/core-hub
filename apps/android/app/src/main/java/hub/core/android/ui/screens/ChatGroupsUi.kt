@@ -252,7 +252,7 @@ private fun ChannelHeader(channel: String, count: Int, open: Boolean, shell: She
         LucideIcon(Lucide.MessagesSquare, null, size = 12.dp, tint = t.textFaint)
         Text(
             channelName(channel), Modifier.weight(1f), fontSize = FontTokens.sizeXs.sp, fontWeight = FontWeight.SemiBold,
-            color = t.textMuted, maxLines = 1,
+            color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         Text(count.toString(), fontSize = FontTokens.sizeXs.sp, color = t.textFaint)
     }

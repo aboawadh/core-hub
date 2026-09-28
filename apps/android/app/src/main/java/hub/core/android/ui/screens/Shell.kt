@@ -773,14 +773,14 @@ private fun Footer(shell: ShellViewModel, nav: Navigator, onClose: () -> Unit) {
             val lang = graph.prefs.effectiveLanguage
             Row(
                 Modifier.clip(ItemShape).clickable {
-                    graph.prefs.language = if (lang == AppLanguage.AR) AppLanguage.EN else AppLanguage.AR
+                    graph.prefs.language = AppLanguage.next(lang)
                     (context as? Activity)?.recreate()
                 }.padding(horizontal = 4.dp, vertical = 6.dp).testTag("footer.language"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 LucideIcon(Lucide.Globe, stringResource(R.string.shell_language), size = 16.dp, tint = t.accent)
-                Text(if (lang == AppLanguage.AR) "English" else "العربية", fontSize = FontTokens.sizeSm.sp, color = t.accent)
+                Text(AppLanguage.next(lang).info.nativeName, fontSize = FontTokens.sizeSm.sp, color = t.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.weight(1f))
             ThemeChips(theme) { graph.prefs.setTheme(it) }

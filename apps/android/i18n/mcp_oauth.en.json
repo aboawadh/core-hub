@@ -1,0 +1,15 @@
+{
+  "mcp_oauth_connected": "Connected",
+  "mcp_oauth_expired_status": "Expired",
+  "mcp_oauth_not_connected": "Not connected",
+  "mcp_oauth_error": "Sign-in unreadable",
+  "mcp_oauth_connect": "Connect OAuth",
+  "mcp_oauth_reconnect": "Reconnect OAuth",
+  "mcp_oauth_per_profile": "Each profile connects separately.",
+  "mcp_oauth_waiting": "Finish signing in in the browser; this page updates by itself.",
+  "mcp_oauth_open_page": "Open the sign-in page",
+  "mcp_oauth_approved": "Connected — Hermes lists %1$s tools.",
+  "mcp_oauth_failed": "The sign-in did not finish:",
+  "mcp_oauth_cancelled": "The sign-in was cancelled.",
+  "mcp_oauth_expired": "The sign-in ran out before it finished. Start it again."
+}

@@ -1,0 +1,17 @@
+{
+  "taskwt_title": "Worktree",
+  "taskwt_branch": "Branch",
+  "taskwt_path": "Folder",
+  "taskwt_changes": "Changes",
+  "taskwt_counts": "%1$s changed files · %2$s commits ahead of %3$s",
+  "taskwt_remove": "Remove worktree",
+  "taskwt_confirm_remove": "Remove this task's worktree?",
+  "taskwt_confirm_remove_body": "The folder is removed. The branch %1$s stays in the repository, and uncommitted changes are lost.",
+  "taskwt_running": "The task is running in this worktree. Stop it first.",
+  "taskwt_status_creating": "Being made",
+  "taskwt_status_ready": "Ready",
+  "taskwt_status_dirty": "Has changes",
+  "taskwt_status_merged": "Merged",
+  "taskwt_status_removed": "Removed",
+  "taskwt_status_error": "Git refused"
+}

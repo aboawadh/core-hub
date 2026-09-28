@@ -151,7 +151,7 @@ final class AppModel {
         let pair = try await api.anonymous(hub: hub) {
             try await AuthAPI.authLogin(
                 loginRequest: LoginRequest(username: username, password: password),
-                acceptLanguage: AuthAPI.AcceptLanguage_authLogin(rawValue: self.language.rawValue),
+                acceptLanguage: AuthAPI.AcceptLanguage_authLogin(rawValue: self.language.hubLocale),
                 apiConfiguration: $0
             )
         }
@@ -178,7 +178,7 @@ final class AppModel {
         let pair = try await api.anonymous(hub: hub) {
             try await AuthAPI.authCompleteSetup(
                 setupRequest: request,
-                acceptLanguage: AuthAPI.AcceptLanguage_authCompleteSetup(rawValue: self.language.rawValue),
+                acceptLanguage: AuthAPI.AcceptLanguage_authCompleteSetup(rawValue: self.language.hubLocale),
                 apiConfiguration: $0
             )
         }

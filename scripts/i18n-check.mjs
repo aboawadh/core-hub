@@ -12,7 +12,7 @@
 //   other than 0-9 (DECISIONS §113), or `status: complete` while keys are missing.
 // - The generated catalogue indexes (`src/i18n/catalogues.ts`) match the registry.
 // The space rules (how wide a string may be) are `pnpm i18n:limits`, which needs the fonts.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { staleIndexes } from './i18n/generate.mjs';
 import { SETS, readCatalogue, readRegistry, repoRoot } from './i18n/registry.mjs';
@@ -22,7 +22,6 @@ const OLD_WORD = { en: /\bworkspaces?\b/i, ar: /مساح(?:ة|ات) (?:ال)?ع�
 // no other script's digits — nor Arabic's percent, thousands and decimal signs — in a catalogue,
 // unless the owner lets a language use its own (`numerals: native`).
 const NATIVE_DIGITS = /[\u0660-\u066C\u06F0-\u06F9]|(?![0-9])\p{Nd}/u;
-const ANDROID_AR = 'apps/android/app/src/main/res/values-ar';
 const PLURAL = new Set(['zero', 'one', 'two', 'few', 'many', 'other']);
 const verbose = process.argv.includes('--verbose');
 
@@ -33,7 +32,9 @@ const fail = (msg) => {
 };
 const warn = (msg) => console.warn(`  warn   ${msg}`);
 
-const placeholderList = (text) => [...String(text).matchAll(/\{[a-zA-Z0-9_]+\}/g)].map((m) => m[0]);
+// `{name}` everywhere; Android's own `%1$s` / `%2$d` in its catalogues.
+const placeholderList = (text) =>
+  [...String(text).matchAll(/\{[a-zA-Z0-9_]+\}|%\d+\$(?:\.\d+)?[sdf]/g)].map((m) => m[0]);
 const placeholders = (text) => [...new Set(placeholderList(text))].sort().join(',');
 const codeSpans = (text) =>
   [...String(text).matchAll(/`[^`]*`/g)]
@@ -143,7 +144,7 @@ for (const set of SETS) {
     if (catalogue === null) {
       if (existsSync(path.join(dir, `${each.code}.json`))) continue; // unreadable: reported
       // The phone apps join the registry in phase 2 (ADR 0028): until then only ar/en there.
-      if (each.required || set.index) fail(`${set.dir}/${each.code}.json is missing`);
+      fail(`${set.dir}/${each.code}.json is missing — \`pnpm i18n:new ${each.code}\` writes it`);
       continue;
     }
     catalogues[each.code] = catalogue;
@@ -151,18 +152,54 @@ for (const set of SETS) {
   const { ar, en } = catalogues;
   if (!ar || !en) continue;
 
-  // Arabic and English: strict, as always.
+  // Plural strings: keys ending in a CLDR category, grouped by what comes before them, in either
+  // language. `x.other` alone is a word ("Other"), not a plural string.
+  const pluralGroups = new Map();
+  for (const key of [...en.keys(), ...ar.keys()]) {
+    const base = pluralBase(key);
+    if (!base) continue;
+    if (!pluralGroups.has(base)) pluralGroups.set(base, new Set());
+    pluralGroups.get(base).add(key.slice(base.length + 1));
+  }
+  for (const [base, categories] of [...pluralGroups])
+    if (categories.size < 2 || !categories.has('other')) pluralGroups.delete(base);
+  const inPlural = (key) => {
+    const base = pluralBase(key);
+    return base !== null && pluralGroups.has(base);
+  };
+
+  // Arabic and English: strict, as always. A plural string gives each language's own forms
+  // (Arabic six, English at least one and other), and `other` in both.
   for (const key of en.keys())
-    if (!ar.has(key)) fail(`${set.name}: "${key}" exists in en.json but not in ar.json`);
+    if (!ar.has(key) && !inPlural(key))
+      fail(`${set.name}: "${key}" exists in en.json but not in ar.json`);
   for (const key of ar.keys())
-    if (!en.has(key)) fail(`${set.name}: "${key}" exists in ar.json but not in en.json`);
+    if (!en.has(key) && !inPlural(key))
+      fail(`${set.name}: "${key}" exists in ar.json but not in en.json`);
+  // A plural form may leave its number out ("one file"), never bring a placeholder of its own.
+  for (const [key, value] of ar) {
+    const base = pluralBase(key);
+    if (!inPlural(key) || typeof value !== 'string') continue;
+    const allowed = placeholderList(en.get(`${base}.other`) ?? '');
+    const extra = placeholderList(value).filter((p) => !allowed.includes(p));
+    if (extra.length > 0)
+      fail(`${set.name}: ar "${key}" has ${extra.join(', ')}, which English does not`);
+  }
+  for (const [base] of pluralGroups)
+    for (const [name, catalogue] of [
+      ['en', en],
+      ['ar', ar],
+    ])
+      if (!present(catalogue, `${base}.other`))
+        fail(`${set.name}: ${name} "${base}" has no "${base}.other"`);
   for (const [key, value] of en) {
+    if (inPlural(key) && !ar.has(key)) continue;
     if (typeof value !== 'string' || value.trim() === '')
       fail(`${set.name}: en "${key}" is empty or not a string`);
     const other = ar.get(key);
     if (typeof other !== 'string' || other.trim() === '')
       fail(`${set.name}: ar "${key}" is empty or not a string`);
-    else if (placeholders(value) !== placeholders(other))
+    else if (!inPlural(key) && placeholders(value) !== placeholders(other))
       fail(`${set.name}: "${key}" placeholders differ between ar and en`);
   }
   // One word for one thing (owner, 2026-09-23): what the code calls a workspace, a person
@@ -174,18 +211,6 @@ for (const set of SETS) {
   for (const [key, value] of ar)
     if (typeof value === 'string' && OLD_WORD.ar.test(value))
       fail(`${set.name}: ar "${key}" says «مساحة العمل» — the product word is «بروفايل»`);
-
-  // Plural strings: English keys ending in a CLDR category, grouped by what comes before it.
-  // `x.other` alone is a word ("Other"), not a plural string.
-  const pluralGroups = new Map();
-  for (const key of en.keys()) {
-    const base = pluralBase(key);
-    if (!base) continue;
-    if (!pluralGroups.has(base)) pluralGroups.set(base, new Set());
-    pluralGroups.get(base).add(key.slice(base.length + 1));
-  }
-  for (const [base, categories] of [...pluralGroups])
-    if (categories.size < 2 || !categories.has('other')) pluralGroups.delete(base);
 
   const report = [];
   for (const each of languages) {
@@ -265,20 +290,16 @@ for (const set of SETS) {
 for (const { file } of await staleIndexes(registry))
   fail(`${path.relative(repoRoot, file)} is out of date — run \`pnpm i18n:generate\``);
 
-// The Android app keeps its strings in resource XML (its own parity test checks the keys).
-if (existsSync(path.join(repoRoot, ANDROID_AR))) {
-  for (const name of readdirSync(path.join(repoRoot, ANDROID_AR))) {
-    if (!name.endsWith('.xml')) continue;
-    const text = readFileSync(path.join(repoRoot, ANDROID_AR, name), 'utf8');
-    text.split('\n').forEach((line, index) => {
-      if (NATIVE_DIGITS.test(line))
+// Android's strings are generated from apps/android/i18n (ADR 0028): a strings XML written by hand
+// would be a second copy nobody translates.
+const androidRes = path.join(repoRoot, 'apps/android/app/src/main/res');
+if (existsSync(androidRes))
+  for (const dir of readdirSync(androidRes).filter((name) => name.startsWith('values')))
+    for (const name of readdirSync(path.join(androidRes, dir)))
+      if (/^(strings|plurals).*\.xml$/.test(name))
         fail(
-          `android: ${ANDROID_AR}/${name}:${index + 1} has Arabic-Indic digits — digits are Latin (123) everywhere`,
+          `android: ${dir}/${name} — Android strings live in apps/android/i18n/*.json; the resources are generated`,
         );
-    });
-  }
-  console.log('i18n:check  android: Arabic resources use Latin digits');
-}
 
 if (failures > 0) {
   console.error(`i18n:check  FAILED with ${failures} problem(s)`);
