@@ -46,6 +46,12 @@ export const CHANNELS = {
   voiceMic: 'voice:mic',
   voiceMicAsk: 'voice:mic-ask',
   voiceMicSettings: 'voice:mic-settings',
+  ownerGet: 'owner:get',
+  ownerRecoveryBegin: 'owner:recovery-begin',
+  ownerRecoveryFinish: 'owner:recovery-finish',
+  ownerRecoveryCancel: 'owner:recovery-cancel',
+  ownerSignIn: 'owner:sign-in',
+  ownerSetLocalSignIn: 'owner:set-local-sign-in',
 } as const;
 
 export interface WelcomeInit {

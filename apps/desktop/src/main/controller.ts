@@ -84,7 +84,17 @@ import {
 import { AutoInstaller, type PendingUpdate } from './auto-update.js';
 import { appMenuTemplate, trayMenuTemplate, type MenuActions, type MenuUpdates } from './menu.js';
 import { startProxy, type ProxyServer } from './proxy.js';
-import { isHubToApp } from '../shared/hub-ipc.js';
+import { isHubToApp, ownerAccessClient } from '../shared/hub-ipc.js';
+import { OwnerAccessService } from './owner-access.js';
+import {
+  confirmKind,
+  fakeConfirm,
+  osConfirm,
+  realExec,
+  realExists,
+  type ConfirmKind,
+  type OsConfirmEnv,
+} from './os-confirm.js';
 import { RelayManager, RelayRefusal } from './relay.js';
 import {
   answerPermission,
@@ -150,6 +160,16 @@ export class DesktopController {
   private readonly computer: ThisComputerService;
   /** The way in from outside for the local hub (DECISIONS §95). */
   private readonly relay: RelayManager;
+  /** The owner of the local hub (DECISIONS §131): forgot password, password-free sign-in. */
+  private readonly owner: OwnerAccessService;
+  private readonly ownerHub = ownerAccessClient({
+    send: (message) => {
+      if (!this.localHub) return false;
+      this.localHub.send(message);
+      return true;
+    },
+  });
+  private confirmKindOnce: Promise<ConfirmKind | null> | null = null;
 
   constructor(
     private readonly paths: ControllerPaths,
@@ -196,6 +216,36 @@ export class DesktopController {
       platform: process.platform,
       arch: process.arch,
       onChange: (state) => this.localHub?.send({ type: 'relay-state', state }),
+    });
+    const confirmEnv: OsConfirmEnv = {
+      platform: process.platform,
+      env: process.env,
+      exec: realExec,
+      exists: realExists,
+      touchId: {
+        can: () => process.platform === 'darwin' && systemPreferences.canPromptTouchID(),
+        prompt: (reason) => systemPreferences.promptTouchID(reason),
+      },
+    };
+    // The desktop tests answer the OS prompt themselves; an installed app always asks the OS.
+    const fake = app.isPackaged ? null : fakeConfirm(process.env.COREHUB_DESKTOP_FAKE_OS_CONFIRM);
+    this.owner = new OwnerAccessService({
+      isLocal: () => this.config.get().mode === 'local' && this.localHub !== null,
+      kind: () => {
+        if (fake) return Promise.resolve('test');
+        // Windows asks PowerShell whether Hello is set up: once per run is enough.
+        this.confirmKindOnce ??= confirmKind(confirmEnv).catch(() => null);
+        return this.confirmKindOnce;
+      },
+      confirm: (reason) => (fake ? fake(reason) : osConfirm(confirmEnv, reason)),
+      reason: () =>
+        this.t(
+          process.platform === 'darwin' ? 'owner_access.touch_id_reason' : 'owner_access.prompt',
+        ),
+      ask: (request) => this.ownerHub.ask(request),
+      localSignIn: () => this.config.get().localSignIn,
+      setLocalSignIn: (value) => this.config.update((c) => ({ ...c, localSignIn: value })),
+      label: () => `desktop · ${os.hostname() || PRODUCT.name}`.slice(0, 120),
     });
   }
 
@@ -443,6 +493,7 @@ export class DesktopController {
 
   /** The hub asks about the way in from outside (`shared/hub-ipc.ts`). */
   private async answerHub(message: unknown): Promise<void> {
+    if (this.ownerHub.receive(message)) return;
     if (!isHubToApp(message)) return;
     const hub = this.localHub;
     const reply = (answer: Parameters<LocalHub['send']>[0]) => (this.localHub ?? hub)?.send(answer);
@@ -1122,8 +1173,32 @@ export class DesktopController {
     };
   }
 
+  private registerOwnerIpc(): void {
+    ipcMain.handle(CHANNELS.ownerGet, (event) => (this.fromApp(event) ? this.owner.state() : null));
+    ipcMain.handle(CHANNELS.ownerRecoveryBegin, (event) =>
+      this.fromApp(event) ? this.owner.beginRecovery() : null,
+    );
+    ipcMain.handle(CHANNELS.ownerRecoveryFinish, (event, password: unknown) =>
+      this.fromApp(event) && typeof password === 'string'
+        ? this.owner.finishRecovery(password)
+        : null,
+    );
+    ipcMain.handle(CHANNELS.ownerRecoveryCancel, (event) => {
+      if (this.fromApp(event)) this.owner.cancelRecovery();
+    });
+    ipcMain.handle(CHANNELS.ownerSignIn, (event) =>
+      this.fromApp(event) ? this.owner.signIn() : null,
+    );
+    ipcMain.handle(CHANNELS.ownerSetLocalSignIn, (event, value: unknown, token: unknown) =>
+      this.fromApp(event)
+        ? this.owner.setLocalSignIn(value === true, typeof token === 'string' ? token : null)
+        : null,
+    );
+  }
+
   private registerIpc(): void {
     this.registerHelperIpc();
+    this.registerOwnerIpc();
     this.registerProgramsIpc();
     this.registerUpdatesIpc();
     ipcMain.handle(CHANNELS.voiceMic, (event) => (this.fromApp(event) ? this.micState() : null));

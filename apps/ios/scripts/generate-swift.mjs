@@ -8,7 +8,10 @@
 //                                     its id and the pairing QR type, current and legacy)
 //   CoreHub/Resources/<lang>.lproj/InfoPlist.strings ← the product's name and the
 //                                     `permissions.*` sentences of CoreHub/i18n/<lang>.json,
-//                                     so the system's own prompts speak Arabic and English
+//                                     so the system's own prompts speak each language
+//   CoreHub/Generated/Languages.swift ← locales/languages.json (the UI languages, ADR 0028); the
+//                                     same list is `CFBundleLocalizations` in project.yml, so
+//                                     iOS offers each one in the app's own language setting
 //
 //   node apps/ios/scripts/generate-swift.mjs          # write them
 //   node apps/ios/scripts/generate-swift.mjs --check  # fail when a committed file is stale (CI)
@@ -156,6 +159,45 @@ ${motion}
 `;
 }
 
+/** `"a\"b"` — a Swift string literal. */
+const swiftLiteral = (text) => `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+
+export function languagesSwift(registry) {
+  const entry = (l) =>
+    `        LanguageInfo(code: ${swiftLiteral(l.code)}, englishName: ${swiftLiteral(l.englishName)}, nativeName: ${swiftLiteral(l.nativeName)}, rtl: ${l.direction === 'rtl'}, fallback: [${l.fallback.map(swiftLiteral).join(', ')}]),`;
+  const pseudo = (p) =>
+    `        PseudoLocale(code: ${swiftLiteral(p.code)}, base: ${swiftLiteral(p.base)}, rtl: ${p.direction === 'rtl'}, style: ${swiftLiteral(p.style)}),`;
+  return `${HEADER('locales/languages.json')}
+/// One UI language of the registry (ADR 0028).
+struct LanguageInfo: Equatable {
+    let code: String
+    let englishName: String
+    /// How the language names itself: what the language pickers show.
+    let nativeName: String
+    let rtl: Bool
+    /// Tried in order for a key the language lacks; English is always tried last.
+    let fallback: [String]
+}
+
+/// A test-only locale made from a real catalogue; never offered to a person.
+struct PseudoLocale: Equatable {
+    let code: String
+    let base: String
+    let rtl: Bool
+    let style: String
+}
+
+enum Languages {
+    static let all: [LanguageInfo] = [
+${registry.languages.map(entry).join('\n')}
+    ]
+    static let pseudo: [PseudoLocale] = [
+${registry.pseudo.map(pseudo).join('\n')}
+    ]
+}
+`;
+}
+
 export function productSwift(product) {
   const { PRODUCT, derived, LEGACY } = product;
   return `${HEADER('packages/contracts/src/product.ts')}
@@ -179,6 +221,7 @@ enum Product {
 const stringsLiteral = (text) => `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 export function infoPlistStrings(language, product, catalogue) {
+  // The product's name is Arabic in Arabic and its own (Latin) name in every other language.
   const name = language === 'ar' ? product.PRODUCT.nameAr : product.PRODUCT.name;
   const entries = {
     CFBundleDisplayName: name,
@@ -203,16 +246,30 @@ async function main() {
     'Generated/Tokens.swift': tokensSwift(tokens),
     'Generated/Product.swift': productSwift(product),
   };
-  for (const language of ['ar', 'en']) {
-    const catalogue = JSON.parse(
-      readFileSync(path.join(appDir, 'i18n', `${language}.json`), 'utf8'),
-    );
-    files[`Resources/${language}.lproj/InfoPlist.strings`] = infoPlistStrings(
-      language,
+  const registry = JSON.parse(readFileSync(path.join(repoRoot, 'locales/languages.json'), 'utf8'));
+  files['Generated/Languages.swift'] = languagesSwift(registry);
+  const read = (code) => {
+    const file = path.join(appDir, 'i18n', `${code}.json`);
+    return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  };
+  for (const language of registry.languages) {
+    // A permission sentence the language lacks comes from its fallback chain, then English.
+    const chain = [language.code, ...language.fallback, 'en'].map(read);
+    const permissions = {};
+    for (const key of Object.keys(read('en').permissions ?? {}))
+      permissions[key] = chain.map((c) => c.permissions?.[key]).find((v) => v && v.trim()) ?? '';
+    files[`Resources/${language.code}.lproj/InfoPlist.strings`] = infoPlistStrings(
+      language.code,
       product,
-      catalogue,
+      { permissions },
     );
   }
+  // `CFBundleLocalizations` in project.yml: the registry's codes, in its order.
+  const projectFile = path.join(iosRoot, 'project.yml');
+  const project = readFileSync(projectFile, 'utf8');
+  const localizations = `CFBundleLocalizations: [${registry.languages.map((l) => l.code).join(', ')}]`;
+  const updated = project.replace(/CFBundleLocalizations: \[[^\]]*\]/, localizations);
+  files['../project.yml'] = updated;
   let stale = 0;
   for (const [name, content] of Object.entries(files)) {
     const file = path.join(appDir, name);

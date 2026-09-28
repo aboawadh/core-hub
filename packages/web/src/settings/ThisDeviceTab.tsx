@@ -20,6 +20,7 @@ import { OutsideAccessSection } from '../desktop/OutsideAccessSection.js';
 import { VoiceSection } from '../desktop/VoiceSection.js';
 import { desktopBridge, type DesktopState } from '../desktop/desktop.js';
 import { HelperSection } from '../desktop/HelperSection.js';
+import { LocalSignInSection } from '../desktop/LocalSignInSection.js';
 import { UpdatesSection } from '../desktop/UpdatesSection.js';
 import { Button, Notice, Skeleton, SkeletonGroup, Switch, Table } from '../ui/index.js';
 
@@ -35,6 +36,7 @@ export function ThisDeviceTab() {
   const meta = useMeta();
   const { user } = useAuth();
   const isAdmin = user?.role === 'owner' || user?.role === 'admin';
+  const isOwner = user?.role === 'owner';
   const [state, setState] = useState<DesktopState | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -160,6 +162,10 @@ export function ThisDeviceTab() {
           testId="this-device-tray"
         />
       </section>
+
+      {state.mode === 'local' && isOwner && bridge.ownerAccess && (
+        <LocalSignInSection bridge={bridge.ownerAccess} />
+      )}
 
       <HelperSection bridge={bridge} local={state.mode === 'local'} />
 

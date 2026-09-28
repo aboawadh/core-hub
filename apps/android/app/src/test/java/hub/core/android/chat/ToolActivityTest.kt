@@ -4,7 +4,6 @@ import hub.core.client.model.ToolCall
 import hub.core.client.model.ToolCallStatus
 import java.io.File
 import java.time.OffsetDateTime
-import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -75,18 +74,16 @@ class ToolActivityTest {
 
     /** Arabic has six plural forms; English two. Every tool-activity plural carries all of its language's. */
     @Test fun `the plurals have every form of their language`() {
-        val res = File(System.getProperty("user.dir"), "src/main/res")
-        fun plurals(dir: String): Map<String, Set<String>> {
-            val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File(res, "$dir/strings_tool_activity.xml"))
-            val nodes = doc.getElementsByTagName("plurals")
-            return (0 until nodes.length).associate { i ->
-                val node = nodes.item(i) as org.w3c.dom.Element
-                val items = node.getElementsByTagName("item")
-                node.getAttribute("name") to (0 until items.length).map { (items.item(it) as org.w3c.dom.Element).getAttribute("quantity") }.toSet()
-            }
+        // The strings are JSON catalogues (apps/android/i18n, ADR 0028); resources are generated.
+        val dir = File(System.getProperty("corehub.repoRoot") ?: "../../..", "apps/android/i18n")
+        fun plurals(lang: String): Map<String, Set<String>> {
+            val json = org.json.JSONObject(File(dir, "tool_activity.$lang.json").readText())
+            return json.keys().asSequence().mapNotNull { key ->
+                (json.get(key) as? org.json.JSONObject)?.let { key to it.keys().asSequence().toSet() }
+            }.toMap()
         }
-        val en = plurals("values")
-        val ar = plurals("values-ar")
+        val en = plurals("en")
+        val ar = plurals("ar")
         assertEquals(en.keys, ar.keys)
         en.values.forEach { assertEquals(setOf("one", "other"), it) }
         ar.values.forEach { assertEquals(setOf("zero", "one", "two", "few", "many", "other"), it) }

@@ -8,8 +8,18 @@ import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, SETUP_PATH } from '../navigation/routes.js';
 import { Button, Field, Input, Notice, Separator, CoreHubMark } from '../ui/index.js';
 import { LanguageSwitch } from '../i18n/LanguageSwitch.js';
+import {
+  LocalOwnerActions,
+  RecoveryForm,
+  useLocalOwner,
+  type RecoveryOpened,
+} from '../desktop/OwnerRecovery.js';
 
-/** Signing in: one card, two fields, and nothing else on the page to look at. */
+/**
+ * Signing in: one card, two fields, and nothing else on the page to look at. In the desktop app
+ * talking to its own hub (DECISIONS §131) it also offers "Forgot password?" and, when the owner
+ * turned it on, signing in on this computer without the password.
+ */
 export function LoginScreen() {
   const { t, language } = useI18n();
   const { session, signIn } = useAuth();
@@ -22,6 +32,8 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const owner = useLocalOwner();
+  const [recovery, setRecovery] = useState<RecoveryOpened | null>(null);
   if (session) return <Navigate to={HOME_PATH} replace />;
   // A hub with no owner cannot be signed in to: first run happens on the setup screen (ADR 0011).
   if (setup.data?.required) return <Navigate to={SETUP_PATH} replace />;
@@ -40,6 +52,22 @@ export function LoginScreen() {
       setBusy(false);
     }
   };
+
+  const signedIn = () => navigate(HOME_PATH, { replace: true });
+
+  if (owner && recovery)
+    return (
+      <main className="gate">
+        <div className="gate-card glass">
+          <RecoveryForm
+            owner={owner}
+            opened={recovery}
+            onCancel={() => setRecovery(null)}
+            onDone={signedIn}
+          />
+        </div>
+      </main>
+    );
 
   return (
     <main className="gate">
@@ -101,6 +129,9 @@ export function LoginScreen() {
         <Button type="submit" variant="primary" size="lg" loading={busy} className="mt-1">
           {busy ? t('login.signing_in') : t('login.submit')}
         </Button>
+        {owner && (owner.state.recovery || owner.state.localSignIn) && (
+          <LocalOwnerActions owner={owner} onOpened={setRecovery} onSignedIn={signedIn} />
+        )}
       </form>
     </main>
   );

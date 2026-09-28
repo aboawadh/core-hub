@@ -216,14 +216,16 @@
   },
   "agents": {
     "mcp_oauth": {
-      "title": "Sign-in received",
-      "received": "The sign-in to {server} reached Hermes. You can close this tab and return to Core Hub; the MCP page shows the result.",
+      "connected_title": "Connected",
+      "connected": "{server} is connected: Hermes signed in and lists {count} tools. You can close this tab and return to Core Hub.",
+      "failed_title": "Sign-in did not finish",
+      "failed": "Hermes could not finish the sign-in to {server}. Return to Core Hub and try again; Hermes's reason:",
+      "pending_title": "Still finishing",
+      "pending": "The provider sent you back and Hermes is still finishing the sign-in to {server}. Return to Core Hub: the MCP page shows the result.",
       "declined_title": "Sign-in not completed",
       "declined": "The provider did not grant access to {server}. Return to Core Hub and try again.",
       "expired_title": "This sign-in has ended",
       "expired": "Core Hub is no longer waiting for this sign-in (it ran out, was cancelled or was already used). Start it again from the MCP page.",
-      "unavailable_title": "Hermes is not available",
-      "unavailable": "Core Hub could not hand this sign-in to Hermes. Return to Core Hub and try again.",
       "close": "Close this tab"
     },
     "mcp_test": {

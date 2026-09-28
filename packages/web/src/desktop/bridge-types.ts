@@ -77,6 +77,66 @@ export interface DesktopBridge {
    * the page then shows only what the browser itself can tell.
    */
   voice?: DesktopVoiceBridge;
+  /**
+   * The owner of the hub on this computer (DECISIONS §131): "Forgot password?" after the OS
+   * confirms the person, and sign-in without a password. Absent in an app older than it, and it
+   * answers `local: false` when the window talks to a hub elsewhere.
+   */
+  ownerAccess?: DesktopOwnerAccessBridge;
+}
+
+/** The OS prompt a reset starts with: Touch ID or the Mac's password, Windows Hello, polkit. */
+export type DesktopConfirmKind = 'macos' | 'windows_hello' | 'polkit' | 'test';
+
+export interface DesktopOwnerAccessState {
+  /** The window talks to the hub the app runs on this computer. */
+  local: boolean;
+  /** The OS prompt a reset starts with; null: this computer has none the app can reach. */
+  recovery: DesktopConfirmKind | null;
+  /** The app signs the owner in to the hub on this computer without the password. */
+  localSignIn: boolean;
+  /** Turning it on was refused: only the owner, signed in, may. */
+  refused?: 'not_owner';
+}
+
+/** A sign-in the hub answered (`TokenPair`): stored as the web client stores its own. */
+export interface DesktopOwnerTokens {
+  access_token: string;
+  refresh_token: string | null;
+  expires_in: number;
+  user: {
+    id: string;
+    username: string;
+    display_name: string;
+    role: string;
+    default_profile: string;
+  };
+}
+
+/**
+ * Why the app or the hub said no: `cancelled` (the person dismissed the OS prompt),
+ * `unavailable` (no OS prompt here), `rate_limited`, `expired` (confirm again),
+ * `invalid_password`, `no_owner`, `owner_disabled`, `off`, `not_local`, `busy`, `failed`.
+ */
+export type DesktopOwnerRefusal = { ok: false; reason: string };
+
+export type DesktopRecoveryStart =
+  | { ok: true; username: string; displayName: string | null; expiresAt: string }
+  | DesktopOwnerRefusal;
+
+export type DesktopOwnerResult = { ok: true; tokens: DesktopOwnerTokens } | DesktopOwnerRefusal;
+
+export interface DesktopOwnerAccessBridge {
+  get(): Promise<DesktopOwnerAccessState>;
+  /** Shows the OS prompt; on success, the owner's username (the grant stays in the app). */
+  beginRecovery(): Promise<DesktopRecoveryStart>;
+  /** The new password; every other sign-in of the owner ends, this app is signed in. */
+  finishRecovery(password: string): Promise<DesktopOwnerResult>;
+  cancelRecovery(): Promise<void>;
+  /** The owner, signed in without a password, while `localSignIn` is on. */
+  signIn(): Promise<DesktopOwnerResult>;
+  /** On needs the owner's current access token (the hub checks it); off needs nothing. */
+  setLocalSignIn(value: boolean, token: string | null): Promise<DesktopOwnerAccessState>;
 }
 
 /**

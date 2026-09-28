@@ -9,7 +9,7 @@
 // with empty strings, so every string still reads in English until it is translated — and the
 // generated catalogue indexes. Translate by filling the empty strings; `pnpm i18n:check` shows
 // the coverage and `pnpm i18n:limits` the space each string has.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as prettier from 'prettier';
 import { staleIndexes } from './generate.mjs';
@@ -128,16 +128,20 @@ raw.languages.push(entry);
 await write(registryFile, raw);
 
 for (const set of SETS) {
-  // The phone apps join in phase 2 (ADR 0028); their files are added then.
-  if (!set.index) continue;
   const dir = path.join(repoRoot, set.dir);
   if (!existsSync(dir)) continue;
-  const target = path.join(dir, `${code}.json`);
-  if (existsSync(target)) {
-    console.log(`i18n:new  kept ${path.relative(repoRoot, target)} (already there)`);
-    continue;
+  // `en.json`, and on the phones every area's `<area>.en.json` too.
+  const english = readdirSync(dir).filter(
+    (name) => name === 'en.json' || (set.areas && name.endsWith('.en.json')),
+  );
+  for (const name of english) {
+    const target = path.join(dir, name.replace(/en\.json$/, `${code}.json`));
+    if (existsSync(target)) {
+      console.log(`i18n:new  kept ${path.relative(repoRoot, target)} (already there)`);
+      continue;
+    }
+    await write(target, blank(JSON.parse(readFileSync(path.join(dir, name), 'utf8'))));
   }
-  await write(target, blank(JSON.parse(readFileSync(path.join(dir, 'en.json'), 'utf8'))));
 }
 
 for (const { file, want } of await staleIndexes(readRegistry())) {

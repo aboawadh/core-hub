@@ -36,6 +36,7 @@ import {
   Field,
   Input,
   Notice,
+  Segmented,
   Skeleton,
   SkeletonGroup,
   Switch,
@@ -51,11 +52,13 @@ import {
   useMcpServers,
   useTestMcpServer,
   useUpdateMcpServer,
+  type McpOAuthFlow,
   type McpServer,
 } from './skills.js';
 import { describeToolError } from './toolErrors.js';
 import { HubToolsCard } from './HubToolsCard.js';
 import { TestResult } from './McpTestResultView.js';
+import { McpSignInForm } from './McpSignInForm.js';
 import {
   McpOAuthChip,
   McpOAuthControls,
@@ -74,6 +77,8 @@ export function AgentMcpScreen() {
   const agents = useAgents();
   const servers = useMcpServers(agentId);
   const [editing, setEditing] = useState<McpServer | null | undefined>(undefined);
+  // Sign-ins "Add server" started, followed by their row from then on (§122).
+  const [adopted, setAdopted] = useState<Record<string, McpOAuthFlow>>({});
 
   const agent = agents.data?.find((entry) => entry.id === agentId);
   const title = agent ? t('mcp.title_of', { name: agent.name }) : t('nav.agent_mcp');
@@ -117,14 +122,28 @@ export function AgentMcpScreen() {
             <ul className="flex flex-col gap-2" data-testid="mcp-list">
               {items.map((server) => (
                 <li key={server.name}>
-                  <ServerRow agentId={agentId} server={server} onEdit={() => setEditing(server)} />
+                  <ServerRow
+                    agentId={agentId}
+                    server={server}
+                    adopted={adopted[server.name] ?? null}
+                    onEdit={() => setEditing(server)}
+                  />
                 </li>
               ))}
             </ul>
           ))}
       </div>
       {editing !== undefined && (
-        <ServerEditor agentId={agentId} server={editing} onClose={() => setEditing(undefined)} />
+        <ServerEditor
+          agentId={agentId}
+          server={editing}
+          taken={(servers.data?.items ?? []).map((server) => server.name)}
+          onSignInStarted={(name, flow) => {
+            setAdopted((current) => ({ ...current, [name]: flow }));
+            setEditing(undefined);
+          }}
+          onClose={() => setEditing(undefined)}
+        />
       )}
     </AppShell>
   );
@@ -133,17 +152,19 @@ export function AgentMcpScreen() {
 function ServerRow({
   agentId,
   server,
+  adopted,
   onEdit,
 }: {
   agentId: string | undefined;
   server: McpServer;
+  adopted: McpOAuthFlow | null;
   onEdit: () => void;
 }) {
   const { t } = useI18n();
   const update = useUpdateMcpServer(agentId);
   const remove = useDeleteMcpServer(agentId);
   const probe = useTestMcpServer(agentId);
-  const oauth = useMcpOAuthConnect(agentId, server.name);
+  const oauth = useMcpOAuthConnect(agentId, server.name, adopted);
   const { ask, dialog } = useConfirm();
   // Hermes said the server wants a sign-in: offer it where the failure is read (§122).
   const signInHere =
@@ -242,13 +263,20 @@ function summarise(server: McpServer): string {
 function ServerEditor({
   agentId,
   server,
+  taken,
+  onSignInStarted,
   onClose,
 }: {
   agentId: string | undefined;
   server: McpServer | null;
+  taken: readonly string[];
+  onSignInStarted: (name: string, flow: McpOAuthFlow) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  // A new server is added one of two ways: its JSON as before, or signed in by its address.
+  const [mode, setMode] = useState<'json' | 'signin'>('json');
+  const signingIn = !server && mode === 'signin';
   const create = useCreateMcpServer(agentId);
   const update = useUpdateMcpServer(agentId);
   const [name, setName] = useState(server?.name ?? '');
@@ -265,40 +293,63 @@ function ServerEditor({
       size="lg"
       onOpenChange={(open) => !open && onClose()}
       title={server ? server.name : t('mcp.new')}
-      description={t('mcp.editor_note')}
+      description={signingIn ? t('mcp.signin_add.note') : t('mcp.editor_note')}
       closeLabel={t('common.cancel')}
       testId="mcp-editor"
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            disabled={name === '' || badName || !parsed.ok || pending}
-            data-testid="save-mcp"
-            onClick={() => {
-              if (!parsed.ok) return;
-              if (server) update.mutate({ name, config: parsed.value }, { onSuccess: onClose });
-              else
-                create.mutate(
-                  {
-                    name,
-                    // The shape decides: a `url` is a socket, a `command` is a process.
-                    transport: typeof parsed.value.url === 'string' ? 'http' : 'stdio',
-                    enabled: true,
-                    config: parsed.value,
-                  },
-                  { onSuccess: onClose },
-                );
-            }}
-          >
-            {t('common.save')}
-          </Button>
-        </>
+        signingIn ? null : (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={name === '' || badName || !parsed.ok || pending}
+              data-testid="save-mcp"
+              onClick={() => {
+                if (!parsed.ok) return;
+                if (server) update.mutate({ name, config: parsed.value }, { onSuccess: onClose });
+                else
+                  create.mutate(
+                    {
+                      name,
+                      // The shape decides: a `url` is a socket, a `command` is a process.
+                      transport: typeof parsed.value.url === 'string' ? 'http' : 'stdio',
+                      enabled: true,
+                      config: parsed.value,
+                    },
+                    { onSuccess: onClose },
+                  );
+              }}
+            >
+              {t('common.save')}
+            </Button>
+          </>
+        )
       }
     >
       <div className="flex flex-col gap-3">
         {!server && (
+          <Segmented
+            label={t('mcp.signin_add.how')}
+            value={mode}
+            onChange={(value: string) => setMode(value === 'signin' ? 'signin' : 'json')}
+            size="sm"
+            testId="mcp-add-mode"
+            options={[
+              { value: 'json', label: t('mcp.signin_add.mode_json') },
+              { value: 'signin', label: t('mcp.signin_add.mode_signin') },
+            ]}
+          />
+        )}
+        {signingIn && (
+          <McpSignInForm
+            agentId={agentId}
+            taken={taken}
+            onStarted={onSignInStarted}
+            onCancel={onClose}
+          />
+        )}
+        {!signingIn && !server && (
           <Field label={t('mcp.name')} {...(badName ? { error: t('mcp.name_bad') } : {})}>
             {(props) => (
               <Input
@@ -313,20 +364,24 @@ function ServerEditor({
             )}
           </Field>
         )}
-        <Textarea
-          rows={14}
-          dir="ltr"
-          className="skill-editor"
-          aria-label={t('mcp.config')}
-          value={text}
-          onChange={(event) => setDraft(event.target.value)}
-          data-testid="mcp-config"
-        />
-        {/* Said while typing, not after saving: a bracket in the wrong place is worth
-            knowing about before the button is pressed. */}
-        {!parsed.ok && <Notice tone="warning">{t('mcp.invalid_json')}</Notice>}
-        {(create.isError || update.isError) && (
-          <Notice tone="danger">{describeError(create.error ?? update.error, t)}</Notice>
+        {!signingIn && (
+          <>
+            <Textarea
+              rows={14}
+              dir="ltr"
+              className="skill-editor"
+              aria-label={t('mcp.config')}
+              value={text}
+              onChange={(event) => setDraft(event.target.value)}
+              data-testid="mcp-config"
+            />
+            {/* Said while typing, not after saving: a bracket in the wrong place is worth
+                knowing about before the button is pressed. */}
+            {!parsed.ok && <Notice tone="warning">{t('mcp.invalid_json')}</Notice>}
+            {(create.isError || update.isError) && (
+              <Notice tone="danger">{describeError(create.error ?? update.error, t)}</Notice>
+            )}
+          </>
         )}
       </div>
     </Dialog>

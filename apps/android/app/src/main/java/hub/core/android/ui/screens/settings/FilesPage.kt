@@ -641,7 +641,7 @@ private fun ProgressLine(p: Progress) {
     Text(
         if (f != null) stringResource(R.string.files_progress, (f * 100).toInt(), FilesRules.size(p.read), FilesRules.size(p.total ?: 0))
         else FilesRules.size(p.read),
-        fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1,
+        fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
     )
     Box(Modifier.padding(top = 2.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(t.surface3)) {
         Box(Modifier.fillMaxWidth(f ?: 0f).height(3.dp).background(t.accent))

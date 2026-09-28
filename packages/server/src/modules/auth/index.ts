@@ -7,6 +7,7 @@ import { requireSqlite } from '../../lib/db.js';
 import { defineModule } from '../../lib/module.js';
 import type { AuthContext } from './context.js';
 import { LinkCodes, identityOf, linkWithCode, touchIdentity } from './channel-identities.js';
+import { LocalOwnerAccess } from './local-owner.js';
 import { authenticateHook, type Principal } from './principal.js';
 import { registerAuthRoutes } from './routes.js';
 import {
@@ -118,6 +119,33 @@ export function stepUpFor(io: SocketServer) {
   };
 }
 export { STEP_UP_TTL_MS, type StepUpPurpose } from './step-up.js';
+
+const localOwners = new WeakMap<AuthContext, LocalOwnerAccess>();
+
+/**
+ * The owner on the computer the hub runs on (DECISIONS §131): a password reset after the OS
+ * confirmed the person, and sign-in without a password. For the desktop app's IPC channel to
+ * the hub it forked (`apps/desktop/src/hub/entry.ts`) only — never an HTTP route. `null` when
+ * auth is not composed into this hub.
+ */
+export function localOwnerAccessFor(io: SocketServer): LocalOwnerAccess | null {
+  const ctx = contexts.get(io);
+  if (!ctx) return null;
+  let access = localOwners.get(ctx);
+  if (!access) {
+    access = new LocalOwnerAccess(ctx);
+    localOwners.set(ctx, access);
+  }
+  return access;
+}
+export {
+  LocalOwnerRefusal,
+  RECOVERY_TTL_MS,
+  type LocalOwnerAccess,
+  type LocalOwnerRefusalReason,
+  type LocalTokenPair,
+  type RecoveryGrant,
+} from './local-owner.js';
 export const registerEvents = authModule.registerEvents.bind(authModule);
 
 /**

@@ -476,7 +476,7 @@ fun TaskCard(task: Task, badges: Boolean, profileName: (String) -> String, modif
             task.assignee?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     LucideIcon(Lucide.Bot, null, size = 12.dp, tint = t.textMuted)
-                    Text(it.name, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1)
+                    Text(it.name, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             // The checklist, as the web's card counts it.

@@ -115,11 +115,12 @@ const FLOW = '01J8QK3ZR2W7M5N4P6T8V9X0F1';
 
 function hub(options: { status?: OAuthStatus; testError?: string | null } = {}) {
   const sent: Sent[] = [];
-  let status: OAuthStatus = options.status ?? 'not_connected';
+  const statuses: Record<string, OAuthStatus> = { clickup: options.status ?? 'not_connected' };
+  const added: Record<string, Record<string, unknown>> = {};
   let polls = 0;
-  const flow = (state: string, tools: unknown[] = []) => ({
+  const flow = (state: string, tools: unknown[] = [], name = 'clickup') => ({
     id: FLOW,
-    server_name: 'clickup',
+    server_name: name,
     status: state,
     authorization_url: AUTHORIZE,
     redirect_uri: 'https://hub.example/cb',
@@ -157,33 +158,50 @@ function hub(options: { status?: OAuthStatus; testError?: string | null } = {}) 
         recent_calls: [],
         updated_at: null,
       });
-    if (path.endsWith('/mcp-servers/clickup/oauth') && method === 'POST') {
-      polls = 0;
-      return json(flow('pending'));
+    const named = /\/mcp-servers\/([^/]+)(\/.*)?$/.exec(path);
+    const target = named?.[1] ?? '';
+    const rest = named?.[2] ?? '';
+    const row = (name: string) =>
+      server(name, added[name] ?? { url: 'https://mcp.clickup.example/mcp', auth: 'oauth' }, {
+        required: true,
+        status: statuses[name] ?? 'not_connected',
+      });
+    if (path.endsWith('/mcp-servers') && method === 'POST') {
+      const input = body as { name: string; config: Record<string, unknown> };
+      if (input.name === 'clickup' || added[input.name]) {
+        return json(
+          { error: 'taken', code: 'conflict', details: { reason: 'mcp_name_taken' } },
+          409,
+        );
+      }
+      added[input.name] = input.config;
+      return json(row(input.name), 201);
     }
-    if (path.endsWith('/mcp-servers/clickup/oauth') && method === 'DELETE') {
-      status = 'not_connected';
+    if (rest === '/oauth' && method === 'POST') {
+      polls = 0;
+      return json(flow('pending', [], target));
+    }
+    if (rest === '/oauth' && method === 'DELETE') {
+      statuses[target] = 'not_connected';
+      return json(row(target));
+    }
+    if (rest === `/oauth/${FLOW}`) {
+      polls += 1;
+      if (polls < 2) return json(flow('pending', [], target));
+      statuses[target] = 'connected';
       return json(
-        server(
-          'clickup',
-          { url: 'https://mcp.clickup.example/mcp', auth: 'oauth' },
-          { required: true, status },
+        flow(
+          'approved',
+          [
+            { name: 'get_tasks', description: null },
+            { name: 'create_task', description: null },
+          ],
+          target,
         ),
       );
     }
-    if (path.endsWith(`/mcp-servers/clickup/oauth/${FLOW}`)) {
-      polls += 1;
-      if (polls < 2) return json(flow('pending'));
-      status = 'connected';
-      return json(
-        flow('approved', [
-          { name: 'get_tasks', description: null },
-          { name: 'create_task', description: null },
-        ]),
-      );
-    }
-    if (path.endsWith('/mcp-servers/clickup/test')) {
-      const error = status === 'connected' ? null : (options.testError ?? null);
+    if (rest === '/test') {
+      const error = statuses[target] === 'connected' ? null : (options.testError ?? null);
       return json({
         ok: error === null,
         tools: error === null ? [{ name: 'get_tasks', description: null }] : [],
@@ -194,11 +212,7 @@ function hub(options: { status?: OAuthStatus; testError?: string | null } = {}) 
     if (path.endsWith('/mcp-servers')) {
       return json({
         items: [
-          server(
-            'clickup',
-            { url: 'https://mcp.clickup.example/mcp', auth: 'oauth' },
-            { required: true, status },
-          ),
+          row('clickup'),
           server(
             'github',
             { url: 'https://mcp.example/github', headers: { Authorization: '[stored]' } },
@@ -206,6 +220,7 @@ function hub(options: { status?: OAuthStatus; testError?: string | null } = {}) 
           ),
           server('legacy', { url: 'https://old-hub.example/mcp' }),
           server('files', { command: 'npx' }),
+          ...Object.keys(added).map(row),
         ],
       });
     }
@@ -291,10 +306,60 @@ describe('connecting an MCP server by OAuth', () => {
     await waitFor(() =>
       expect(screen.getByTestId('mcp-oauth-status-clickup').textContent).toContain('Connected'),
     );
-
-    fireEvent.click(screen.getByTestId('mcp-oauth-test-clickup'));
+    // Signed in: the test runs by itself and shows the count; the button offers a new sign-in.
     const result = await screen.findByTestId('mcp-test-result-clickup');
     expect(result.getAttribute('data-ok')).toBe('true');
+    expect(
+      sent.filter((s) => s.method === 'POST' && s.url.endsWith('/mcp-servers/clickup/test')),
+    ).toHaveLength(1);
+    expect(screen.getByTestId('mcp-oauth-connect-clickup').textContent).toBe('Reconnect OAuth');
+  });
+
+  it('adds a server by its address and signs it in: the name from the host, the smallest block, the tab to the provider', async () => {
+    const { fetchImpl, sent } = hub();
+    const { tab } = fakeTab();
+    mount(fetchImpl);
+    fireEvent.click(await screen.findByTestId('new-mcp'));
+    fireEvent.click(await screen.findByRole('radio', { name: 'Sign in (OAuth)' }));
+    expect(
+      screen.getByRole('radio', { name: 'Sign in (OAuth)' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(screen.getByRole('radio', { name: 'JSON' }).getAttribute('aria-checked')).toBe('false');
+    // Only the sign-in form: the JSON editor is the other way.
+    expect(screen.queryByTestId('mcp-config')).toBeNull();
+    const url = await screen.findByTestId('mcp-signin-url');
+    fireEvent.change(url, { target: { value: 'http://mcp.clickup.com/mcp' } });
+    expect(screen.getByText('An https:// address (http:// only for this computer).')).toBeTruthy();
+    expect((screen.getByTestId('mcp-signin-submit') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(url, { target: { value: 'https://mcp.clickup.com/mcp' } });
+    // `clickup` is taken on this page: the name offered is the next free one, and editable.
+    const name = screen.getByTestId('mcp-signin-name') as HTMLInputElement;
+    expect(name.value).toBe('clickup-2');
+    fireEvent.change(name, { target: { value: 'clickup' } });
+    expect(
+      screen.getByText('A server named clickup already exists; choose another name.'),
+    ).toBeTruthy();
+    fireEvent.change(name, { target: { value: 'work-clickup' } });
+    fireEvent.click(screen.getByTestId('mcp-signin-submit'));
+
+    await waitFor(() => expect(tab.location.href).toBe(AUTHORIZE));
+    const created = sent.find((s) => s.method === 'POST' && s.url.endsWith('/mcp-servers'));
+    expect(created?.body).toEqual({
+      name: 'work-clickup',
+      transport: 'http',
+      enabled: true,
+      config: { url: 'https://mcp.clickup.com/mcp', auth: 'oauth' },
+    });
+    expect(
+      sent.some((s) => s.method === 'POST' && s.url.endsWith('/mcp-servers/work-clickup/oauth')),
+    ).toBe(true);
+    // The dialog closed; the new row follows the sign-in to Connected and tests itself.
+    await waitFor(() => expect(screen.queryByTestId('mcp-signin-add')).toBeNull());
+    const result = await screen.findByTestId('mcp-test-result-work-clickup', undefined, {
+      timeout: 5000,
+    });
+    expect(result.getAttribute('data-ok')).toBe('true');
+    expect(screen.getByTestId('mcp-oauth-status-work-clickup').textContent).toContain('Connected');
   });
 
   it("offers Connect under a test that failed for want of a sign-in, in Hermes's words", async () => {

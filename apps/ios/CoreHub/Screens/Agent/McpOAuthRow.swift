@@ -55,7 +55,7 @@ struct McpOAuthRow: View {
                         StatusPill(text: l10n("mcp_oauth.status.\(state.status.rawValue)"), kind: kind(state.status))
                             .accessibilityIdentifier("mcp.\(server.name).oauth")
                     }
-                    if flow?.status != .pending && (state.status != .connected) {
+                    if flow?.status != .pending {
                         Button {
                             Task { await start() }
                         } label: {

@@ -12,7 +12,15 @@ import type { HubClient } from '@corehub/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useI18n } from '../i18n/context.js';
 import { createClientBundle } from './client.js';
-import { expiresAt, type SessionStore, type StoredSession, type StoredUser } from './store.js';
+import {
+  sessionFromTokens,
+  type SessionStore,
+  type StoredSession,
+  type StoredUser,
+  type TokenPairLike,
+} from './store.js';
+
+export type { TokenPairLike } from './store.js';
 
 export interface AuthValue {
   baseUrl: string;
@@ -44,9 +52,19 @@ export interface AuthValue {
   signIn(username: string, password: string): Promise<StoredSession>;
   /** First run only (ADR 0011, 0019): create the owner — with the setup token once the window closed. */
   completeSetup(input: SetupInput): Promise<StoredSession>;
+  /**
+   * A sign-in the hub answered somewhere else (`TokenPair`): the desktop app's reset of a
+   * forgotten password, or its password-free sign-in on this computer (DECISIONS §131).
+   */
+  adoptTokens(data: TokenPairLike): StoredSession;
   signOut(): Promise<void>;
   /** A new access token now (single flight); true when one was stored. */
   refresh(): Promise<boolean>;
+  /**
+   * The access token to hand to something that checks it itself (the desktop app asks its hub
+   * whether it is the owner's, DECISIONS §131): refreshed first when it is about to expire.
+   */
+  accessToken(): Promise<string | null>;
 }
 
 export interface SetupInput {
@@ -98,30 +116,8 @@ export function AuthProvider({
 
   /** `auth.login` and `auth.completeSetup` answer the same `TokenPair`; one place stores it. */
   const remember = useCallback(
-    (data: {
-      access_token: string;
-      refresh_token: string | null;
-      expires_in: number;
-      user: {
-        id: string;
-        username: string;
-        display_name: string;
-        role: string;
-        default_profile: string;
-      };
-    }) => {
-      const next: StoredSession = {
-        profile: data.user.default_profile,
-        token: data.access_token,
-        refresh_token: data.refresh_token,
-        expires_at: expiresAt(data.expires_in),
-        user: {
-          id: data.user.id,
-          username: data.user.username,
-          display_name: data.user.display_name,
-          role: data.user.role,
-        },
-      };
+    (data: TokenPairLike) => {
+      const next = sessionFromTokens(data);
       store.save(next);
       return next;
     },
@@ -169,6 +165,15 @@ export function AuthProvider({
     }
   }, [bundle, store, queryClient]);
 
+  const accessToken = useCallback(async () => {
+    const current = store.read();
+    if (!current) return null;
+    const expires = current.expires_at ? Date.parse(current.expires_at) : Number.NaN;
+    if (current.refresh_token && Number.isFinite(expires) && expires - Date.now() < 60_000)
+      await bundle.refresh().catch(() => false);
+    return store.read()?.token ?? null;
+  }, [store, bundle]);
+
   // The chats list opens on "All profiles" on every entry into the app (owner, 2026-09-24:
   // «كل البروفايلات افتراضيا»). Here rather than in the list because every page draws its
   // own sidebar, and the filter must survive moving between pages.
@@ -199,10 +204,23 @@ export function AuthProvider({
       anonymous: bundle.anonymous,
       signIn,
       completeSetup,
+      adoptTokens: remember,
       signOut,
       refresh: bundle.refresh,
+      accessToken,
     }),
-    [baseUrl, session, setProfile, listFilter, bundle, signIn, completeSetup, signOut],
+    [
+      baseUrl,
+      session,
+      setProfile,
+      listFilter,
+      bundle,
+      signIn,
+      completeSetup,
+      remember,
+      signOut,
+      accessToken,
+    ],
   );
   return (
     <RootAuthContext.Provider value={value}>

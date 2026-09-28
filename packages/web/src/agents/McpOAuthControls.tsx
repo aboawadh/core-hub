@@ -11,7 +11,7 @@
  * Nothing here holds a token: the row reads `connected`, `expired`, `not connected` from the
  * hub, which reads it from the metadata of Hermes's file.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { describeError } from '../auth/client.js';
 import { useI18n } from '../i18n/context.js';
 import { Badge, Button, Notice, Spinner, useConfirm, type BadgeTone } from '../ui/index.js';
@@ -20,6 +20,7 @@ import {
   useDisconnectMcpOAuth,
   useMcpOAuthFlow,
   useStartMcpOAuth,
+  type McpOAuthFlow,
   type McpOAuthState,
   type McpServer,
 } from './skills.js';
@@ -57,10 +58,21 @@ export function McpOAuthChip({ server }: { server: McpServer }) {
   );
 }
 
-/** Starting, waiting on and ending one sign-in; shared by the row and the failed test. */
-export function useMcpOAuthConnect(agentId: string | undefined, name: string) {
+/**
+ * Starting, waiting on and ending one sign-in; shared by the row and the failed test. `adopted`
+ * is a sign-in started elsewhere for this server — "Add server" → sign in — which the row then
+ * follows as its own.
+ */
+export function useMcpOAuthConnect(
+  agentId: string | undefined,
+  name: string,
+  adopted: McpOAuthFlow | null = null,
+) {
   const start = useStartMcpOAuth(agentId);
-  const [flowId, setFlowId] = useState<string | null>(null);
+  const [flowId, setFlowId] = useState<string | null>(adopted?.id ?? null);
+  useEffect(() => {
+    if (adopted) setFlowId(adopted.id);
+  }, [adopted]);
   const flow = useMcpOAuthFlow(agentId, name, flowId);
   const connect = () => {
     let tab: Window | null = null;
@@ -84,7 +96,7 @@ export function useMcpOAuthConnect(agentId: string | undefined, name: string) {
       onError: () => tab?.close(),
     });
   };
-  const current = flow.data ?? start.data ?? null;
+  const current = flow.data ?? start.data ?? (adopted && adopted.id === flowId ? adopted : null);
   const reset = () => {
     setFlowId(null);
     start.reset();
@@ -110,9 +122,17 @@ export function McpOAuthControls({
   const cancel = useCancelMcpOAuth(agentId);
   const disconnect = useDisconnectMcpOAuth(agentId);
   const { ask, dialog } = useConfirm();
+  const { current } = oauth;
+  // Signed in: Hermes lists the tools at once, so the test runs by itself and shows the count.
+  const tested = useRef<string | null>(null);
+  useEffect(() => {
+    if (current?.status === 'approved' && tested.current !== current.id) {
+      tested.current = current.id;
+      onTest();
+    }
+  }, [current, onTest]);
   const state = server.oauth;
   if (!state || !offersOAuth(server)) return null;
-  const { current } = oauth;
   const waiting = oauth.start.isPending || current?.status === 'pending';
   const signedIn = state.status !== 'not_connected';
   const renew = state.status === 'expired' || state.status === 'error';
@@ -120,14 +140,14 @@ export function McpOAuthControls({
   return (
     <div className="flex flex-col gap-2" data-testid={`mcp-oauth-${server.name}`}>
       <div className="flex flex-wrap items-center gap-2">
-        {!waiting && (!signedIn || renew) && (
+        {!waiting && (
           <Button
             size="sm"
             variant={renew ? 'primary' : 'secondary'}
             data-testid={`mcp-oauth-connect-${server.name}`}
             onClick={oauth.connect}
           >
-            {t(renew ? 'mcp.oauth.reconnect' : 'mcp.oauth.connect')}
+            {t(signedIn ? 'mcp.oauth.reconnect' : 'mcp.oauth.connect')}
           </Button>
         )}
         {!waiting && signedIn && (

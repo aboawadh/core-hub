@@ -6565,20 +6565,19 @@ paths:
       tags: [agents]
       summary: Start connecting an MCP server by OAuth (admin)
       description: >-
-        Asks Hermes to start its browser sign-in for a remote (`http`/`sse`) server in the
-        profile in `X-Hub-Profile` (Hermes's own `POST /api/mcp/servers/{name}/auth`, ADR 0015;
-        contract decision §122). Before asking, the hub writes the server's
-        `oauth.redirect_uri` in the profile's `config.yaml` as its own callback,
-        `agents.mcpOAuthCallback`, at `hub_url` when the client sends it (the address the
-        person reaches the hub on, a tunnel's included) and otherwise at the address this
-        request arrived on; an `oauth.redirect_uri` the person set to anything else is left
-        alone. The client opens `authorization_url` in a browser and polls
-        `agents.getMcpOAuthFlow` until `status` is no longer `pending`. Hermes keeps the tokens
-        in the profile's own home; no token passes through the hub, and each profile connects
-        separately. A stdio server, or one that signs in with its own headers, is Hermes's
-        refusal: `409 conflict` with `details.reason = hermes_refused`. Only where the hub
-        supervises Hermes: otherwise `409 state_invalid` with `details.reason =
-        hermes_not_supervised`; Hermes's API not starting is `503`.
+        Starts Hermes's own browser sign-in for a remote (`http`/`sse`) server in the profile in
+        `X-Hub-Profile` (`hermes mcp login`; contract decision §122). Before it, the hub writes in
+        the profile's `config.yaml` the server's `auth: oauth`, its `oauth.redirect_uri` — the
+        hub's callback, `agents.mcpOAuthCallback`, at `hub_url` when the client sends it (the
+        address the person reaches the hub on, a tunnel's included) and otherwise at the address
+        this request arrived on; an `oauth.redirect_uri` the person set to anything else is left
+        alone — and `oauth.redirect_port`, where Hermes then waits for the callback on the hub's
+        host. The client opens `authorization_url` in a browser and polls
+        `agents.getMcpOAuthFlow` until `status` is no longer `pending`. Hermes keeps the tokens in
+        the profile's own home; no token passes through the hub, and each profile connects
+        separately. A new sign-in for the same server ends the one before. A stdio server is
+        `409 conflict` with `details.reason = mcp_oauth_stdio`. Only where the hub runs Hermes:
+        otherwise `409 state_invalid` with `details.reason = hermes_not_supervised`.
       x-roles: [owner, admin]
       requestBody:
         required: false
@@ -6670,10 +6669,12 @@ paths:
       tags: [agents]
       summary: How an MCP OAuth sign-in stands (admin)
       description: >-
-        Hermes's state of the sign-in, as the contract's: `pending` until the browser comes
-        back, then `approved` (with the tools Hermes listed once signed in), `failed` (`error`
-        in Hermes's words), `cancelled`, or `expired` once Hermes has forgotten it (fifteen
-        minutes, or a restart). A sign-in started in another profile is `404`.
+        How Hermes's sign-in stands, as the contract's: `pending` while Hermes waits for the
+        browser and then exchanges the code, `approved` once Hermes said it signed in and the
+        token is in the profile's home (with the tools Hermes then lists), `failed` (`error` in
+        Hermes's words), `cancelled`, or `expired` (Hermes waited five minutes for the browser).
+        The hub keeps a sign-in fifteen minutes and forgets it on a restart (`404`). A sign-in
+        started in another profile is `404`.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -6709,8 +6710,8 @@ paths:
       tags: [agents]
       summary: Stop waiting for an MCP OAuth sign-in (admin)
       description: >-
-        Tells Hermes to give up on the sign-in, so a new one can start at once. Idempotent: a
-        sign-in that already ended is answered as it stands.
+        Ends Hermes's sign-in, so a new one can start at once. Idempotent: a sign-in that already
+        ended is answered as it stands.
       x-roles: [owner, admin]
       x-rt-events: []
       responses:
@@ -6822,12 +6823,14 @@ paths:
       summary: Where an OAuth provider sends the browser back after an MCP sign-in
       description: >-
         Not a client API: the `redirect_uri` `agents.startMcpOAuth` writes. Public, because the
-        browser arrives from the provider without the hub's session; the query is handed to
-        Hermes's own callback (`GET /api/mcp/oauth/callback/{server_name}`), which accepts it
-        only with the `state` of a sign-in it started. Answers a short page in the browser's
-        language saying whether the sign-in was received, always `200`; the outcome itself is
-        read by polling `agents.getMcpOAuthFlow`. The query is never logged (contract decision
-        §122).
+        browser arrives from the provider without the hub's session; the query — `code`, `state`,
+        `error` and RFC 9207's `iss` — is handed unchanged to the listener of the Hermes sign-in
+        with that `state`, which accepts it only as the answer to the page it named. Answers a short page in the browser's
+        language, always `200`, once Hermes says how the sign-in ended (it waits up to 45 s):
+        connected (with the number of tools) only after Hermes exchanged the code, stored the
+        token and reached the server with it; otherwise the failure in Hermes's words, or "still
+        finishing" — never success on the code's arrival alone. `agents.getMcpOAuthFlow`
+        answers the same outcome. The query is never logged (contract decision §122).
       security: []
       x-scope: global
       parameters:
@@ -22350,6 +22353,7 @@ components:
           type: string
         error:
           type: [string, 'null']
+          description: Why a `failed` or `expired` sign-in stopped, in Hermes's words.
         tools:
           type: array
           description: The tools Hermes listed once signed in; empty until `approved`.

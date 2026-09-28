@@ -38,6 +38,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import hub.core.android.generated.LanguageInfo
+import hub.core.android.generated.Languages
 import hub.core.android.ui.theme.ThemeChoice
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -47,25 +49,96 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** The two UI languages; content direction is decided per message, not by this. */
-enum class AppLanguage(val tag: String) {
-    AR("ar"), EN("en");
+/**
+ * A UI language of the registry (locales/languages.json, ADR 0028), generated into [Languages];
+ * content direction is decided per message, not by this. Arabic and English are always there.
+ */
+class AppLanguage private constructor(val info: LanguageInfo) {
+    val tag: String get() = info.code
+
+    /**
+     * The locale its resources are filed under: the tag itself, but for Android's own reserved
+     * pseudo-locales, whose test-only words (debug build) are filed as en-XL and ar-XR.
+     */
+    val resourceTag: String get() = when (tag) {
+        "en-XA" -> "en-XL"
+        "ar-XB" -> "ar-XR"
+        else -> tag
+    }
+    val rtl: Boolean get() = info.rtl
+
+    /**
+     * The contract's `Locale` (`ar` | `en`) nearest to this language: the hub stores it and writes
+     * its own notices in it (DECISIONS §130). The first of the two on the fallback chain.
+     */
+    val hubLocale: String
+        get() = (listOf(tag) + info.fallback + "en").first { it == "ar" || it == "en" }
+
+    override fun equals(other: Any?) = other is AppLanguage && other.tag == tag
+    override fun hashCode() = tag.hashCode()
+    override fun toString() = tag
 
     companion object {
-        fun of(tag: String?): AppLanguage? = entries.firstOrNull { it.tag == tag }
+        /** Every language a person can choose, in the registry's order. */
+        val entries: List<AppLanguage> = Languages.all.map(::AppLanguage)
+        val AR: AppLanguage = entries.first { it.tag == "ar" }
+        val EN: AppLanguage = entries.first { it.tag == "en" }
+
+        /**
+         * A registered language by its tag — or a test-only pseudo-locale (en-XA, ar-XB, zh-XC,
+         * th-XD), whose words exist in the debug build only and which no picker lists.
+         */
+        fun of(tag: String?): AppLanguage? =
+            entries.firstOrNull { it.tag == tag } ?: Languages.pseudo.firstOrNull { it.code == tag }?.let(::AppLanguage)
+
+        /**
+         * The registered language for a locale: the exact tag, the language with its script
+         * (`zh-TW` → `zh-Hant`), the bare language, then any variant of it.
+         */
+        fun match(locale: Locale): AppLanguage? {
+            val script = locale.script.ifEmpty {
+                when {
+                    locale.language == "zh" && locale.country in setOf("TW", "HK", "MO") -> "Hant"
+                    locale.language == "zh" -> "Hans"
+                    else -> ""
+                }
+            }
+            val candidates = listOfNotNull(
+                locale.toLanguageTag(),
+                if (script.isNotEmpty() && locale.country.isNotEmpty()) "${locale.language}-$script-${locale.country}" else null,
+                if (script.isNotEmpty()) "${locale.language}-$script" else null,
+                if (locale.country.isNotEmpty()) "${locale.language}-${locale.country}" else null,
+                locale.language,
+            )
+            for (candidate in candidates) entries.firstOrNull { it.tag.equals(candidate, ignoreCase = true) }?.let { return it }
+            return entries.firstOrNull { it.tag.substringBefore('-') == locale.language }
+        }
+
         /** The phone's language (not the process default, which follows the app's choice: [Digits.useAppLocale]). */
-        fun system(): AppLanguage = if (Digits.phoneLocales()[0].language == "ar") AR else EN
+        fun system(): AppLanguage = match(Digits.phoneLocales()[0]) ?: EN
+
+        /** What the one-press language switch goes to: the other of two languages, else the next. */
+        fun next(current: AppLanguage): AppLanguage = entries[(entries.indexOf(current) + 1) % entries.size]
     }
 }
 
 /** Local preferences of this install (NAVIGATION.md §1 footer chips: language and theme). */
 class AppPrefs(private val prefs: SharedPreferences) {
+    /** Called when the in-app language changes: the graph tells Android's per-app setting. */
+    var onLanguageChanged: ((AppLanguage?) -> Unit)? = null
+
     /** Null follows the phone's language. */
     var language: AppLanguage?
         get() = AppLanguage.of(prefs.getString(KEY_LANGUAGE, null))
-        set(value) = prefs.edit().putString(KEY_LANGUAGE, value?.tag).apply()
+        set(value) {
+            prefs.edit().putString(KEY_LANGUAGE, value?.tag).apply()
+            onLanguageChanged?.invoke(value)
+        }
 
-    val effectiveLanguage: AppLanguage get() = language ?: AppLanguage.system()
+    /** Android's per-app language (13+), which the graph reads from the system. */
+    var perApp: (() -> AppLanguage?)? = null
+
+    val effectiveLanguage: AppLanguage get() = perApp?.invoke() ?: language ?: AppLanguage.system()
 
     private val _theme = MutableStateFlow(
         runCatching { ThemeChoice.valueOf(prefs.getString(KEY_THEME, null) ?: "") }.getOrDefault(ThemeChoice.SYSTEM),
@@ -94,6 +167,10 @@ class AppGraph(
     releaseSource: hub.core.android.phone.ReleaseSource? = null,
 ) {
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
+        .also { prefs ->
+            prefs.onLanguageChanged = { Digits.publishAppLanguage(context, it) }
+            prefs.perApp = { Digits.perAppLanguage(context) }
+        }
     /** The order the person dragged the chats into, per view (ChatOrder.kt). */
     val chatOrder = hub.core.android.ui.screens.ChatOrderStore(context.getSharedPreferences("corehub.chatorder", Context.MODE_PRIVATE))
     /** Which drawer groups («Tools») are closed on this device (nav/SidebarGroups.kt). */
@@ -126,7 +203,8 @@ class AppGraph(
         PushRegistrar(store, { apis(it) }, { token -> DeviceProof.proof(proofKeys, "fcm", token) }) {
             thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker())
         },
-        { prefs.effectiveLanguage.tag },
+        // The contract's Locale is Arabic or English: the nearest of the two (DECISIONS §130).
+        { prefs.effectiveLanguage.hubLocale },
         scope,
     )
 

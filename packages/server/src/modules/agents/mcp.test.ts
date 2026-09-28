@@ -13,7 +13,7 @@ import {
   getMcpServer,
   listMcpServers,
   putMcpServer,
-  setOAuthRedirect,
+  prepareOAuthLogin,
 } from './mcp.js';
 
 const homes: string[] = [];
@@ -187,27 +187,45 @@ describe('a remote server that signs in (DECISIONS §122)', () => {
     expect(read(dir)).not.toContain(STORED);
   });
 
-  it("sets the hub's callback, moves its own, and keeps one the person wrote", () => {
+  it("prepares Hermes's login: `auth: oauth`, the hub's callback and the port; keeps a redirect the person wrote", () => {
     const dir = home(REMOTE);
     const ours = (uri: string) => uri.includes('/api/v1/mcp-oauth/callback/');
     expect(
-      setOAuthRedirect(dir, 'clickup', 'https://a.example/api/v1/mcp-oauth/callback/clickup', ours),
+      prepareOAuthLogin(
+        dir,
+        'clickup',
+        'https://a.example/api/v1/mcp-oauth/callback/clickup',
+        40001,
+        ours,
+      ),
     ).toBe('https://a.example/api/v1/mcp-oauth/callback/clickup');
     expect(read(dir)).toContain('client_secret: cs-secret');
     expect(read(dir)).toContain(
       'redirect_uri: https://a.example/api/v1/mcp-oauth/callback/clickup',
     );
-    setOAuthRedirect(dir, 'clickup', 'https://b.example/api/v1/mcp-oauth/callback/clickup', ours);
+    expect(read(dir)).toContain('redirect_port: 40001');
+    prepareOAuthLogin(
+      dir,
+      'clickup',
+      'https://b.example/api/v1/mcp-oauth/callback/clickup',
+      40002,
+      ours,
+    );
     expect(read(dir)).toContain(
       'redirect_uri: https://b.example/api/v1/mcp-oauth/callback/clickup',
     );
+    expect(read(dir)).toContain('redirect_port: 40002');
+    expect(read(dir)).not.toContain('40001');
 
     const own = home(
       'mcp_servers:\n  x:\n    url: https://x.example\n    oauth:\n      redirect_uri: https://proxy.example/cb\n',
     );
-    expect(setOAuthRedirect(own, 'x', 'https://b.example/api/v1/mcp-oauth/callback/x', ours)).toBe(
-      'https://proxy.example/cb',
+    expect(
+      prepareOAuthLogin(own, 'x', 'https://b.example/api/v1/mcp-oauth/callback/x', 40003, ours),
+    ).toBe('https://proxy.example/cb');
+    expect(read(own)).toContain('auth: oauth');
+    expect(() => prepareOAuthLogin(own, 'ghost', 'https://b.example/', 1, ours)).toThrow(
+      /not_found/,
     );
-    expect(() => setOAuthRedirect(own, 'ghost', 'https://b.example/', ours)).toThrow(/not_found/);
   });
 });

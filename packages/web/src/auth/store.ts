@@ -88,3 +88,32 @@ export function isSession(value: unknown): value is StoredSession {
 export function expiresAt(expiresInSeconds: number, now: number = Date.now()): string {
   return new Date(now + expiresInSeconds * 1000).toISOString();
 }
+
+/** What `auth.login`, `auth.completeSetup` and the desktop app's local sign-in answer. */
+export interface TokenPairLike {
+  access_token: string;
+  refresh_token: string | null;
+  expires_in: number;
+  user: {
+    id: string;
+    username: string;
+    display_name: string;
+    role: string;
+    default_profile: string;
+  };
+}
+
+export function sessionFromTokens(data: TokenPairLike, now: number = Date.now()): StoredSession {
+  return {
+    profile: data.user.default_profile,
+    token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: expiresAt(data.expires_in, now),
+    user: {
+      id: data.user.id,
+      username: data.user.username,
+      display_name: data.user.display_name,
+      role: data.user.role,
+    },
+  };
+}

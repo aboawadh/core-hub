@@ -68,7 +68,9 @@ class MainActivity : ComponentActivity() {
      * Latin in both (DECISIONS §113) — also when the app follows an Arabic phone.
      */
     override fun attachBaseContext(base: Context) {
-        val language = (base.applicationContext as? CoreHubApp)?.graph?.prefs?.language
+        // Android's per-app language (13+) and the in-app one are kept the same (AppPrefs); the
+        // system's wins if a person changed it in Android's settings since.
+        val language = Digits.perAppLanguage(base) ?: (base.applicationContext as? CoreHubApp)?.graph?.prefs?.language
         super.attachBaseContext(Digits.wrap(base, language))
     }
 

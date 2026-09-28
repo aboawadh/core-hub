@@ -72,6 +72,16 @@ is judged afresh.
   revokes all its tokens; nothing is deleted; logged at warning level. It runs once: the
   marker `<DATA_DIR>/owner-reset.json` (`reset_at`, `disabled_owner_ids`) makes later boots
   with the variable ignore it; a boot without the variable removes the marker.
+- **The owner on the desktop's own computer** (`local-owner.ts`, DECISIONS §131):
+  `localOwnerAccessFor(io)` — for the desktop app's IPC channel to the hub it forked
+  (`apps/desktop/src/hub/entry.ts`) only, **never an HTTP route**. `beginRecovery(method)` (after
+  the OS confirmed the person) answers the owner's username and a 256-bit grant kept by SHA-256:
+  single use, five minutes, one alive, at most five in fifteen minutes. `finishRecovery(grant,
+  password, label)` sets the password (8–1024), revokes every `app_tokens` row of the owner (web,
+  device — the device marked revoked — and personal), ends push and sockets, and answers a new
+  `TokenPair`. `signIn(label)` is the password-free sign-in; `isOwnerSession(bearer)` lets the app
+  check the owner before turning that on. Audit: `auth.password_recovery_started`,
+  `auth.password_recovered`, and `auth.login` with `data.via = desktop_local`.
 - **Passwords**: Argon2id (`passwords.ts`, OWASP parameters).
 - **Sign-in** (`POST /auth/login`): a `web` row in `app_tokens` is the rotating refresh token
   (SHA-256 stored, 30 days); the access token is a 15-minute JWT whose `sid` is that row. A
@@ -107,7 +117,8 @@ is judged afresh.
   knowledge attachments (those are workspace-scoped; users are global).
 - **Audit**: `auth.login`, `auth.login_failed`, `auth.logout`, `auth.pairing_created`,
   `auth.pairing_claimed`, `auth.token_created`, `auth.token_revoked`, `auth.user_*`,
-  `auth.password_changed`, `auth.step_up`, `auth.step_up_failed`, `auth.profile_*` rows in
+  `auth.password_changed`, `auth.password_recovery_started`, `auth.password_recovered`,
+  `auth.step_up`, `auth.step_up_failed`, `auth.profile_*` rows in
   `audit_events`.
 
 ## Temporary pieces (remove when their owner module lands)

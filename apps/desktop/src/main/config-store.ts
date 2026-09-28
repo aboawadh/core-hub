@@ -15,14 +15,19 @@ export class ConfigStore {
   constructor(dir: string, makeId: () => string = randomUUID) {
     this.file = path.join(dir, 'desktop.json');
     let raw: unknown;
+    let unread = false;
     try {
       raw = JSON.parse(readFileSync(this.file, 'utf8'));
-    } catch {
-      raw = null;
+    } catch (error) {
+      // No file: a new install, with a new install's defaults. A file that cannot be read is
+      // an install that exists: `{}` keeps a new default (password-free sign-in) from turning
+      // on because a file was damaged.
+      raw = (error as NodeJS.ErrnoException).code === 'ENOENT' ? null : {};
+      unread = true;
     }
     this.current = parseConfig(raw, makeId);
     // The device key must survive the first launch even if nothing else is changed.
-    if (raw === null) this.write();
+    if (unread) this.write();
   }
 
   get(): DesktopConfig {

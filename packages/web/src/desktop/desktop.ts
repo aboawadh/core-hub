@@ -7,7 +7,7 @@
  * "This device" settings tab), notices also reach the OS, and a `corehub://open/…` link
  * lands on its page. In a browser every function here is a no-op.
  */
-import { isSession, type SessionStore } from '../auth/store.js';
+import { isSession, sessionFromTokens, type SessionStore } from '../auth/store.js';
 import type { DesktopBridge } from './bridge-types.js';
 
 export type { DesktopBridge, DesktopState, DesktopNotice } from './bridge-types.js';
@@ -33,5 +33,17 @@ export async function adoptDesktopSession(store: SessionStore): Promise<void> {
     if (isSession(pending)) store.save(pending);
   } catch {
     // Nothing handed over: the sign-in screen asks as usual.
+  }
+  if (store.read()) return;
+  // The hub on this computer, with password-free sign-in on (DECISIONS §131): the app signs the
+  // owner in. After a sign-out the sign-in screen stays until the window loads again, and offers
+  // the same thing as a button.
+  try {
+    const owner = await bridge.ownerAccess?.get();
+    if (!owner?.local || !owner.localSignIn) return;
+    const result = await bridge.ownerAccess!.signIn();
+    if (result.ok) store.save(sessionFromTokens(result.tokens));
+  } catch {
+    // An older app, or the hub not ready: the sign-in screen asks as usual.
   }
 }

@@ -133,5 +133,9 @@
     "trash": "Move to Trash",
     "keep": "Keep it",
     "failed": "The old copy could not be moved to the Trash: {message}"
+  },
+  "owner_access": {
+    "touch_id_reason": "reset the owner's password of the hub on this computer",
+    "prompt": "Core Hub wants to reset the owner's password of the hub on this computer. Confirm it is you."
   }
 }

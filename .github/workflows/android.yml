@@ -11,6 +11,7 @@ on:
       - packages/contracts/**
       - packages/ui-tokens/tokens.json
       - docs/clients/navigation.json
+      - locales/**
       - .github/workflows/android.yml
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - packages/contracts/**
       - packages/ui-tokens/tokens.json
       - docs/clients/navigation.json
+      - locales/**
       - .github/workflows/android.yml
   workflow_dispatch:
 
@@ -64,6 +66,14 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
           if-no-files-found: error
+      # ADR 0028: the main screens in the test-only pseudo-locales, pass or fail.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-pseudo-locale-screens
+          path: apps/android/app/build/pseudo/
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

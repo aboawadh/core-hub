@@ -328,6 +328,9 @@ export function useMcpOAuthFlow(agentId: string | undefined, name: string, flowI
     },
     refetchInterval: (query) =>
       !query.state.data || query.state.data.status === 'pending' ? MCP_OAUTH_POLL_MS : false,
+    // The person is on the provider's tab meanwhile: keep asking, so the page is current when
+    // they come back and Hermes's server is not stopped as idle mid-sign-in.
+    refetchIntervalInBackground: true,
   });
 }
 

@@ -22,7 +22,11 @@ export const SETS = [
   { name: 'cli', dir: 'packages/cli/src/i18n', required: true, index: 'eager' },
   { name: 'web', dir: 'packages/web/src/i18n', required: true, index: 'lazy' },
   { name: 'desktop', dir: 'apps/desktop/src/i18n', required: false, index: 'eager' },
+  // The phones read their catalogues themselves: iOS at run time, Android as string resources
+  // generated at build time (`:app:generateSharedSources`). Android keys are resource names and
+  // its placeholders `%1$s`.
   { name: 'ios', dir: 'apps/ios/CoreHub/i18n', required: false, areas: true, index: null },
+  { name: 'android', dir: 'apps/android/i18n', required: false, areas: true, index: null },
 ];
 
 export function readRegistry(file = registryFile) {

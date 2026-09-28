@@ -9,9 +9,13 @@
  * IPC channel `fork` opens. Configuration is the hub's own (`DATA_DIR`, `PORT`, …).
  */
 import { buildServer } from '../../../../packages/server/src/app/server.js';
+import {
+  LocalOwnerRefusal,
+  localOwnerAccessFor,
+} from '../../../../packages/server/src/modules/auth/index.js';
 import { RelayHostRefusal } from '../../../../packages/server/src/modules/devices/index.js';
 import { createServer } from 'node:net';
-import { ipcRelayHost } from '../shared/hub-ipc.js';
+import { ipcRelayHost, serveOwnerAccess } from '../shared/hub-ipc.js';
 
 function portFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -36,6 +40,18 @@ const preferred = Number(process.env.COREHUB_DESKTOP_PORT) || 0;
 if (preferred && (await portFree(preferred))) process.env.PORT = String(preferred);
 
 const app = await buildServer({ webDir: null, relayHost });
+
+// The owner on this computer (DECISIONS §131): a password reset after the OS confirmed the
+// person, and sign-in without a password — asked by the app over this IPC channel only. The
+// hub has no HTTP route for either, so nothing reaching the port (the LAN, a tunnel) can.
+const ownerAccess = process.send ? localOwnerAccessFor(app.hub.io) : null;
+if (ownerAccess)
+  serveOwnerAccess({
+    access: ownerAccess,
+    send: (message) => process.send?.(message),
+    listen: (listener) => process.on('message', listener),
+    reasonOf: (error) => (error instanceof LocalOwnerRefusal ? error.reason : null),
+  });
 
 try {
   await app.listen({ port: app.hub.config.port, host: '127.0.0.1' });
