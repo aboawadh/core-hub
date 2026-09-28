@@ -21,7 +21,7 @@
   الإنجليزية، و`InfoPlist.strings` و`CFBundleLocalizations` من السجل (فيظهر اختيار اللغة في
   إعدادات iOS للتطبيق). لا واجهة عامة لقواعد الجمع في iOS، فـ`PluralCategory` يحمل قواعد CLDR
   للأعداد الصحيحة للغات الشائعة.
-- **قواعد المساحة**: كل `Text` بسطر واحد في أندرويد كان يُقص صار ينتهي بـ«…» (13 موضعًا)،
+- **قواعد المساحة**: كل `Text` بسطر واحد في أندرويد كان يُقص صار ينتهي بـ«…» (11 موضعًا)،
   وصف حالة الإشعارات لا يأخذ أكثر من نصف السطر (وجدته الاختبارات: كلمة «الإشعارات» كانت تنكسر
   حرفين حرفين)، و`.singleLine()` في iOS (سطر واحد + تصغير حتى 85% + «…») لرقائق الواجهة.
 - **الاختبارات التجريبية**: Robolectric يمشي 10 شاشات أندرويد أمام الهب التجريبي بـ`en-XA`
@@ -37,7 +37,7 @@
 - أندرويد: `apps/android/i18n/*.json` (58 ملفًا، بدل `res/values*/strings*.xml`)،
   `app/build.gradle.kts` (التوليد، اللغات التجريبية، `MissingTranslation`)، `AndroidManifest.xml`،
   `AppGraph.kt`، `Digits.kt`، `MainActivity.kt`، شاشات الدخول والدرج والعرض، `NotificationStatus.kt`،
-  13 موضع `Text`، اختبارات `StringsParityTest` و`ToolActivityTest` و`PseudoLocaleLayoutTest`
+  11 موضع `Text`، اختبارات `StringsParityTest` و`ToolActivityTest` و`PseudoLocaleLayoutTest`
   و`TextAudit(Test)`.
 - iOS: `i18n/L10n.swift`، `i18n/Pseudo.swift`، `Generated/Languages.swift`، `scripts/generate-swift.mjs`،
   `project.yml`، `Theme/Icon.swift` (`singleLine`)، `Shell/Components.swift`، `DisplayPage.swift`،
