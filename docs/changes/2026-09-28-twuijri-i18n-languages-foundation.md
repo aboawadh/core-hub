@@ -92,6 +92,7 @@ ADR 0028 وDECISIONS §129 — مقترح، بانتظار تأكيد المال
 محليًا (الذاكرة عبر mj-run، عمال vitest=2، Playwright ‏`--workers=1`):
 ```
 pnpm lint                                    All matched files use Prettier code style!
+pnpm typecheck                               exit 0 (every package)
 pnpm i18n:check                              registry: 2 languages (ar, en), 5 test-only pseudo-locales
                                              server 216 · cli 252 · web 3358 · desktop 105 · ios 2706 keys, ar/en in parity
                                              i18n:check  OK

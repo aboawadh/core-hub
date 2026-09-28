@@ -203,7 +203,8 @@ export function auditLayout(): AuditFinding[] {
     // A short label or title that wrapped: its last line must hold more than one letter.
     if (!singleLine && [...text].length > 2 && [...text].length <= 48) {
       const textNodes = [...element.childNodes].filter(
-        (child): child is Text => child.nodeType === Node.TEXT_NODE && !!child.data.trim(),
+        (child): child is Text =>
+          child.nodeType === Node.TEXT_NODE && !!(child as Text).data.trim(),
       );
       const last = textNodes[textNodes.length - 1];
       if (!last) continue;
