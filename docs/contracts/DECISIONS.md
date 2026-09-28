@@ -4290,3 +4290,46 @@ wire is unchanged.
 
 Rejected: widening `Locale` or the header enum now (breaks the generated clients the phones ship
 with); a free-text `locale` (every client would have to cope with any string at once).
+
+## 131. The owner on the desktop's own computer: «نسيت كلمة المرور؟» after the OS confirms, and sign-in without a password
+Design approved by the owner 2026-09-28; the defaults below are proposed — owner to confirm.
+**No change to the OpenAPI document or to any realtime event.**
+
+In local mode (ADR 0009) the desktop app's sign-in screen offers "Forgot password?" /
+«نسيت كلمة المرور؟». Pressing it shows the operating system's own confirmation — Touch ID or a Mac
+administrator's password (`systemPreferences.promptTouchID`, then Authorization Services through
+`osascript … with administrator privileges` running `/usr/bin/true`), Windows Hello
+(`UserConsentVerifier` through Windows PowerShell's WinRT projection), polkit on Linux
+(`pkexec /usr/bin/true`). No native module is shipped. After it, the page shows the owner's
+username in monospace and asks for a new password twice (8–1024 characters, as setup); saving
+sets it, revokes **every** token and session of the owner (web sessions, paired devices — which
+are marked revoked — and personal tokens), ends their push registrations and sockets, signs the
+app in with a fresh session and writes `auth.password_recovery_started` and
+`auth.password_recovered` audit rows (method, counts; never the password or the grant).
+
+**Local only, never HTTP.** The hub has no route for any of this. `LocalOwnerAccess`
+(`packages/server/src/modules/auth/local-owner.ts`, `localOwnerAccessFor(io)`) is reached only from
+`apps/desktop/src/hub/entry.ts` over the IPC channel of the child process the app forked
+(`owner` requests / `owner-answer` in `apps/desktop/src/shared/hub-ipc.ts`). The LAN, a tunnel
+(§95) or another account on the computer cannot open that channel; a hub in a container has none.
+`begin` (sent only after the OS said yes) answers the username and a random 256-bit grant kept by
+its SHA-256, single use, five minutes, one alive at a time, at most five in fifteen minutes; the
+app keeps the grant, the page never sees it; the app asks the OS at most five times in fifteen
+minutes. A computer with no reachable prompt (Windows without Hello, Linux without `pkexec` or a
+graphical session) does not show the button.
+
+**Sign-in without a password on this computer.** The same channel's `sign-in` gives the owner a
+session when the app's setting `localSignIn` (`desktop.json`) is on; the web client asks for it at
+start when it holds no session, and the sign-in screen offers «ادخل على هذا الحاسوب» / "Sign in on
+this computer". Phones, browsers and other computers still need the password. Default: **on for a
+new install** (no `desktop.json` yet), **off for an install from before it** (a file without the
+field, or one that cannot be read) — nothing changes for anyone who already has the app until the
+owner turns it on in Settings → This device. Turning it on takes the owner's own live sign-in
+(the hub checks the access token, `is-owner`); turning it off takes nothing.
+
+Rejected: an HTTP route guarded by loopback (a tunnel's connector reaches the hub from loopback);
+a per-launch secret over HTTP (the IPC channel already exists and is not a socket); CredUI with a
+`LogonUser` check on Windows (P/Invoke through PowerShell we could not verify on a real machine —
+Hello covers Windows 10/11 with a PIN); a password-free default for existing installs (changes what
+people who already run the app have). Hubs in Docker are out of scope: recovery codes or a command
+inside the container are for the owner to choose later.

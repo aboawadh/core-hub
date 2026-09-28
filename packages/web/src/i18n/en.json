@@ -77,7 +77,42 @@
     "password": "Password",
     "submit": "Sign in",
     "signing_in": "Signing in…",
-    "setup_unknown": "Could not ask this hub whether it still needs first-run setup. Sign in, or reload the page."
+    "setup_unknown": "Could not ask this hub whether it still needs first-run setup. Sign in, or reload the page.",
+    "forgot": "Forgot password?",
+    "forgot_waiting": "Waiting for your computer to confirm it is you…",
+    "forgot_hint": {
+      "macos": "Your Mac asks for Touch ID or an administrator’s password first.",
+      "windows_hello": "Windows asks for Windows Hello first: your face, fingerprint or PIN.",
+      "polkit": "Linux asks for your password first. It says it will run “true” as the administrator: that is only the check, nothing else runs.",
+      "test": "A test confirmation answers instead of the operating system."
+    },
+    "local_sign_in": "Sign in on this computer",
+    "recovery": {
+      "title": "Choose a new password",
+      "confirmed": "Your computer confirmed it is you. This is the owner account of the hub on this computer.",
+      "username_label": "The owner’s username",
+      "username_hint": "Sign in with exactly this name: every letter and dot counts.",
+      "password": "New password",
+      "password_hint": "At least {min} characters.",
+      "confirm": "Confirm the new password",
+      "mismatch": "The two passwords are not the same.",
+      "too_short": "The password must be at least {min} characters.",
+      "signs_out": "Saving signs the owner out everywhere else: phones and other computers paired with this hub must sign in again, and personal access tokens stop working.",
+      "save": "Save and sign in",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "errors": {
+        "cancelled": "Your computer did not confirm it is you. Nothing changed.",
+        "unavailable": "This computer has no way to confirm it is you, so the password cannot be reset here.",
+        "rate_limited": "Too many attempts. Wait a few minutes and try again.",
+        "expired": "The confirmation expired. Press “Forgot password?” again.",
+        "invalid_password": "The hub refused the new password. Use at least {min} characters.",
+        "no_owner": "This hub has no owner yet.",
+        "owner_disabled": "The owner account is disabled.",
+        "busy": "Your computer is already asking. Answer that prompt first.",
+        "failed": "Something went wrong. Try again, or sign in with the password."
+      }
+    }
   },
   "setup": {
     "title": "Create the owner account",
@@ -3223,7 +3258,15 @@
     "hermes_program": "Installed on this computer",
     "hermes_gateway": "Already running on this computer",
     "hermes_none": "Not found — the agents show Hermes as not installed",
-    "hermes_path": "Hermes program"
+    "hermes_path": "Hermes program",
+    "local_sign_in": {
+      "title": "Signing in on this computer",
+      "label": "Sign in without a password on this computer",
+      "hint": "The app signs you, the owner, in to the hub on this computer without the password. Phones, browsers and other computers still need it.",
+      "refused": "Only the owner, signed in, can turn this on. Sign in again and try once more.",
+      "recovery_on": "If you forget the password, “Forgot password?” on the sign-in screen resets it after this computer confirms it is you.",
+      "recovery_off": "This computer has no way to confirm it is you (such as Windows Hello or a password prompt), so “Forgot password?” is not offered here."
+    }
   },
   "helper": {
     "title": "Agents on this computer",

@@ -155,6 +155,8 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
     HOME: home,
     HERMES_HOME: path.join(home, '.hermes'),
     COREHUB_DESKTOP_HERMES_GATEWAY: 'http://127.0.0.1:9/health',
+    // The OS prompt of "Forgot password?" answers yes (an unpackaged app only; DECISIONS §131).
+    COREHUB_DESKTOP_FAKE_OS_CONFIRM: 'allow',
   });
   try {
     const welcome = await app.firstWindow();
@@ -226,6 +228,60 @@ test('local mode: no Hermes found → the hub starts on this computer anyway →
     // Programs on this computer are a part of This device, not a page of their own.
     await expect(page.getByTestId('programs')).toBeVisible();
     await page.getByTestId('helper').screenshot({ path: path.join(shots, 'helper-ar.png') });
+
+    // The owner of the hub on this computer (DECISIONS §131). A packaged app asks the real OS,
+    // which a test cannot answer: these steps need the development runtime.
+    if (!packaged) {
+      const origin = new URL(page.url()).origin;
+      const login = (password: string) =>
+        page.evaluate(
+          async ({ password }) =>
+            (
+              await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ username: 'tariq', password }),
+              })
+            ).status,
+          { password },
+        );
+      // This install's settings file came before the setting: password-free sign-in stays off.
+      const localSignIn = page.getByTestId('this-device-local-sign-in');
+      await expect(localSignIn).toHaveAttribute('aria-checked', 'false');
+
+      // Signed out (the stored sign-in forgotten), the app does not sign anyone in by itself.
+      await page.evaluate(() => localStorage.clear());
+      await page.goto(`${origin}/login`);
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.getByRole('button', { name: 'نسيت كلمة المرور؟' })).toBeVisible();
+      await page.screenshot({ path: path.join(shots, 'login-local-ar.png') });
+      await page.getByRole('button', { name: 'نسيت كلمة المرور؟' }).click();
+      await expect(page.getByTestId('recovery-username')).toHaveText('tariq');
+      await page.getByLabel('كلمة المرور الجديدة', { exact: true }).fill('a-recovered-password');
+      await page
+        .getByLabel('تأكيد كلمة المرور الجديدة', { exact: true })
+        .fill('a-recovered-password');
+      await page.screenshot({ path: path.join(shots, 'recovery-ar.png') });
+      await page.getByRole('button', { name: 'احفظ وادخل' }).click();
+      await expect(page).toHaveURL(/\/chat$/);
+      expect(await login('local-owner-password')).toBe(401);
+      expect(await login('a-recovered-password')).toBe(200);
+
+      // Turned on, the app signs the owner in at start without the password.
+      await page.goto(`${origin}/settings/this-device`);
+      await localSignIn.click();
+      await expect(localSignIn).toHaveAttribute('aria-checked', 'true');
+      expect(
+        (
+          JSON.parse(readFileSync(path.join(userDataOf(app), 'desktop.json'), 'utf8')) as {
+            localSignIn: boolean;
+          }
+        ).localSignIn,
+      ).toBe(true);
+      await page.evaluate(() => localStorage.clear());
+      await page.goto(`${origin}/login`);
+      await expect(page).toHaveURL(/\/chat$/);
+    }
   } finally {
     await app.close();
   }

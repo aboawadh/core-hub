@@ -11,6 +11,9 @@ import type {
   DesktopBridge,
   DesktopHelperState,
   DesktopNotice,
+  DesktopOwnerAccessState,
+  DesktopOwnerResult,
+  DesktopRecoveryStart,
   DesktopState,
   DesktopUpdatesState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
@@ -88,6 +91,24 @@ const bridge: DesktopBridge = {
     mic: () => ipcRenderer.invoke(CHANNELS.voiceMic),
     askMic: () => ipcRenderer.invoke(CHANNELS.voiceMicAsk),
     openMicSettings: () => ipcRenderer.invoke(CHANNELS.voiceMicSettings) as Promise<void>,
+  },
+  ownerAccess: {
+    get: () => ipcRenderer.invoke(CHANNELS.ownerGet) as Promise<DesktopOwnerAccessState>,
+    beginRecovery: () =>
+      ipcRenderer.invoke(CHANNELS.ownerRecoveryBegin) as Promise<DesktopRecoveryStart>,
+    finishRecovery: (password) =>
+      ipcRenderer.invoke(
+        CHANNELS.ownerRecoveryFinish,
+        String(password),
+      ) as Promise<DesktopOwnerResult>,
+    cancelRecovery: () => ipcRenderer.invoke(CHANNELS.ownerRecoveryCancel) as Promise<void>,
+    signIn: () => ipcRenderer.invoke(CHANNELS.ownerSignIn) as Promise<DesktopOwnerResult>,
+    setLocalSignIn: (value, token) =>
+      ipcRenderer.invoke(
+        CHANNELS.ownerSetLocalSignIn,
+        value === true,
+        typeof token === 'string' ? token : null,
+      ) as Promise<DesktopOwnerAccessState>,
   },
 };
 

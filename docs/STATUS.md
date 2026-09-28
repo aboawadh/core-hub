@@ -1025,6 +1025,19 @@ disabled admin, tokens revoked, nothing deleted) and reopens setup — once, tha
 to the marker `owner-reset.json`. `HUB_ADMIN_PASSWORD` still creates the owner
 unattended and skips the screen.
 
+Since 2026-09-28 the **desktop app's own hub** (local mode) has «نسيت كلمة المرور؟» /
+"Forgot password?" on its sign-in screen (DECISIONS §131; design approved, defaults proposed —
+owner to confirm): the operating system confirms the person (Touch ID or a Mac administrator's
+password, Windows Hello, polkit), the owner's username is shown in monospace, and a new password
+revokes every other sign-in, paired device and personal token of the owner, signs the app in and
+is audited. The hub accepts it only over the IPC channel of the app that started it — no HTTP
+route. The same channel signs the owner in without a password on that computer when This device
+→ «الدخول دون كلمة مرور على هذا الحاسوب» is on (on for a new install, off for an existing one).
+Tested with the OS prompt faked (server, desktop unit and the desktop smoke run under Xvfb);
+**never run against a real Touch ID, Mac password dialog, Windows Hello or polkit agent**. A hub
+in Docker has no such recovery yet (recovery codes or a command in the container, the owner's
+choice later).
+
 ## Runtime
 A fresh install has **two** agents (ADOPTION-BACKLOG §2.15, owner's decision of
 2026-09-22):

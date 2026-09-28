@@ -80,6 +80,12 @@ export interface DesktopConfig {
   relay: RelayConfig;
   /** macOS: the person was asked about the old `corehub.app` (asked once, ever). */
   legacyAppAsked: boolean;
+  /**
+   * Local mode: the app signs the owner in to the hub on this computer without the password
+   * (DECISIONS §131). On for a new install; an install from before it has no such field and
+   * stays off until the owner turns it on in Settings → This device.
+   */
+  localSignIn: boolean;
 }
 
 export const RECENT_LIMIT = 5;
@@ -105,6 +111,7 @@ export function defaultConfig(
     localHubPort: null,
     relay: { ...DEFAULT_RELAY },
     legacyAppAsked: false,
+    localSignIn: true,
   };
 }
 
@@ -170,6 +177,8 @@ export function parseConfig(
     localHubPort: userPort(raw.localHubPort),
     relay: parseRelayConfig(raw.relay),
     legacyAppAsked: raw.legacyAppAsked === true,
+    // A settings file without the field is an install from before it: unchanged (off).
+    localSignIn: raw.localSignIn === true,
   };
 }
 
