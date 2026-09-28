@@ -1,7 +1,7 @@
 // Hermes Agent — the base runtime (ADR 0006). It ships inside the image, so the hub never
 // installs or removes it; the entry exists so the registry, the adapters and the clients
 // all read Hermes from the same place as every other agent.
-import { HERMES_FLOOR } from './hermes-versions.js';
+import { HERMES_FLOOR, HERMES_TESTED } from './hermes-versions.js';
 import type { CatalogEntry } from './types.js';
 
 export const hermes: CatalogEntry = {
@@ -22,6 +22,10 @@ export const hermes: CatalogEntry = {
   // older Hermes is not proven (a person's own install may be any age,
   // `docs/changes/2026-09-27-…-existing-hermes.md`).
   minimumVersion: HERMES_FLOOR.version,
+  // The release the image carries and every real suite passes on too; a person's own Hermes past
+  // it is said on its card, and its newer releases are looked up where Hermes publishes them.
+  testedVersion: HERMES_TESTED.version,
+  releases: { github: 'NousResearch/hermes-agent' },
   // Hermes's API server documents `GET /health` (docs/inspirations/hermes-agent.md §1).
   // Hermes does not take its keys from the process environment the hub spawns it with:
   // it reads its own `${HERMES_HOME}/.env`, which the hub writes (ADR 0010

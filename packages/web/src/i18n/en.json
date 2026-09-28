@@ -627,6 +627,10 @@
     "update_hermes_body": "Core Hub will run Hermes's own updater (hermes update --yes) on the Hermes installed on this computer. It updates Hermes for everything else that uses it too, and then restarts the Hermes Core Hub runs.",
     "newer_than_tested_hint": "This version is past the one Core Hub was tested with ({version}). It should work; if something breaks, say so.",
     "update_available_untested": "Update available: {version} — newer than the tested version",
+    "hermes_newer_than_tested": "This Hermes ({version}) is newer than {tested}, the version Core Hub is tested with. It may not be supported yet: some features may not work with it.",
+    "hermes_update_available": "Hermes {version} is available (this computer has {current}).",
+    "hermes_update_tested": "Core Hub is tested with this version.",
+    "hermes_update_untested": "Core Hub is not tested with this version yet (it is tested with {tested}); some features may not work with it.",
     "tools": {
       "not_supervised": "This hub does not run Hermes itself, so it cannot ask Hermes to do this.",
       "refused": "Hermes refused: {message}",

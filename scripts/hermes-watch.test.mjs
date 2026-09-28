@@ -13,6 +13,8 @@ import {
   failingTests,
   pickLatest,
   readPins,
+  recordPath,
+  recordText,
   releaseVersion,
   reportBody,
   verdict,
@@ -140,5 +142,31 @@ describe('the report', () => {
     const body = reportBody({ ...pins, failed: [], total: 5 });
     assert.match(body, /All 5 tests passed/);
     assert.match(body, /Never merged automatically/);
+  });
+});
+
+describe('the change record of the bot’s pull request', () => {
+  it('has every section the change-record check asks for, and a block of what ran', () => {
+    const text = recordText({
+      latest: { ref: 'v2026.9.30', version: '0.21.6' },
+      tested: { ref: 'v2026.9.24', version: '0.21.5' },
+      floor: { ref: 'v2026.9.14', version: '0.21.3' },
+      runUrl: 'https://example.invalid/run/1',
+      branch: 'bot/hermes-v2026.9.30',
+      total: 87,
+    });
+    const readme = readFileSync(path.join(ROOT, 'docs/changes/README.md'), 'utf8');
+    for (const section of readme.match(/^## .+$/gm) ?? [])
+      assert.ok(text.includes(section), section);
+    assert.match(text, /^المسؤول: twuijri · الفرع: bot\/hermes-v2026\.9\.30 · الحالة: review$/m);
+    assert.match(text.split('## الفحوص')[1], /```/);
+    assert.equal(
+      recordPath('2026-09-30', 'v2026.9.30'),
+      'docs/changes/2026-09-30-twuijri-hermes-v2026-9-30.md',
+    );
+    assert.match(
+      recordPath('2026-09-30', 'v2026.9.30'),
+      /^docs\/changes\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/,
+    );
   });
 });

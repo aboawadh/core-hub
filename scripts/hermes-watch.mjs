@@ -12,7 +12,9 @@
 //   node scripts/hermes-watch.mjs latest [--output file]  → {"latest":…,"tested":…,"newer":bool}
 //   node scripts/hermes-watch.mjs bump --ref vX --version X.Y.Z
 //   node scripts/hermes-watch.mjs report --results vitest.json --ref vX --version X.Y.Z
-//       --run-url URL --body body.md [--summary summary.json]
+//       --run-url URL --body body.md [--summary summary.json] [--output $GITHUB_OUTPUT]
+//   node scripts/hermes-watch.mjs record --ref vX --version X.Y.Z --run-url URL --branch B
+//       --total N [--date YYYY-MM-DD]   → writes the change record of the bot's pull request
 //
 // `latest` reads GITHUB_TOKEN when it is set (a higher rate limit); the release list is public.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -147,6 +149,50 @@ export function reportBody({ latest, tested, floor, failed, total, runUrl }) {
   ].join('\n');
 }
 
+/** Where the bot's change record for moving the pin goes (`docs/changes/README.md`). */
+export function recordPath(date, ref) {
+  return `docs/changes/${date}-twuijri-hermes-${ref.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`;
+}
+
+/**
+ * The change record of the pull request the watch opens (TEAM-RULES §2; Arabic, like every record).
+ * It says what the watch did and ran, and leaves the rest to the owner's review.
+ */
+export function recordText({ latest, tested, floor, runUrl, branch, total }) {
+  return [
+    `# نقل صورة المركز إلى هرمز ${latest.ref} (${latest.version})`,
+    `المسؤول: twuijri · الفرع: ${branch} · الحالة: review`,
+    '',
+    '## المشكلة والهدف',
+    `صدر هرمز ${latest.ref} (\`${latest.version}\`) والصورة على ${tested.ref} (\`${tested.version}\`). فتح مراقب هرمز (DECISIONS §132) هذا الطلب لأن كل اختبارات هرمز الحقيقية نجحت عليه.`,
+    '',
+    '## القرار والموافقات',
+    `نقل \`HERMES_REF\` و\`HERMES_TESTED\` إلى ${latest.ref}؛ الحد الأدنى يبقى ${floor.ref} (\`${floor.version}\`). مقترح آليًا — ينتظر مراجعة المالك ودمجه، ولا يُدمج آليًا أبدًا.`,
+    '',
+    '## العقد (ما تغيّر في packages/contracts، أو «لا شيء»)',
+    'لا شيء.',
+    '',
+    '## الملفات والتأثير',
+    '- `packages/server/Dockerfile` (`HERMES_REF`)',
+    '- `packages/server/src/modules/agents/catalog/hermes-versions.ts` (`HERMES_TESTED`)',
+    '',
+    '## الفحوص (الأوامر ونواتجها الفعلية)',
+    `تشغيل المراقب: ${runUrl}`,
+    '```',
+    `COREHUB_HERMES_IMAGE=<صورة بهرمز ${latest.ref}> vitest run $(find src tests -name '*.real.test.ts')`,
+    `→ ${total} passed, 0 failed`,
+    '```',
+    'ويشغّل CI الاختبارات الحقيقية مرة أخرى على الحد الأدنى والإصدار الجديد (`hermes-real`) عند كل دفع لهذا الفرع.',
+    '',
+    '## المخاطر والرجوع',
+    'ما لا تغطيه الاختبارات الحقيقية قد يتغير في هرمز الجديد. الرجوع: إعادة `HERMES_REF` إلى الإصدار السابق وبناء الصورة.',
+    '',
+    '## التسليم والخطوة التالية',
+    'مراجعة المالك؛ وبعد الدمج إصدار صورة جديدة حسب docs/RELEASING.md.',
+    '',
+  ].join('\n');
+}
+
 function argsOf(argv) {
   const out = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -247,7 +293,25 @@ async function main([command, ...rest]) {
     console.log(body);
     return 0;
   }
-  console.error('usage: hermes-watch.mjs current|latest|bump|report …');
+  if (command === 'record') {
+    const { floor, tested } = readPins(readFiles());
+    const date = args.date ?? new Date().toISOString().slice(0, 10);
+    const file = recordPath(date, args.ref);
+    writeFileSync(
+      path.join(ROOT, file),
+      recordText({
+        latest: { ref: args.ref, version: args.version },
+        tested,
+        floor,
+        runUrl: args['run-url'] ?? '',
+        branch: args.branch ?? '',
+        total: Number(args.total ?? 0),
+      }),
+    );
+    console.log(file);
+    return 0;
+  }
+  console.error('usage: hermes-watch.mjs current|latest|bump|report|record …');
   return 2;
 }
 

@@ -33,6 +33,7 @@ import {
   Switch,
   Textarea,
 } from '../ui/index.js';
+import { useConfirm } from '../ui/ConfirmDialog.js';
 import { IconSettings } from '../ui/icons.js';
 import { AgentSignInCard } from './AgentSignInCard.js';
 import { CompressionSettingsCard } from './CompressionSettingsCard.js';
@@ -125,12 +126,23 @@ function UpdatesCard({ agent }: { agent: Agent }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<'check' | 'upgrade' | 'auto' | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const { ask, dialog } = useConfirm();
   // A bundled agent has no registry behind it: it arrives with the image.
   if (agent.install.source === 'builtin' || agent.install.source === 'none') return null;
   const notes = versionNotes(agent.install);
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: keys.agents(profile) });
   const run = async (kind: 'check' | 'upgrade') => {
+    // Hermes's own updater updates it for the whole computer: the person agrees first (§119).
+    if (kind === 'upgrade' && agent.install.self_update) {
+      const yes = await ask({
+        title: t('agents.update_hermes_title'),
+        body: t('agents.update_hermes_body'),
+        confirmLabel: t('agents.update_hermes'),
+        tone: 'default',
+      });
+      if (!yes) return;
+    }
     setBusy(kind);
     setError(null);
     try {
@@ -211,6 +223,7 @@ function UpdatesCard({ agent }: { agent: Agent }) {
           {t('agents.update_now')}
         </Button>
       </div>
+      {dialog}
       {agent.install.auto_update_supported && (
         <div className="mt-3">
           <Switch

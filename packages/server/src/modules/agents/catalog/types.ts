@@ -163,6 +163,18 @@ export interface CatalogEntry {
    * with. An older one still runs; the card says so (`AgentInstall.below_minimum`).
    */
   minimumVersion?: string;
+  /**
+   * For an agent the hub does not install (Hermes): the release the hub is tested with — the one
+   * the image carries (`hermes-versions.ts` §HERMES_TESTED). A person's own newer one is said on
+   * its card (`AgentInstall.tested_version`, `newer_than_tested`).
+   */
+  testedVersion?: string;
+  /**
+   * For an agent the person installed with the vendor's own installer (Hermes): where its
+   * releases are listed, so the hub can say a newer one exists (`latest_version`) — its own
+   * updater takes it (`AgentInstall.self_update`). A GitHub `owner/repo`.
+   */
+  releases?: { github: string };
 }
 
 /** The pinned version an entry should be at, or null when the hub does not install it. */

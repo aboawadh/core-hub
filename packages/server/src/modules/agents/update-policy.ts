@@ -55,12 +55,30 @@ export function newerOf(a: string | null, b: string | null): string | null {
   return compareVersions(a, b) >= 0 ? a : b;
 }
 
-export type RegistryKind = 'npm' | 'pypi';
+/**
+ * Where an agent's releases are listed: npm, PyPI, or a project's GitHub releases (`owner/repo`;
+ * Hermes, which a person installs with its own installer, not from a package registry — §132).
+ */
+export type RegistryKind = 'npm' | 'pypi' | 'github';
 
 /** Asks a package registry for the newest stable version. Installs nothing. */
 export interface PackageRegistry {
   /** The newest stable version, or `null` when the registry names none. Throws when unreachable. */
   latest(kind: RegistryKind, name: string): Promise<string | null>;
+}
+
+/**
+ * The version a GitHub release names: `v1.2.3` in its title first (Hermes's "Hermes Agent v0.21.5
+ * (v2026.9.24)": the tag is a date, the version is in the title), then its tag.
+ */
+export function releaseVersionOf(release: { name?: unknown; tag_name?: unknown }): string | null {
+  for (const text of [release.name, release.tag_name]) {
+    const match = /(?:^|[^\w.])v?(\d+\.\d+\.\d+)(?![\w.-])/.exec(
+      typeof text === 'string' ? text : '',
+    );
+    if (match) return match[1]!;
+  }
+  return null;
 }
 
 export interface PackageRegistryOptions {
@@ -69,6 +87,8 @@ export interface PackageRegistryOptions {
   npmUrl?: string;
   /** Default `https://pypi.org`. */
   pypiUrl?: string;
+  /** Default `https://api.github.com`. */
+  githubUrl?: string;
   timeoutMs?: number;
 }
 
@@ -81,6 +101,7 @@ export function createPackageRegistry(options: PackageRegistryOptions = {}): Pac
   const fetchImpl = options.fetchImpl ?? fetch;
   const npmUrl = (options.npmUrl ?? 'https://registry.npmjs.org').replace(/\/$/, '');
   const pypiUrl = (options.pypiUrl ?? 'https://pypi.org').replace(/\/$/, '');
+  const githubUrl = (options.githubUrl ?? 'https://api.github.com').replace(/\/$/, '');
   const timeoutMs = options.timeoutMs ?? 15_000;
 
   const getJson = async (url: string): Promise<unknown> => {
@@ -95,6 +116,20 @@ export function createPackageRegistry(options: PackageRegistryOptions = {}): Pac
 
   return {
     async latest(kind, name) {
+      if (kind === 'github') {
+        // The newest published release: never a draft or a pre-release, never a pre-release
+        // version. Unauthenticated, as a person's own hub asks (60 an hour is plenty every 6 h).
+        if (!/^[\w.-]+\/[\w.-]+$/.test(name)) throw new Error(`not a GitHub repository: ${name}`);
+        const body = (await getJson(`${githubUrl}/repos/${name}/releases?per_page=30`)) as unknown;
+        const releases = Array.isArray(body) ? (body as Record<string, unknown>[]) : [];
+        let newest: string | null = null;
+        for (const release of releases) {
+          if (release.draft === true || release.prerelease === true) continue;
+          const version = releaseVersionOf(release);
+          if (isStableVersion(version)) newest = newerOf(newest, version);
+        }
+        return newest;
+      }
       if (kind === 'npm') {
         // `@scope/name` is one path segment to the registry: the slash is encoded.
         const body = (await getJson(`${npmUrl}/${name.replace('/', '%2f')}/latest`)) as {
