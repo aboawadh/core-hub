@@ -12,7 +12,7 @@
 //   other than 0-9 (DECISIONS §113), or `status: complete` while keys are missing.
 // - The generated catalogue indexes (`src/i18n/catalogues.ts`) match the registry.
 // The space rules (how wide a string may be) are `pnpm i18n:limits`, which needs the fonts.
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { staleIndexes } from './i18n/generate.mjs';
 import { SETS, readCatalogue, readRegistry, repoRoot } from './i18n/registry.mjs';
@@ -289,6 +289,17 @@ for (const set of SETS) {
 // ---- generated indexes -------------------------------------------------------------------
 for (const { file } of await staleIndexes(registry))
   fail(`${path.relative(repoRoot, file)} is out of date — run \`pnpm i18n:generate\``);
+
+// Android's strings are generated from apps/android/i18n (ADR 0028): a strings XML written by hand
+// would be a second copy nobody translates.
+const androidRes = path.join(repoRoot, 'apps/android/app/src/main/res');
+if (existsSync(androidRes))
+  for (const dir of readdirSync(androidRes).filter((name) => name.startsWith('values')))
+    for (const name of readdirSync(path.join(androidRes, dir)))
+      if (/^(strings|plurals).*\.xml$/.test(name))
+        fail(
+          `android: ${dir}/${name} — Android strings live in apps/android/i18n/*.json; the resources are generated`,
+        );
 
 if (failures > 0) {
   console.error(`i18n:check  FAILED with ${failures} problem(s)`);

@@ -968,8 +968,14 @@ pseudo-locales (`en-XA`, `ar-XB`, `zh-XC`, `th-XD`) walk 18 main screens at desk
 in the web journeys and fail on spilled, clipped or lone-letter labels, overlapping controls and
 sideways scroll. With a third language the language switch becomes a menu and Display a list —
 proven by unit tests with a stand-in registry, not yet with a real translation. The hub keeps
-storing `ar`/`en` as a person's `locale` (the contract's enum); the phones read the registry in
-phase 2 (`feat/i18n-languages-apps`).
+storing `ar`/`en` as a person's `locale` (the contract's enum). Since phase 2
+(`feat/i18n-languages-apps`) the phones read the registry too: Android's strings are JSON
+catalogues in `apps/android/i18n` with the resources generated at build time (the compiled
+resources identical to before), a per-app language list for Android 13+ (`locales_config`), and
+iOS's `AppLanguage`, fallback chain, `InfoPlist.strings` and `CFBundleLocalizations` from the same
+file; Android's Robolectric test walks 10 screens in the four pseudo-locales and fails on text cut
+without an ellipsis or a lone letter; iOS's XCTest keeps a chip one line in each. iOS builds and
+tests run in CI only.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the
