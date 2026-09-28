@@ -4,9 +4,10 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as I18n from '../src/i18n/index.js';
 
 vi.mock('../src/i18n/index.js', async (original) => {
-  const real = await original<typeof import('../src/i18n/index.js')>();
+  const real: typeof I18n = await original();
   const fr = {
     code: 'fr',
     englishName: 'French',

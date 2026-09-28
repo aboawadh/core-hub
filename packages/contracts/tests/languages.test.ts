@@ -118,13 +118,13 @@ describe('pseudo-locales', () => {
     expect(pseudoize('غيّر {count} ملفات', 'long-rtl')).toContain('{count}');
     const cjk = pseudoize('New chat', 'cjk');
     expect(cjk).not.toMatch(/[A-Za-z ]/);
-    expect(pseudoize('Tasks', 'tall')).toMatch(/[่-๋]/);
+    expect(pseudoize('Tasks', 'tall')).toMatch(/[\u0E48-\u0E4B]/);
   });
 
   it('draw a pseudo-locale from its base language', () => {
     const t = createTranslate((code) => (code === 'en' ? { nav: { chat: 'Chat' } } : undefined));
     expect(t('en-XA', 'nav.chat')).toMatch(/^\[Çĥ/);
-    expect(t('en-XK', 'nav.chat')).toMatch(/^Chat⁤/);
+    expect(t('en-XK', 'nav.chat')).toMatch(/^Chat\u2064/);
   });
 
   it('en-XK tags a string with its key in characters that take no room', () => {
@@ -133,6 +133,6 @@ describe('pseudo-locales', () => {
       keys: ['nav.chat', 'tasks.title_ar'],
       text: 'Chat · Tasks',
     });
-    expect(keyTag('x')).toMatch(/^⁤(?:‌|‍|⁠|﻿)+$/);
+    expect(keyTag('x')).toMatch(/^\u2064(?:\u200C|\u200D|\u2060|\uFEFF)+$/);
   });
 });

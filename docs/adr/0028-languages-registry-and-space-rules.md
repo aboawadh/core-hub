@@ -75,7 +75,10 @@ overrun is cut with an ellipsis today. CI installs the fonts in its own job; on 
 them the result is an estimate from per-script character widths and says so.
 
 ### 5. The web and desktop UI itself
-Every single-line label in the kit already ends in an ellipsis; badges now also shrink
+Every single-line label in the kit already ends in an ellipsis, and is now cut on the inline axis
+only (`overflow-x: clip; overflow-y: visible`): `overflow: hidden` also cut the ink below a tight
+line — the dots of Arabic «ي» in card titles, search results and notices, a defect the journeys
+found in the Arabic UI of today. Badges now also shrink
 (`min-inline-size: 0`), a profile card's title row lets its name and slug shrink, and a label cut
 short shows its full words as a `title` while, and only while, it is cut (one document listener,
 `src/i18n/truncation.ts`). `text-wrap: pretty` keeps a wrapped label from leaving one letter on its
