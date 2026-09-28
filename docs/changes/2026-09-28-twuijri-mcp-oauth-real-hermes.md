@@ -88,7 +88,16 @@ playwright zz-agent-tools + zzzzzzzzzzzzzz-mcp-oauth (--workers=1) → 3 passed 
 pnpm lint → All matched files use Prettier code style!   pnpm typecheck → exit 0
 contracts:lint OK · contracts:compat OK — no breaking change against v1.1.4 · check-clients OK · i18n:check OK · nav:check OK
 ```
-CI: يُضاف بعد تشغيل PR #215.
+CI على PR #215 (الالتزام `edcd48b4`، كل الفحوص خضراء):
+```
+pass | MCP OAuth against the real Hermes (the image's pinned tag) | 54s   ← Hermes Agent v0.21.3 (2026.9.14): Tests 3 passed (3)
+pass | Web smoke journeys (Playwright against the real hub) | 13m33s
+pass | Lint, typecheck, contracts, client tests, build | 7m29s
+pass | Server unit tests (shard 1/3, 2/3, 3/3)
+pass | Build and test on the iOS simulator | 7m56s · Android build, unit tests, lint | 8m7s
+pass | Desktop app smoke · Docker image builds and answers /health · db:generate + db:migrate
+pass | Translations fit their labels · change record · graphify-out untouched · Lint, typecheck, contracts, tests, build (gate)
+```
 
 ## المخاطر والرجوع
 - لم يُجرَّب مع ClickUp الحقيقي (يحتاج حساب المالك)؛ جُرّب مع خادم يطابق بيانات ClickUp المنشورة (`iss`، DCR، PKCE،
