@@ -26,7 +26,7 @@
 ## الفحوص (الأوامر ونواتجها الفعلية)
 ```
 $ node scripts/version-check.mjs
-version: 1.1.4 everywhere (10 places)
+version: 1.1.5 everywhere (10 places)
 ```
 
 ## المخاطر والرجوع
