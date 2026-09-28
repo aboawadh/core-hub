@@ -52,7 +52,8 @@ final class OwnSettingsTests: XCTestCase {
             .chat(sessionID: "S1", profile: "default")
         )
         XCTAssertEqual(OwnSettingsRules.route(for: notice("a", read: false, resource: ResourceRef(kind: .task, id: "T")), selector: "default"), .destination(.tasks))
-        XCTAssertEqual(OwnSettingsRules.route(for: notice("a", read: false, resource: ResourceRef(kind: .workflowRun, id: "R")), selector: "default"), .destination(.schedules))
+        // A workflow run opens on the Workflows page, the run itself (DECISIONS §128).
+        XCTAssertEqual(OwnSettingsRules.route(for: notice("a", read: false, resource: ResourceRef(kind: .workflowRun, id: "R")), selector: "default"), .workflowRun(runID: "R", profile: "work"))
         // A record with nothing behind it only gets marked read.
         XCTAssertNil(OwnSettingsRules.route(for: notice("a", read: false), selector: "default"))
     }

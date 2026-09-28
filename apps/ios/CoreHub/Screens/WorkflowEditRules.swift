@@ -25,12 +25,17 @@ enum WorkflowEditRules {
         var nodes: [WorkflowNode]
         var edges: [WorkflowEdge]
         var limits: WorkflowLimits?
+        /// Who is told when a run fails (§127), as saved or as changed here.
+        var onFailure: WorkflowFailureAlert? = nil
+        /// The person changed the failure alert while editing: only then is it written, so an
+        /// alert this app did not touch (or cannot read) stays as the hub has it.
+        var alertTouched = false
     }
 
     static func draft(_ workflow: Workflow?) -> Draft {
         guard let workflow else { return Draft(name: "", description: "", workingDir: nil, nodes: [], edges: [], limits: nil) }
         return Draft(name: workflow.name, description: workflow.description ?? "", workingDir: workflow.workingDir,
-                     nodes: workflow.nodes, edges: workflow.edges, limits: workflow.limits)
+                     nodes: workflow.nodes, edges: workflow.edges, limits: workflow.limits, onFailure: workflow.onFailure)
     }
 
     /// A copy of a saved workflow under a new name («… (copy)»).
@@ -99,6 +104,17 @@ enum WorkflowEditRules {
         return id
     }
 
+    /// The palette's "Send message" (§124): a notify step titled as it, with no target yet. It stays
+    /// a `notify` node, so an app that does not know `send` still opens the workflow.
+    @discardableResult
+    static func addSend(title: String, to draft: inout Draft) -> String {
+        let id = add(.notify, title: title, to: &draft)
+        if let index = draft.nodes.firstIndex(where: { $0.id == id }) {
+            draft.nodes[index].send = WorkflowSend(targets: [])
+        }
+        return id
+    }
+
     /// Removes a step and every link to or from it: a link never outlives either end.
     static func remove(_ nodeID: String, from draft: inout Draft) {
         draft.nodes.removeAll { $0.id == nodeID }
@@ -152,8 +168,18 @@ enum WorkflowEditRules {
                 out.provider = nil
             }
             if node.kind == .approval { out.approvalRequired = false }
+            // A condition with no rule left answers from its single line again (§123).
+            if node.kind == .condition, let rules = node.rules, rules.items.isEmpty {
+                out.rules = nil
+                out.sendNull.insert(.rules)
+            }
             return out
         }
+        var clear: Set<WorkflowWrite.Clearable> = clearing && description.isEmpty ? [.description] : []
+        // The failure alert (§127) goes only once the person changed it here (a new workflow or a
+        // copy carries what it has); emptied, it is cleared on the hub with an explicit null.
+        let alert = draft.alertTouched || !clearing ? draft.onFailure : nil
+        if clearing && draft.alertTouched && draft.onFailure == nil { clear.insert(.onFailure) }
         return WorkflowWrite(
             name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
             description: description.isEmpty ? nil : description,
@@ -161,7 +187,8 @@ enum WorkflowEditRules {
             nodes: nodes,
             edges: draft.edges,
             limits: draft.limits,
-            sendNull: clearing && description.isEmpty ? [.description] : []
+            onFailure: alert,
+            sendNull: clear
         )
     }
 
@@ -177,36 +204,6 @@ enum WorkflowEditRules {
             edges: saved.edges,
             limits: saved.limits
         )
-    }
-
-    /// A condition's several rules (DECISIONS §123), as lines to read: made through the model's
-    /// own JSON so the words match the contract (`path operator "value"`). The phone shows them
-    /// and keeps them untouched when it saves; they are edited on the web.
-    static func ruleLines(_ rules: WorkflowRules?) -> (match: String, lines: [String]) {
-        guard let rules,
-              let data = try? JSONEncoder().encode(rules),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return ("all", []) }
-        let items = object["items"] as? [[String: Any]] ?? []
-        let lines = items.map { item -> String in
-            let path = item["path"] as? String ?? ""
-            let op = item["operator"] as? String ?? ""
-            if let value = item["value"] as? String { return "\(path) \(op) \"\(value)\"" }
-            return "\(path) \(op)"
-        }
-        return (object["match"] as? String == "any" ? "any" : "all", lines)
-    }
-
-    /// A "Send message" step's targets as lines to read (§124): `telegram -100…`,
-    /// `conversation "Reports"`. The phone keeps them untouched when it saves.
-    static func sendLines(_ send: WorkflowSend) -> [String] {
-        send.targets.map { target in
-            switch target.platform {
-            case "telegram": return "telegram \(target.chatId ?? "")"
-            case "core_hub": return "conversation \"\(target.title ?? target.sessionId ?? "")\""
-            default: return target.platform
-            }
-        }
     }
 
     /// A trigger's address on the hub the phone is signed in to.
@@ -285,6 +282,177 @@ enum WorkflowEditRules {
         let value = condition.value.trimmingCharacters(in: .whitespaces)
         let numeric = !value.isEmpty && Double(value) != nil
         return "\(path) \(condition.op) \(numeric ? value : "\"\(condition.value)\"")"
+    }
+
+    // MARK: - Several rules (§123)
+
+    /// What a run a trigger started can read about its event, offered while a rule's path is edited.
+    static let triggerPaths = [
+        "trigger.event",
+        "trigger.task_id",
+        "trigger.event_id",
+        "trigger.body.history_items.0.field",
+        "trigger.body.history_items.0.after.status",
+    ]
+
+    /// A rule to start from: the single comparison when there is one, else the trigger's event.
+    static func firstRule(_ input: String?) -> WorkflowRule {
+        if let parts = split(input ?? ""), !parts.path.trimmingCharacters(in: .whitespaces).isEmpty {
+            return WorkflowRule(path: parts.path, _operator: parts.op, value: unary.contains(parts.op) ? nil : parts.value)
+        }
+        return WorkflowRule(path: "trigger.event", _operator: "==", value: "")
+    }
+
+    /// "Several rules" on: every rule must hold, starting from the step's own comparison. Off:
+    /// the rules go, sent as an explicit null so the hub drops them too (a node without the field
+    /// keeps the saved rules).
+    static func setSeveralRules(_ on: Bool, node: inout WorkflowNode) {
+        if on {
+            node.rules = WorkflowRules(match: .all, items: [firstRule(node.input)])
+            node.sendNull.remove(.rules)
+        } else {
+            node.rules = nil
+            node.sendNull.insert(.rules)
+        }
+    }
+
+    /// One rule changed. `exists` and `empty` carry no value (null); another operator after them
+    /// starts from an empty one. The operator stays the plain string the contract carries.
+    static func setRule(_ rules: WorkflowRules, at index: Int, path: String? = nil, op: String? = nil, value: String? = nil) -> WorkflowRules {
+        guard rules.items.indices.contains(index) else { return rules }
+        var next = rules
+        var rule = next.items[index]
+        if let path { rule.path = path }
+        if let op { rule._operator = op }
+        if let value { rule.value = value }
+        if unary.contains(rule._operator) {
+            rule.value = nil
+        } else if rule.value == nil {
+            rule.value = ""
+        }
+        next.items[index] = rule
+        return next
+    }
+
+    /// "Add a rule": another comparison of the trigger's event.
+    static func addRule(_ rules: WorkflowRules) -> WorkflowRules {
+        var next = rules
+        next.items.append(WorkflowRule(path: "trigger.event", _operator: "==", value: ""))
+        return next
+    }
+
+    /// Removes a rule; the last one stays (switch "Several rules" off instead).
+    static func removeRule(_ rules: WorkflowRules, at index: Int) -> WorkflowRules {
+        guard rules.items.count > 1, rules.items.indices.contains(index) else { return rules }
+        var next = rules
+        next.items.remove(at: index)
+        return next
+    }
+
+    /// The paths offered for a rule of this step: the trigger's, the run's input, earlier steps'.
+    static func ruleSuggestions(_ draft: Draft, of nodeID: String) -> [String] {
+        triggerPaths + ["input"] + upstream(draft, of: nodeID).map { "steps.\($0.id).output" }
+    }
+
+    // MARK: - Send message (§124) and the failure alert (§127)
+
+    static let telegram = "telegram"
+    static let coreHub = "core_hub"
+
+    /// The target of one platform, if the step sends there.
+    static func target(_ send: WorkflowSend?, _ platform: String) -> WorkflowSendTarget? {
+        send?.targets.first { $0.platform == platform }
+    }
+
+    /// Replaces (or, with nil, removes) the target of one platform; every other target — one of a
+    /// platform this app does not know among them — stays as it is.
+    static func setTarget(_ send: WorkflowSend, platform: String, _ target: WorkflowSendTarget?) -> WorkflowSend {
+        var targets = send.targets.filter { $0.platform != platform }
+        if let target { targets.append(target) }
+        return WorkflowSend(targets: targets)
+    }
+
+    static func telegramTarget(chatID: String) -> WorkflowSendTarget {
+        WorkflowSendTarget(platform: telegram, chatId: chatID.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// A conversation of the profile, with what lets the hub make it again if it is deleted; none
+    /// picked yet: the platform alone.
+    static func conversationTarget(_ session: Session?) -> WorkflowSendTarget {
+        guard let session else { return WorkflowSendTarget(platform: coreHub) }
+        return WorkflowSendTarget(platform: coreHub, sessionId: session.id, title: session.title, agentId: session.agentId)
+    }
+
+    /// "Send test message" needs a target and words.
+    static func canTestSend(_ send: WorkflowSend, text: String?) -> Bool {
+        !send.targets.isEmpty && !(text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func sendTest(_ send: WorkflowSend, text: String?) -> WorkflowSendTest {
+        WorkflowSendTest(send: send, text: (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Each target that did not take it: "target: reason".
+    static func failureLines(_ result: WorkflowSendResult) -> [String] {
+        result.failures.map { "\($0.target): \($0.reason)" }
+    }
+
+    /// The failure alert as changed here, as the web writes it: the inbox or at least one target
+    /// keeps an alert; nothing left clears it.
+    static func setAlert(inbox: Bool, send: WorkflowSend?, in draft: inout Draft) {
+        draft.alertTouched = true
+        let targets = send?.targets ?? []
+        guard inbox || !targets.isEmpty else {
+            draft.onFailure = nil
+            return
+        }
+        draft.onFailure = targets.isEmpty
+            ? WorkflowFailureAlert(inbox: inbox, send: nil, sendNull: [.send])
+            : WorkflowFailureAlert(inbox: inbox, send: WorkflowSend(targets: targets))
+    }
+
+    // MARK: - Test this step (§127)
+
+    /// A ClickUp-shaped sample event to start from (the web's `SAMPLE_TRIGGER`).
+    static let sampleTrigger = """
+    {
+      "event": "taskStatusUpdated",
+      "task_id": "sample-task",
+      "body": {
+        "history_items": [
+          {
+            "field": "status",
+            "after": {
+              "status": "review"
+            }
+          }
+        ]
+      }
+    }
+    """
+
+    enum StepTestProblem: Error, Equatable { case badJSON }
+
+    /// What "Try it" sends: the step as it would be saved, the sample input (none when empty), the
+    /// sample event read as JSON (none when empty), and a real agent turn only when asked for an
+    /// agent step. Invalid JSON sends nothing.
+    static func stepTest(node: WorkflowNode, input: String, trigger: String, execute: Bool) -> Result<WorkflowStepTest, StepTestProblem> {
+        var event: JSONValue?
+        let text = trigger.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            guard let value = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) else { return .failure(.badJSON) }
+            event = value
+        }
+        let single = Draft(name: "test", description: "", workingDir: nil, nodes: [node], edges: [], limits: nil)
+        let written = write(single, clearing: false).nodes?.first ?? node
+        let sample = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return .success(WorkflowStepTest(
+            node: written,
+            input: sample.isEmpty ? nil : sample,
+            trigger: event,
+            execute: node.kind == .agent && execute,
+            sendNull: sample.isEmpty ? [.input] : []
+        ))
     }
 
     // MARK: - Models

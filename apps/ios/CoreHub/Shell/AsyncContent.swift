@@ -91,7 +91,7 @@ struct FactRow: View {
 
 /// A status word in a soft pill.
 struct StatusPill: View {
-    enum Kind { case good, warn, bad, neutral }
+    enum Kind { case good, warn, bad, info, neutral }
     let text: String
     var kind: Kind = .neutral
 
@@ -110,6 +110,7 @@ struct StatusPill: View {
         case .good: return Tone.successSoftText
         case .warn: return Tone.warningSoftText
         case .bad: return Tone.dangerSoftText
+        case .info: return Tone.infoSoftText
         case .neutral: return Tone.textMuted
         }
     }
@@ -119,6 +120,7 @@ struct StatusPill: View {
         case .good: return Tone.successSoft
         case .warn: return Tone.warningSoft
         case .bad: return Tone.dangerSoft
+        case .info: return Tone.infoSoft
         case .neutral: return Tone.surface2
         }
     }

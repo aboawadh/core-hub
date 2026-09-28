@@ -16,7 +16,7 @@ final class FamilyTests: XCTestCase {
         // The web's `destinationIcons` table, for the destinations the phone has.
         let web: [DestinationID: String] = [
             .newChat: "square-pen", .search: "search", .agentManager: "bot", .tasks: "list-checks",
-            .schedules: "calendar-clock", .chat: "messages-square", .rooms: "users", .settings: "settings",
+            .schedules: "calendar-clock", .workflows: "workflow", .chat: "messages-square", .rooms: "users", .settings: "settings",
             .account: "circle-user", .users: "users", .webhooks: "webhook", .display: "type",
             .notifications: "bell", .privacy: "shield-check", .about: "info", .models: "box",
             .deviceConnections: "qr-code", .knowledge: "book-open", .linkedHubs: "network", .logs: "scroll-text",

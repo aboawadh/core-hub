@@ -103,7 +103,9 @@
     "theme_dark": "Dark",
     "profile": "Profile",
     "profile_switch": "Switch profile",
-    "profile_current": "You are in {profile}"
+    "profile_current": "You are in {profile}",
+    "group_expanded": "Expanded",
+    "group_collapsed": "Collapsed"
   },
   "sessions": {
     "all_profiles": "All profiles",
@@ -437,9 +439,7 @@
     "state_scheduled": "Scheduled",
     "state_running": "Running",
     "state_paused": "Paused",
-    "state_exhausted": "Finished",
-    "tab_jobs": "Schedules",
-    "tab_workflows": "Workflows"
+    "state_exhausted": "Finished"
   },
   "setup": {
     "open": "This hub has no owner yet and is open to set up now. Make the owner account.",

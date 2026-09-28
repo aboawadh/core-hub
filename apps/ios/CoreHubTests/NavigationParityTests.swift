@@ -1,6 +1,7 @@
 // The navigation parity test (docs/clients/README.md): the app against docs/clients/navigation.json,
 // copied into the test bundle at build time. It fails on the first difference.
 @testable import CoreHub
+import CoreHubClient
 import XCTest
 
 final class NavigationParityTests: XCTestCase {
@@ -157,6 +158,95 @@ final class NavigationParityTests: XCTestCase {
         XCTAssertFalse(PageRegistry.notNative.contains(.account), "a native page is not in the fallback list")
     }
 
+    /// `railExtra`, `brandRow` and `sidebarGroups`, read loosely (they carry `$comment` strings).
+    private func drawerManifest() throws -> (railExtra: [String], brandRow: [String: Any], groups: [String: [String: Any]]) {
+        let object = try JSONSerialization.jsonObject(with: Fixture.repositoryFile("navigation", "json")) as! [String: Any]
+        let railExtra = object["railExtra"] as? [String] ?? []
+        let brandRow = object["brandRow"] as? [String: Any] ?? [:]
+        var groups: [String: [String: Any]] = [:]
+        for (id, value) in object["sidebarGroups"] as? [String: Any] ?? [:] where !id.hasPrefix("$") {
+            groups[id] = value as? [String: Any]
+        }
+        return (railExtra, brandRow, groups)
+    }
+
+    // DECISIONS §126/§128: the rail's extra entries, the brand row and the drawer's groups are the manifest's.
+    func testTheDrawersExtraEntriesBrandRowAndGroupsAreTheManifests() throws {
+        let m = try manifest()
+        let ios = Set(onIOS(m).map(\.id))
+        let drawer = try drawerManifest()
+        XCTAssertEqual(NavigationMap.railExtra.map(\.rawValue), drawer.railExtra.filter(ios.contains))
+        XCTAssertTrue((drawer.brandRow["surfaces"] as? [String] ?? []).contains("ios"))
+        XCTAssertEqual(NavigationMap.brandRow.map(\.rawValue), drawer.brandRow["items"] as? [String])
+        let onPhone = drawer.groups.filter { ($0.value["surfaces"] as? [String] ?? []).contains("ios") }
+        XCTAssertEqual(Set(NavigationMap.sidebarGroups.map(\.id)), Set(onPhone.keys))
+        for group in NavigationMap.sidebarGroups {
+            let entry = try XCTUnwrap(onPhone[group.id], group.id)
+            XCTAssertEqual(group.title, entry["title"] as? String, group.id)
+            XCTAssertEqual(group.items.map(\.rawValue), (entry["items"] as? [String] ?? []).filter(ios.contains), group.id)
+            for language in AppLanguage.allCases {
+                let l10n = L10n(language, bundle: Bundle(for: AppModel.self))
+                XCTAssertEqual(l10n(group.titleKey), m.terms[group.title]?[language.rawValue], "\(language) \(group.id)")
+            }
+        }
+        // Workflows has a screen of its own and its route resolves to it.
+        XCTAssertEqual(AppRoutes.routes[.workflows], "/workflows")
+        XCTAssertEqual(AppRoutes.match("/workflows")?.destination, .workflows)
+        XCTAssertEqual(Icons.lucide(for: .workflows), .workflow)
+        XCTAssertEqual(Icons.lucide(forGroup: "tools"), .wrench)
+    }
+
+    func testTheDrawerDrawsNewChatThenTheToolsGroupWithTheMembersTheRoleAllows() {
+        let tools = NavigationMap.sidebarGroups[0]
+        XCTAssertEqual(NavigationMap.drawer(admin: true), [.row(.newChat), .group(tools, [.agentManager, .tasks, .workflows, .schedules])])
+        XCTAssertEqual(NavigationMap.drawer(admin: false), [.row(.newChat), .group(tools, [.tasks, .workflows, .schedules])])
+        // Search is in the header (the brand row), never a row of the rail.
+        XCTAssertFalse(NavigationMap.drawer(admin: true).contains(.row(.search)))
+        // Every rail and extra entry is drawn once: in the header, as a row, or in a group.
+        let drawn = NavigationMap.brandRow + NavigationMap.drawer(admin: true).flatMap { entry -> [DestinationID] in
+            switch entry {
+            case .row(let destination): return [destination]
+            case .group(_, let members): return members
+            }
+        }
+        XCTAssertEqual(Set(drawn), Set(NavigationMap.rail + NavigationMap.railExtra))
+        XCTAssertEqual(drawn.count, Set(drawn).count)
+    }
+
+    func testWorkflowLinksAndNoticesOpenTheWorkflowsPageOrTheRun() {
+        func open(_ path: String) -> MainContent? { AppModel.route(for: URL(string: "corehub://open\(path)")!, selector: "home") }
+        XCTAssertEqual(open("/workflows"), .destination(.workflows))
+        XCTAssertEqual(open("/schedules"), .destination(.schedules))
+        // The old address of the Workflows tab, and a run in it.
+        XCTAssertEqual(open("/schedules?section=workflows"), .destination(.workflows))
+        XCTAssertEqual(open("/schedules?section=workflows&workflow_run=01J8QK3ZR2W7M5N4P6T8V9X0RN&profile=work"),
+                       .workflowRun(runID: "01J8QK3ZR2W7M5N4P6T8V9X0RN", profile: "work"))
+        XCTAssertEqual(open("/schedules?workflow_run=01J8QK3ZR2W7M5N4P6T8V9X0RN"), .workflowRun(runID: "01J8QK3ZR2W7M5N4P6T8V9X0RN", profile: "home"))
+        XCTAssertEqual(open("/workflows?workflow_run=R1&profile=work"), .workflowRun(runID: "R1", profile: "work"))
+        XCTAssertEqual(open("/workflows?workflow=W1&profile=work&run=R2"), .workflowRun(runID: "R2", profile: "work"))
+        XCTAssertEqual(open("/workflows?workflow=W1&profile=work&run=latest"), .destination(.workflows))
+        XCTAssertEqual(MainContent.workflowRun(runID: "R1", profile: "work").place, .workflows)
+        XCTAssertEqual(MainContent.destination(.schedules).place, .schedules)
+        XCTAssertNil(MainContent.newChat.place)
+
+        // Notices: a workflow run opens its run; a workflow or a step the page; a schedule, Schedules.
+        XCTAssertEqual(NoticeRouting.route(kind: "workflow_run", sessionID: nil, profile: "work", selector: "x", runID: "R1"),
+                       .workflowRun(runID: "R1", profile: "work"))
+        XCTAssertEqual(NoticeRouting.route(kind: "workflow_run", sessionID: nil, profile: nil, selector: "x"), .destination(.workflows))
+        XCTAssertEqual(NoticeRouting.route(kind: "step", sessionID: nil, profile: nil, selector: "x"), .destination(.workflows))
+        XCTAssertEqual(NoticeRouting.route(kind: "schedule", sessionID: nil, profile: nil, selector: "x"), .destination(.schedules))
+        let pushed = NoticeRouting.tap(from: ["type": "notice", "notice_id": "n1", "profile": "work",
+                                              "resource": ["kind": "workflow_run", "id": "R9"]])
+        XCTAssertEqual(pushed.runID, "R9")
+        XCTAssertEqual(NoticeRouting.route(kind: pushed.kind, sessionID: pushed.sessionID, profile: pushed.profile, selector: "x", runID: pushed.runID),
+                       .workflowRun(runID: "R9", profile: "work"))
+        let notice = Notice(id: "n2", userId: "u1", profile: "work", kind: .runCompleted, title: "Failed",
+                            resource: ResourceRef(kind: .workflowRun, id: "R8"), createdAt: Fixture.date)
+        let local = NoticeRouting.tap(from: NoticeRouting.userInfo(for: notice))
+        XCTAssertEqual(local.runID, "R8")
+        XCTAssertEqual(local.kind, "workflow_run")
+    }
+
     // 8: the profile is a filter — a link names a page, and the selector does not move it.
     func testLinksOpenTheirPageInTheirProfile() {
         let chat = URL(string: "corehub://open/chat/01J8QK3ZR2W7M5N4P6T8V9X0YA?profile=work")!
@@ -168,5 +258,48 @@ final class NavigationParityTests: XCTestCase {
         XCTAssertEqual(AppModel.route(for: URL(string: "corehub://open/agents/01J8QK3ZR2W7M5N4P6T8V9X0AG/mcp")!, selector: "x"), .destination(.agentManager))
         XCTAssertNil(AppModel.route(for: URL(string: "corehub://open/nowhere")!, selector: "x"))
         XCTAssertNil(AppModel.route(for: URL(string: "https://open/tasks")!, selector: "x"))
+    }
+}
+
+/// The drawer's groups open and close on this phone (`sidebar.groupsClosed`, DECISIONS §128).
+final class SidebarGroupStateTests: XCTestCase {
+    private func fresh() -> UserDefaults {
+        let name = "sidebar-groups-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    func testAGroupIsOpenByDefaultAndTheChoiceIsRemembered() {
+        let defaults = fresh()
+        let state = SidebarGroupState(defaults: defaults)
+        XCTAssertTrue(state.isOpen("tools"))
+        XCTAssertEqual(state.closed, [])
+        XCTAssertEqual(state.toggle("tools"), ["tools"])
+        XCTAssertEqual(defaults.stringArray(forKey: SidebarGroupState.key), ["tools"])
+        XCTAssertEqual(SidebarGroupState.key, "sidebar.groupsClosed")
+        // Read again, as the next launch does.
+        XCTAssertFalse(SidebarGroupState(defaults: defaults).isOpen("tools"))
+        XCTAssertEqual(SidebarGroupState(defaults: defaults).toggle("tools"), [])
+        XCTAssertTrue(SidebarGroupState(defaults: defaults).isOpen("tools"))
+    }
+
+    func testAnythingUnreadableCountsAsAllOpen() {
+        let defaults = fresh()
+        defaults.set("tools", forKey: SidebarGroupState.key)
+        XCTAssertTrue(SidebarGroupState(defaults: defaults).isOpen("tools"))
+        defaults.set([1, 2], forKey: SidebarGroupState.key)
+        XCTAssertEqual(SidebarGroupState(defaults: defaults).closed, [])
+        defaults.set(["tools": true], forKey: SidebarGroupState.key)
+        XCTAssertTrue(SidebarGroupState(defaults: defaults).isOpen("tools"))
+    }
+
+    func testAClosedGroupsHeadingIsTheCurrentPlaceOnlyWhileOneOfItsPagesIsOnScreen() {
+        let tools = NavigationMap.sidebarGroups[0]
+        XCTAssertTrue(SidebarGroupState.headingMarked(tools, open: false, current: .workflows))
+        XCTAssertTrue(SidebarGroupState.headingMarked(tools, open: false, current: .schedules))
+        XCTAssertFalse(SidebarGroupState.headingMarked(tools, open: true, current: .workflows), "open: the row itself is marked")
+        XCTAssertFalse(SidebarGroupState.headingMarked(tools, open: false, current: .chat))
+        XCTAssertFalse(SidebarGroupState.headingMarked(tools, open: false, current: nil))
     }
 }

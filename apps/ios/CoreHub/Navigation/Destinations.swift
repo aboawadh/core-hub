@@ -16,6 +16,7 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
     case rooms
     case tasks
     case schedules
+    case workflows
     case settings
     case account
     case users
@@ -100,6 +101,16 @@ enum DestinationID: String, CaseIterable, Hashable, Identifiable {
 
 enum NavigationMap {
     static let rail: [DestinationID] = [.newChat, .search, .agentManager, .tasks, .schedules]
+    /// `railExtra`: rail entries added after `rail` was fixed, so an app built before them still
+    /// matches `rail` exactly (DECISIONS §126). The drawer draws them with the rail.
+    static let railExtra: [DestinationID] = [.workflows]
+    /// `brandRow`: on a phone an icon in the drawer's header beside its close button, not a row
+    /// (DECISIONS §128).
+    static let brandRow: [DestinationID] = [.search]
+    /// `sidebarGroups`: rail entries gathered under one heading that opens and closes.
+    static let sidebarGroups: [SidebarGroup] = [
+        SidebarGroup(id: "tools", title: "tools", items: [.agentManager, .tasks, .workflows, .schedules]),
+    ]
     static let segments: [DestinationID] = [.chat, .rooms]
     static let footer: [DestinationID] = [.settings]
     static let settingsTabs: [DestinationID] = [.account, .users, .webhooks, .display, .notifications, .privacy, .thisDevice, .about]
@@ -120,6 +131,24 @@ enum NavigationMap {
         list.filter { (admin || !$0.adminOnly) && (owner || !$0.ownerOnly) }
     }
 
+    /// The drawer's rail as drawn: `rail` then `railExtra` in order, without the brand row's
+    /// entries; a group's members under its heading at the place of its first member, only those
+    /// the role allows; a group with none is not drawn.
+    static func drawer(admin: Bool, owner: Bool = false) -> [DrawerEntry] {
+        var entries: [DrawerEntry] = []
+        var drawn = Set<String>()
+        for destination in rail + railExtra where !brandRow.contains(destination) {
+            if let group = sidebarGroups.first(where: { $0.items.contains(destination) }) {
+                guard drawn.insert(group.id).inserted else { continue }
+                let members = visible(group.items, admin: admin, owner: owner)
+                if !members.isEmpty { entries.append(.group(group, members)) }
+            } else if admin || !destination.adminOnly, owner || !destination.ownerOnly {
+                entries.append(.row(destination))
+            }
+        }
+        return entries
+    }
+
     /// An agent's menu: only what its adapter declares, in `agentLevel` order; Settings for
     /// every installed agent (navigation.json note on `agent_settings`).
     static func agentMenu(capabilities: [String], installed: Bool) -> [DestinationID] {
@@ -128,5 +157,64 @@ enum NavigationMap {
             if destination == .agentSettings { return installed || capabilities.contains(capability) }
             return capabilities.contains(capability)
         }
+    }
+}
+
+/// One of `sidebarGroups`: not a destination. `title` is a term (`nav.<title>`); `items` are rail
+/// entries in the order shown.
+struct SidebarGroup: Equatable, Hashable {
+    let id: String
+    let title: String
+    let items: [DestinationID]
+
+    /// The locale key of the heading.
+    var titleKey: String { "nav.\(title)" }
+}
+
+/// A line of the drawer's rail: a destination's row, or a group's heading with the members the
+/// person may see.
+enum DrawerEntry: Equatable, Identifiable {
+    case row(DestinationID)
+    case group(SidebarGroup, [DestinationID])
+
+    var id: String {
+        switch self {
+        case .row(let destination): return destination.rawValue
+        case .group(let group, _): return "group.\(group.id)"
+        }
+    }
+}
+
+/// Which drawer groups are closed on this phone: the device's own choice, open by default
+/// (`sidebarGroups`, DECISIONS §128). Anything unreadable under the key counts as all open.
+struct SidebarGroupState {
+    static let key = "sidebar.groupsClosed"
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    /// The ids of the closed groups.
+    var closed: Set<String> {
+        guard let list = defaults.object(forKey: SidebarGroupState.key) as? [String] else { return [] }
+        return Set(list)
+    }
+
+    func isOpen(_ id: String) -> Bool { !closed.contains(id) }
+
+    /// Opens a closed group or closes an open one, remembers it, and returns the closed ids.
+    @discardableResult
+    func toggle(_ id: String) -> Set<String> {
+        var next = closed
+        if next.contains(id) { next.remove(id) } else { next.insert(id) }
+        defaults.set(next.sorted(), forKey: SidebarGroupState.key)
+        return next
+    }
+
+    /// Closed while the current page is one of its members, the heading is the current place.
+    static func headingMarked(_ group: SidebarGroup, open: Bool, current: DestinationID?) -> Bool {
+        guard !open, let current else { return false }
+        return group.items.contains(current)
     }
 }
