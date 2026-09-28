@@ -63,6 +63,7 @@ import { useNoticeStream } from '../notify/queries.js';
 import { useDesktopEffects } from '../desktop/effects.js';
 import { foldShortcutAria, foldShortcutLabel } from './sidebarFold.js';
 import { useSidebarGroups } from './sidebarGroups.js';
+import { LanguageMenuItems, LanguageSwitch } from '../i18n/LanguageSwitch.js';
 
 const SEGMENT_STORAGE = `${derived.storagePrefix}segment`;
 /** The last page outside Settings, for the sidebar's way back (per tab, not per device). */
@@ -422,12 +423,11 @@ export function Sidebar({
                 {t(termKey(d.id))}
               </MenuItem>
             ))}
-            <MenuItem
+            <LanguageMenuItems
+              language={language}
               icon={<IconGlobe size={16} />}
-              onSelect={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
-            >
-              {language === 'ar' ? 'English' : 'العربية'}
-            </MenuItem>
+              onChoose={(next) => update({ language: next })}
+            />
             <MenuItem
               icon={themeIcon(nextTheme(prefs.theme), 16)}
               onSelect={() => update({ theme: nextTheme(prefs.theme) })}
@@ -483,15 +483,13 @@ export function Sidebar({
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<IconGlobe size={12} />}
-              aria-label={t('shell.language_chip')}
-              onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
-            >
-              {language === 'ar' ? 'العربية' : 'English'}
-            </Button>
+            <LanguageSwitch
+              language={language}
+              shows="current"
+              iconSize={12}
+              label={t('shell.language_chip')}
+              onChoose={(next) => update({ language: next })}
+            />
             {/* One button, and a press moves to the next: light → dark → system → light.
               Three symbols side by side asked the person to work out which of them was
               the selected one, and in a dark theme the highlight that says so is the

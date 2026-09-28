@@ -193,6 +193,15 @@ describe('settings file', () => {
     expect(languageFromLocale('ar')).toBe('ar');
     expect(languageFromLocale('en-GB')).toBe('en');
     expect(languageFromLocale(undefined)).toBe('en');
+    // Languages come from the registry (ADR 0028): an unregistered one reads English.
+    expect(languageFromLocale('fr-FR')).toBe('en');
+    expect(languageFromLocale('arn')).toBe('en');
+  });
+
+  it('keeps a saved language only when it is registered', () => {
+    expect(parseConfig({ language: 'ar' }, () => 'id').language).toBe('ar');
+    expect(parseConfig({ language: 'fr' }, () => 'id').language).toBeNull();
+    expect(parseConfig({ language: 'en-XA' }, () => 'id').language).toBeNull();
   });
 });
 

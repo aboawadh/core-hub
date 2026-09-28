@@ -1,0 +1,453 @@
+{
+  "$comment": "The room each single-line web label has, measured in the running client (ADR 0028): the widest text it shows before its ellipsis, in CSS pixels, at its font size and weight. Written by `pnpm i18n:limits --measure`; checked by `pnpm i18n:limits`. Translator-facing copy: locales/limits.md.",
+  "measured": {
+    "screens": 18,
+    "widths": {
+      "desktop": 1280,
+      "phone": 390
+    },
+    "language": "en (as en-XK, each label matched to its key)"
+  },
+  "web": {
+    "account.password": {
+      "area": "ch-card-title",
+      "maxWidth": 324,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/settings/account (phone)"
+    },
+    "account.password_hint": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 324,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (phone)"
+    },
+    "agents.update_available": {
+      "area": "ch-badge-label",
+      "maxWidth": 262,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/agents (desktop)"
+    },
+    "channel_accounts.subtitle": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 324,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (phone)"
+    },
+    "channel_accounts.title": {
+      "area": "ch-card-title",
+      "maxWidth": 324,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/settings/account (phone)"
+    },
+    "composer.model_default": {
+      "area": "ch-combo-name",
+      "maxWidth": 201,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/new (desktop)"
+    },
+    "devices.push.provider.apns": {
+      "area": "ch-badge-label",
+      "maxWidth": 306,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/devices (phone)"
+    },
+    "devices.push.provider.fcm": {
+      "area": "ch-badge-label",
+      "maxWidth": 306,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/devices (phone)"
+    },
+    "devices.push.provider.webpush": {
+      "area": "ch-badge-label",
+      "maxWidth": 306,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/devices (phone)"
+    },
+    "devices.push.state.not_configured": {
+      "area": "ch-badge-label",
+      "maxWidth": 316,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/devices (phone)"
+    },
+    "devices.push.state.ready": {
+      "area": "ch-badge-label",
+      "maxWidth": 316,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/devices (phone)"
+    },
+    "nav.about": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.account": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 500,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.agent_manager": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 234,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.chat": {
+      "area": "ch-segment-label",
+      "maxWidth": 116,
+      "fontSize": 12,
+      "fontWeight": 500,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.device_connections": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.display": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.knowledge": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.linked_hubs": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.logs": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.models": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.new_chat": {
+      "area": "h1",
+      "maxWidth": 241,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/new (phone)"
+    },
+    "nav.notifications": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.performance": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.privacy": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.rooms": {
+      "area": "ch-segment-label",
+      "maxWidth": 116,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.schedules": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 234,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.search": {
+      "area": "h1",
+      "maxWidth": 241,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/search (phone)"
+    },
+    "nav.secrets": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.skills_usage": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.tasks": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 234,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.theme": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.tools": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 224,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.usage": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.users": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.webhooks": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "nav.workflows": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 234,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "nav.workspaces": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 230,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "roles.owner": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 272,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (phone)"
+    },
+    "rooms.active": {
+      "area": "ch-segment-label",
+      "maxWidth": 116,
+      "fontSize": 12,
+      "fontWeight": 500,
+      "maxLines": 1,
+      "where": "/rooms (desktop)"
+    },
+    "rooms.archived": {
+      "area": "ch-segment-label",
+      "maxWidth": 116,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/rooms (desktop)"
+    },
+    "schedules.new": {
+      "area": "ch-card-title",
+      "maxWidth": 324,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/schedules (phone)"
+    },
+    "schedules.new_hint": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 324,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/schedules (phone)"
+    },
+    "sessions.scope.active": {
+      "area": "ch-segment-label",
+      "maxWidth": 71,
+      "fontSize": 12,
+      "fontWeight": 500,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "sessions.scope.all": {
+      "area": "ch-segment-label",
+      "maxWidth": 71,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "sessions.scope.archived": {
+      "area": "ch-segment-label",
+      "maxWidth": 71,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/chat (desktop)"
+    },
+    "shell.back_to_chats": {
+      "area": "ch-sidebar-row-label",
+      "maxWidth": 246,
+      "fontSize": 14,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/account (desktop)"
+    },
+    "tasks.count_one": {
+      "area": "ch-badge-label",
+      "maxWidth": 342,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/tasks (phone)"
+    },
+    "tasks.status.done": {
+      "area": "ch-badge-label",
+      "maxWidth": 90,
+      "fontSize": 12,
+      "fontWeight": 500,
+      "maxLines": 1,
+      "where": "/tasks (desktop)"
+    },
+    "workflows.new": {
+      "area": "ch-card-title",
+      "maxWidth": 171,
+      "fontSize": 16,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/workflows (phone)"
+    },
+    "workflows.new_hint": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 171,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/workflows (phone)"
+    },
+    "working_dir.automatic": {
+      "area": "span",
+      "maxWidth": 262,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/new (desktop)"
+    },
+    "workspaces.counts": {
+      "area": "ch-card-subtitle",
+      "maxWidth": 197,
+      "fontSize": 12,
+      "fontWeight": 400,
+      "maxLines": 1,
+      "where": "/settings/workspaces (phone)"
+    },
+    "workspaces.current": {
+      "area": "ch-badge-label",
+      "maxWidth": 136,
+      "fontSize": 12,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/settings/workspaces (phone)"
+    },
+    "workspaces.default": {
+      "area": "ch-badge-label",
+      "maxWidth": 136,
+      "fontSize": 12,
+      "fontWeight": 600,
+      "maxLines": 1,
+      "where": "/settings/workspaces (phone)"
+    }
+  }
+}

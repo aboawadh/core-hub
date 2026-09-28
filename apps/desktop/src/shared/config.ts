@@ -9,10 +9,12 @@
  */
 import { defaultHelper, parseHelper, randomToken, type HelperConfig } from './helper.js';
 import { normalizeHubUrl } from './hub-url.js';
+import { isUiLanguage, matchLanguage } from '@corehub/contracts/languages';
 import { DEFAULT_RELAY, parseRelayConfig, type RelayConfig } from './relay.js';
 
 export type Mode = 'remote' | 'local';
-export type Language = 'ar' | 'en';
+/** A registered UI language code (locales/languages.json, ADR 0028): `ar`, `en`, … */
+export type Language = string;
 
 export interface WindowBounds {
   x: number | null;
@@ -155,7 +157,7 @@ export function parseConfig(
     mode: raw.mode === 'remote' || raw.mode === 'local' ? raw.mode : null,
     remote: { url: origin(remote.url), recent },
     port: userPort(port),
-    language: raw.language === 'ar' || raw.language === 'en' ? raw.language : null,
+    language: isUiLanguage(raw.language) ? raw.language : null,
     window: bounds(raw.window),
     deviceKey:
       typeof raw.deviceKey === 'string' && /^[A-Za-z0-9-]{8,128}$/.test(raw.deviceKey)
@@ -222,5 +224,6 @@ export function withRemote(config: DesktopConfig, url: string): DesktopConfig {
 
 /** The OS language, reduced to the two the app speaks. Arabic for any `ar-*` locale. */
 export function languageFromLocale(locale: string | null | undefined): Language {
-  return (locale ?? '').toLowerCase().startsWith('ar') ? 'ar' : 'en';
+  // The OS language when it is registered; otherwise English, as before any language was added.
+  return matchLanguage(locale) ?? 'en';
 }

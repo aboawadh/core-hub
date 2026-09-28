@@ -35,6 +35,7 @@ import type {
   DesktopState,
 } from '../../../../packages/web/src/desktop/bridge-types.js';
 import { FOLDER_LIMIT, randomToken, type HelperConfig } from '../shared/helper.js';
+import { isUiLanguage } from '@corehub/contracts/languages';
 import { languageFromLocale, withRemote, type Language } from '../shared/config.js';
 import {
   isSafeAppPath,
@@ -1152,7 +1153,7 @@ export class DesktopController {
       return this.state();
     });
     ipcMain.on(CHANNELS.setLanguage, (event, value: unknown) => {
-      if (!this.fromApp(event) || (value !== 'ar' && value !== 'en')) return;
+      if (!this.fromApp(event) || !isUiLanguage(value)) return;
       if (this.config.get().language === value) return;
       this.config.update((c) => ({ ...c, language: value }));
       this.buildMenus();
@@ -1189,7 +1190,7 @@ export class DesktopController {
       };
     });
     ipcMain.handle(CHANNELS.welcomeLanguage, (event, value: unknown) => {
-      if (!this.fromWelcome(event) || (value !== 'ar' && value !== 'en')) return;
+      if (!this.fromWelcome(event) || !isUiLanguage(value)) return;
       this.config.update((c) => ({ ...c, language: value }));
       this.buildMenus();
     });

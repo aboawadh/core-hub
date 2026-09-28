@@ -14,7 +14,13 @@ import {
   type ReactNode,
 } from 'react';
 import { DEFAULT_GLASS, type GlassLevel } from '@corehub/ui-tokens';
-import { browserLanguage, directionOf, isLanguage, type Language } from '../i18n/index.js';
+import {
+  browserLanguage,
+  directionOf,
+  isLanguage,
+  shownLanguage,
+  type Language,
+} from '../i18n/index.js';
 import { IconMoon, IconSun, IconThemeSystem } from '../ui/icons.js';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -88,8 +94,9 @@ export function applyPrefs(
   if (prefs.theme === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', prefs.theme);
   root.setAttribute('data-glass', prefs.glass);
-  root.setAttribute('lang', prefs.language);
-  root.setAttribute('dir', directionOf(prefs.language));
+  const language = shownLanguage(prefs.language);
+  root.setAttribute('lang', language);
+  root.setAttribute('dir', directionOf(language));
   root.style.setProperty('--ch-text-scale', String(prefs.textScale));
 }
 

@@ -57,7 +57,8 @@ export interface DesktopBridge {
   changeConnection(): Promise<void>;
   setCloseToTray(value: boolean): Promise<DesktopState>;
   /** The web client's language, so the app's menus and tray follow it. */
-  setLanguage(language: 'ar' | 'en'): void;
+  /** A registered UI language (ADR 0028); a desktop app older than the language ignores it. */
+  setLanguage(language: string): void;
   notify(notice: DesktopNotice): void;
   /** The unread count, for the dock / taskbar badge where the OS has one. */
   setUnreadCount(count: number): void;

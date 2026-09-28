@@ -7,7 +7,7 @@ import { useTheme } from '../design/theme.js';
 import { useI18n } from '../i18n/context.js';
 import { HOME_PATH, SETUP_PATH } from '../navigation/routes.js';
 import { Button, Field, Input, Notice, Separator, CoreHubMark } from '../ui/index.js';
-import { IconGlobe } from '../ui/icons.js';
+import { LanguageSwitch } from '../i18n/LanguageSwitch.js';
 
 /** Signing in: one card, two fields, and nothing else on the page to look at. */
 export function LoginScreen() {
@@ -62,15 +62,12 @@ export function LoginScreen() {
               </p>
             )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<IconGlobe size={14} />}
-            aria-label={t('shell.language_chip')}
-            onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
-          >
-            {language === 'ar' ? 'English' : 'العربية'}
-          </Button>
+          <LanguageSwitch
+            language={language}
+            shows="other"
+            label={t('shell.language_chip')}
+            onChoose={(next) => update({ language: next })}
+          />
         </header>
         <Separator />
         {setup.isError && <Notice tone="warning">{t('login.setup_unknown')}</Notice>}

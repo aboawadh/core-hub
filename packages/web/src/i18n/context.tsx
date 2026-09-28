@@ -1,7 +1,14 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { UiDirection } from '../ui/Direction.js';
 import { ToastProvider } from '../ui/Toast.js';
-import { createTranslator, directionOf, type Language, type Translator } from './index.js';
+import {
+  createTranslator,
+  directionOf,
+  isLoaded,
+  loadLanguage,
+  type Language,
+  type Translator,
+} from './index.js';
 
 interface I18nValue {
   language: Language;
@@ -18,9 +25,32 @@ const I18nContext = createContext<I18nValue | null>(null);
  *
  * The toast viewport is mounted here too: it needs the language for the close button's
  * name, and one viewport for the whole client is the point of it.
+ *
+ * A language other than Arabic and English is fetched when chosen (ADR 0028); until it
+ * arrives its words come from its fallback chain, and the tree re-renders once it is here.
  */
 export function I18nProvider({ language, children }: { language: Language; children: ReactNode }) {
-  const value = useMemo<I18nValue>(() => ({ language, t: createTranslator(language) }), [language]);
+  const [, setArrived] = useState(0);
+  const ready = isLoaded(language);
+  useEffect(() => {
+    if (ready) return;
+    let live = true;
+    loadLanguage(language)
+      .then(() => {
+        if (live) setArrived((count) => count + 1);
+      })
+      .catch(() => {
+        // Offline or a missing chunk: the fallback chain keeps every string readable.
+      });
+    return () => {
+      live = false;
+    };
+  }, [language, ready]);
+  const value = useMemo<I18nValue>(
+    () => ({ language, t: createTranslator(language) }),
+    // `ready` makes a new translator once the catalogue arrives, so every consumer re-renders.
+    [language, ready],
+  );
   return (
     <I18nContext.Provider value={value}>
       <UiDirection dir={directionOf(language)}>

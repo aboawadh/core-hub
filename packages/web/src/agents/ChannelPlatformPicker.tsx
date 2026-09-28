@@ -46,7 +46,7 @@ function fold(text: string): string {
 /** Both languages' names are searched, whichever one the page is in. */
 const TRANSLATORS = Object.fromEntries(
   LANGUAGES.map((each) => [each, createTranslator(each)]),
-) as Record<(typeof LANGUAGES)[number], T>;
+) as Record<string, T>;
 
 export interface PickerGroups {
   popular: ChannelPlatform[];
@@ -67,7 +67,7 @@ export function pickerGroups(
   const matches = (spec: ChannelPlatform) =>
     needle === '' ||
     [
-      ...LANGUAGES.map((each) => platformName(spec.platform, TRANSLATORS[each], spec.label)),
+      ...LANGUAGES.map((each) => platformName(spec.platform, TRANSLATORS[each]!, spec.label)),
       spec.label,
       spec.platform,
     ].some((text) => fold(text).includes(needle));

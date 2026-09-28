@@ -8,7 +8,7 @@
  */
 import type { Language } from '../i18n/index.js';
 
-const SUGGESTIONS: Record<Language, readonly string[]> = {
+const SUGGESTIONS: { ar: readonly string[]; en: readonly string[] } = {
   ar: [
     'اشرح لي بنية هذا المشروع وأين أبدأ',
     'اقرأ الملفات في مجلد العمل ولخّص ما تجده',
@@ -22,5 +22,6 @@ const SUGGESTIONS: Record<Language, readonly string[]> = {
 };
 
 export function starterSuggestions(language: Language): readonly string[] {
-  return SUGGESTIONS[language] ?? SUGGESTIONS.en;
+  // Seed content, written in Arabic and English only: any other language gets English.
+  return language === 'ar' ? SUGGESTIONS.ar : SUGGESTIONS.en;
 }

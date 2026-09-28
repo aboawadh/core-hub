@@ -107,8 +107,11 @@ export interface HubClientOptions {
   token?: string | (() => string | undefined);
   /** Workspace scope sent as `X-Hub-Profile` (ADR 0005). */
   profile?: string | (() => string | undefined);
-  /** UI language sent as `Accept-Language`; the server localises `error` on it. */
-  language?: 'ar' | 'en';
+  /**
+   * UI language sent as `Accept-Language`; the server localises `error` on it. Any registered
+   * language code (ADR 0028) — the hub answers in its nearest language for one it lacks.
+   */
+  language?: string;
 }
 
 export interface HubClient {

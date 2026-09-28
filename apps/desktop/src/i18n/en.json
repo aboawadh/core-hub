@@ -6,6 +6,7 @@
     "title": "Welcome to Core Hub",
     "intro": "Choose how this computer works with Core Hub. You can change it later in Settings → This device.",
     "language": "العربية",
+    "language_label": "Language",
     "back": "Back",
     "remote": {
       "title": "Connect to a hub",

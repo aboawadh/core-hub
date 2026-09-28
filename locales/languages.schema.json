@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/twuijri/core-hub/locales/languages.schema.json",
+  "title": "Core Hub UI languages (ADR 0028)",
+  "type": "object",
+  "required": ["languages", "pseudo"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "languages": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "englishName",
+          "nativeName",
+          "direction",
+          "status",
+          "required",
+          "fallback",
+          "numerals"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "BCP 47 tag: a language, optionally a script and a region (ar, en, fr, zh-Hans, pt-BR).",
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|[0-9]{3}))?$"
+          },
+          "englishName": { "type": "string", "minLength": 1 },
+          "nativeName": {
+            "description": "How the language names itself; this is what every picker shows.",
+            "type": "string",
+            "minLength": 1
+          },
+          "direction": { "enum": ["ltr", "rtl"] },
+          "status": {
+            "description": "`complete`: every key of every platform is translated. `partial`: missing keys fall back along `fallback`.",
+            "enum": ["complete", "partial"]
+          },
+          "required": {
+            "description": "Only Arabic and English: held to strict parity by `pnpm i18n:check`.",
+            "type": "boolean"
+          },
+          "fallback": {
+            "description": "Languages tried, in order, for a key this one lacks. English is always tried last.",
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "numerals": {
+            "description": "`latn`: digits are 0-9 in this language too (DECISIONS §113). `native` is a proposal a language's translators may make; the owner decides.",
+            "enum": ["latn", "native"]
+          },
+          "$comment": { "type": "string" }
+        }
+      }
+    },
+    "pseudo": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "base", "direction", "style"],
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string", "pattern": "^[a-z]{2}-X[A-Z]$" },
+          "base": { "type": "string" },
+          "direction": { "enum": ["ltr", "rtl"] },
+          "style": { "enum": ["accented", "long-rtl", "cjk", "tall", "tagged"] },
+          "$comment": { "type": "string" }
+        }
+      }
+    }
+  }
+}

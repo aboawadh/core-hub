@@ -31,6 +31,8 @@ describe('translate', () => {
     expect(interpolate('{a} and {b}', { a: 1, b: 'x' })).toBe('1 and x');
     expect(translate('ar', 'usage.unknown_command', { command: 'x' })).toBe('أمر غير معروف: x');
     expect(translate('ar', 'no.such.key')).toBe('no.such.key');
+    // An unregistered language reads English, never the raw key (ADR 0028).
+    expect(translate('fr', 'usage.unknown_command', { command: 'x' })).toBe('Unknown command: x');
     expect(createTranslator('en')('common.yes')).toBe('yes');
   });
 });
@@ -43,5 +45,13 @@ describe('resolveLanguage', () => {
     expect(resolveLanguage(undefined, { LC_ALL: 'en_GB', LANG: 'ar_SA' })).toBe('en');
     expect(resolveLanguage(undefined, { LANG: 'fr_FR' })).toBe('en');
     expect(resolveLanguage('xx', {})).toBe('en');
+  });
+
+  it('matches any registered language from the registry, and ignores the C locale', () => {
+    expect(resolveLanguage(undefined, { LANG: 'ar_EG.UTF-8' })).toBe('ar');
+    expect(resolveLanguage(undefined, { LC_ALL: 'C.UTF-8', LANG: 'ar_SA.UTF-8' })).toBe('ar');
+    expect(resolveLanguage(undefined, { LANG: 'POSIX' })).toBe('en');
+    // A test-only pseudo-locale is never a language a person runs the CLI in.
+    expect(resolveLanguage('en-XA', {})).toBe('en');
   });
 });

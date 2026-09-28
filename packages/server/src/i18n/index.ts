@@ -1,27 +1,32 @@
 // Server-side strings: only what the server itself says to a human (error envelopes).
-// Every key exists in both files; `pnpm i18n:check` enforces parity.
-import ar from './ar.json' with { type: 'json' };
-import en from './en.json' with { type: 'json' };
+// The languages come from the registry (locales/languages.json, ADR 0028); `pnpm i18n:check`
+// holds Arabic and English to parity and reports every other language's coverage. A key a
+// language lacks falls back along its chain to English, never to the bare key.
+import {
+  UI_LANGUAGE_CODES,
+  createTranslate,
+  nearestLanguage,
+  pickFromAcceptLanguage,
+} from '@corehub/contracts';
+import { CATALOGUES } from './catalogues.js';
 
+/**
+ * The two languages the hub writes its own sentences in outside the catalogue (notices, titles,
+ * stored per-user `locale`, the contract's `Locale`). Every other UI language is served in the
+ * nearest of these two for those; the catalogue's error messages follow the full language.
+ */
 export type Language = 'ar' | 'en';
 export const LANGUAGES: readonly Language[] = ['ar', 'en'];
 export const DEFAULT_LANGUAGE: Language = 'en';
 
-type Catalogue = Record<string, unknown>;
-const catalogues: Record<Language, Catalogue> = { ar, en };
+/** A registered UI language code (`ar`, `en`, and any language added to the registry). */
+export type UiLanguage = string;
 
-function lookup(catalogue: Catalogue, key: string): string | undefined {
-  const value = key.split('.').reduce<unknown>((node, part) => {
-    if (node && typeof node === 'object' && part in (node as Catalogue))
-      return (node as Catalogue)[part];
-    return undefined;
-  }, catalogue);
-  return typeof value === 'string' ? value : undefined;
-}
+const translate = createTranslate((code) => CATALOGUES[code]);
 
-/** Translate a dotted key; falls back to English, then to the key itself. */
-export function t(key: string, language: Language = DEFAULT_LANGUAGE): string {
-  return lookup(catalogues[language], key) ?? lookup(catalogues.en, key) ?? key;
+/** Translate a dotted key; falls back along the language's chain to English, then the key. */
+export function t(key: string, language: UiLanguage = DEFAULT_LANGUAGE): string {
+  return translate(language, key);
 }
 
 /** Pick ar or en from an Accept-Language header (highest q wins, order breaks ties). */
@@ -36,5 +41,13 @@ export function pickLanguage(acceptLanguage: string | undefined): Language {
     if (!LANGUAGES.includes(primary) || Number.isNaN(q) || q <= 0) return;
     if (!best || q > best.q) best = { language: primary, q, index };
   });
-  return best?.language ?? DEFAULT_LANGUAGE;
+  if (best) return best.language;
+  // Neither Arabic nor English asked for: the nearest of the two to a registered language.
+  const ui = pickFromAcceptLanguage(acceptLanguage, UI_LANGUAGE_CODES);
+  return ui ? nearestLanguage(ui, LANGUAGES) : DEFAULT_LANGUAGE;
+}
+
+/** The registered UI language an Accept-Language header asks for; English when none is. */
+export function pickUiLanguage(acceptLanguage: string | undefined): UiLanguage {
+  return pickFromAcceptLanguage(acceptLanguage, UI_LANGUAGE_CODES) ?? DEFAULT_LANGUAGE;
 }

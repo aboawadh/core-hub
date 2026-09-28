@@ -1,5 +1,5 @@
 // The one error envelope every client sees: `{ error, code }` (TEAM-RULES §4).
-import { t, type Language } from '../i18n/index.js';
+import { t, type UiLanguage } from '../i18n/index.js';
 
 /**
  * The contract's `components.schemas.ErrorCode`, verbatim. A unit test compares the two
@@ -89,7 +89,7 @@ export class HubError extends Error {
     this.headers = options.headers;
   }
 
-  toEnvelope(language: Language): ErrorEnvelope {
+  toEnvelope(language: UiLanguage): ErrorEnvelope {
     const envelope: ErrorEnvelope = {
       error: t(this.messageKey ?? `errors.${this.code}`, language),
       code: this.code,

@@ -1,38 +1,33 @@
-// Every string the CLI shows exists in ar.json and en.json; `pnpm i18n:check` enforces parity
-// (the same rule the server follows). Keys are dotted, placeholders are `{name}`.
-import ar from './ar.json' with { type: 'json' };
-import en from './en.json' with { type: 'json' };
+// Every string the CLI shows lives in its catalogues; the languages come from the registry
+// (locales/languages.json, ADR 0028). `pnpm i18n:check` holds Arabic and English to parity and
+// reports every other language's coverage. Keys are dotted, placeholders are `{name}`; a key a
+// language lacks falls back along its chain to English, never to the bare key.
+import {
+  UI_LANGUAGE_CODES,
+  createTranslate,
+  interpolate as fill,
+  matchLanguage,
+  type TranslationParams,
+} from '@corehub/contracts';
+import { CATALOGUES } from './catalogues.js';
 
-export type Language = 'ar' | 'en';
-export const LANGUAGES: readonly Language[] = ['ar', 'en'];
+/** A registered UI language code: `ar`, `en`, or any language added to the registry. */
+export type Language = string;
+export const LANGUAGES: readonly Language[] = UI_LANGUAGE_CODES;
 export const DEFAULT_LANGUAGE: Language = 'en';
 
-export type Params = Record<string, string | number | null | undefined>;
+export type Params = TranslationParams;
 export type Translator = (key: string, params?: Params) => string;
 
-type Catalogue = Record<string, unknown>;
-const catalogues: Record<Language, Catalogue> = { ar, en };
-
-function lookup(catalogue: Catalogue, key: string): string | undefined {
-  const value = key.split('.').reduce<unknown>((node, part) => {
-    if (node && typeof node === 'object' && part in (node as Catalogue))
-      return (node as Catalogue)[part];
-    return undefined;
-  }, catalogue);
-  return typeof value === 'string' ? value : undefined;
-}
+const translateIn = createTranslate((code) => CATALOGUES[code]);
 
 export function interpolate(text: string, params: Params = {}): string {
-  return text.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name: string) => {
-    const value = params[name];
-    return value === undefined || value === null ? match : String(value);
-  });
+  return fill(text, params);
 }
 
-/** Translate a dotted key; falls back to English, then to the key itself. */
+/** Translate a dotted key; falls back along the language's chain to English, then the key. */
 export function translate(language: Language, key: string, params?: Params): string {
-  const text = lookup(catalogues[language], key) ?? lookup(catalogues.en, key) ?? key;
-  return interpolate(text, params);
+  return translateIn(language, key, params);
 }
 
 export function createTranslator(language: Language): Translator {
@@ -40,10 +35,8 @@ export function createTranslator(language: Language): Translator {
 }
 
 function fromTag(tag: string | undefined): Language | undefined {
-  const primary = tag?.trim().toLowerCase().split(/[-_.]/)[0];
-  return primary && (LANGUAGES as readonly string[]).includes(primary)
-    ? (primary as Language)
-    : undefined;
+  if (!tag || /^(c|posix)$/i.test(tag.trim().split('.')[0] ?? '')) return undefined;
+  return matchLanguage(tag, LANGUAGES);
 }
 
 /** `--lang`, then COREHUB_LANG, then LC_ALL / LC_MESSAGES / LANG, then English. */

@@ -25,7 +25,7 @@ import {
   Spinner,
   CoreHubMark,
 } from '../ui/index.js';
-import { IconGlobe } from '../ui/icons.js';
+import { LanguageSwitch } from '../i18n/LanguageSwitch.js';
 
 const MIN_PASSWORD = 8;
 
@@ -139,15 +139,12 @@ export function SetupScreen() {
             </h1>
             <p className="gate-sub">{t('setup.intro')}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<IconGlobe size={14} />}
-            aria-label={t('shell.language_chip')}
-            onClick={() => update({ language: language === 'ar' ? 'en' : 'ar' })}
-          >
-            {language === 'ar' ? 'English' : 'العربية'}
-          </Button>
+          <LanguageSwitch
+            language={language}
+            shows="other"
+            label={t('shell.language_chip')}
+            onChoose={(next) => update({ language: next })}
+          />
         </header>
         <Separator />
 
