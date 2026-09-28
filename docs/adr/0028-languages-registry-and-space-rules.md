@@ -102,6 +102,34 @@ writes the registry entry (names and direction from `Intl`) and every platform's
 English keys and empty strings, then fill, `pnpm i18n:check`, `pnpm i18n:limits`, and a pull
 request from the "New language" issue form. The owner marks a language `complete`.
 
+### 8. The phones (phase 2, `feat/i18n-languages-apps`)
+- **Android**: translators never edit XML. The strings moved, unchanged, from
+  `res/values{,-ar}/strings*.xml` into `apps/android/i18n/<area>.<lang>.json` (flat resource
+  names; a plural is an object of CLDR forms; `%1$s` placeholders), and `:app:generateSharedSources`
+  writes one `values-<qualifier>/catalogue.xml` per registered language (`zh-Hant` →
+  `values-b+zh+Hant`), resolving a language's fallback chain itself so only what no language before
+  English has is left to Android's own fallback to `values`. The compiled resources of the debug
+  APK before and after the move are identical (`aapt2 dump resources`, 2741 strings and plurals,
+  0 differences). `locales_config.xml` and `android:localeConfig` list the registry for Android
+  13+'s per-app language, which the app reads and writes (`LocaleManager`) beside its own setting.
+  `AppLanguage` is the registry, not an enum; the contract's `ar|en` is `hubLocale`, the first of
+  the two on the chain. Lint's `MissingTranslation` is off: a partial language reads English on
+  purpose.
+- **iOS**: `AppLanguage` is the registry (`Generated/Languages.swift` from the same file); `L10n`
+  merges the chain over English; `InfoPlist.strings` and `CFBundleLocalizations` come from the
+  registry, so iOS offers each language in the app's own language setting. iOS has no public
+  plural-rules API: `PluralCategory` holds CLDR's integer rules for the languages people ask for
+  (Arabic, Chinese/Japanese/Korean/Thai/Vietnamese/Indonesian, French/Portuguese/Hindi/Persian,
+  Russian/Ukrainian, Polish, Czech/Slovak, Hebrew, Romanian) and counts like English otherwise.
+- **Space rules**: single-line kit labels keep one line and end in an ellipsis
+  (`maxLines = 1` + `TextOverflow.Ellipsis` on Android — every single-line `Text` that clipped
+  now ellipsizes; `.singleLine()` = `lineLimit(1)` + `minimumScaleFactor(0.85)` + tail truncation
+  for iOS chips). Android's Robolectric test walks the main screens against the demo hub in the
+  four pseudo-locales (en-XA and ar-XB from Android's own pseudo-localisation, zh-XC and th-XD
+  generated — the debug build only) and reads back every text layout: cut without an ellipsis or a
+  lone letter fails; a self-test proves the audit on broken labels. iOS's XCTest keeps a chip one
+  line tall in each pseudo-locale.
+
 ### What stays Arabic and English
 The contract's `Locale` (`ar` | `en`: a person's stored locale, push registrations, `meta.locales`)
 and `Accept-Language`'s documented enum do not change: widening a closed enum would break the

@@ -15,7 +15,7 @@ struct DisplayPage: View {
             PreferencesForm(initial: preferences, saved: reload) { draft in
                 Section {
                     Picker(l10n("shell.language"), selection: Binding(get: { app.language }, set: { app.language = $0 })) {
-                        ForEach(AppLanguage.allCases) { Text(l10n("shell.language_\($0.rawValue)")).tag($0) }
+                        ForEach(AppLanguage.allCases) { Text(l10n.name(of: $0)).tag($0) }
                     }
                     Picker(l10n("display.link_target"), selection: draft.linkTarget) {
                         Text(l10n("display.link_in_app")).tag(Preferences.LinkTarget.inApp)

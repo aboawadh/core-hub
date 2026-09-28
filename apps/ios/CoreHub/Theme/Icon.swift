@@ -45,6 +45,14 @@ struct LucideLabel: View {
 }
 
 extension View {
+    /// A label that holds one line in every language (ADR 0028): it keeps to one line, shrinks a
+    /// little before giving up (never below 85%), and then ends in an ellipsis — never a lone
+    /// letter on a second line (the task board's column title, PR #210). A label that fits is
+    /// drawn exactly as before.
+    func singleLine() -> some View {
+        lineLimit(1).minimumScaleFactor(0.85).truncationMode(.tail)
+    }
+
     /// At least the 44-point square Apple asks of anything a finger presses, without growing
     /// what is drawn (docs/design/family.md, "Tap targets").
     func tapTarget(_ side: CGFloat = 44) -> some View {

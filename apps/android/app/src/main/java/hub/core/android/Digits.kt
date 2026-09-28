@@ -3,6 +3,8 @@ package hub.core.android
 import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.app.LocaleManager
+import android.os.Build
 import android.os.LocaleList
 import java.util.Locale
 
@@ -20,7 +22,7 @@ object Digits {
 
     /** The locales the app formats in: the in-app language when one is chosen, else the phone's list. */
     fun locales(language: AppLanguage?, system: LocaleList): LocaleList {
-        val chosen = language?.let { listOf(Locale.forLanguageTag(it.tag)) } ?: List(system.size()) { system[it] }
+        val chosen = language?.let { listOf(Locale.forLanguageTag(it.resourceTag)) } ?: List(system.size()) { system[it] }
         return LocaleList(*chosen.ifEmpty { listOf(Locale.getDefault()) }.map(::latin).toTypedArray())
     }
 
@@ -44,6 +46,25 @@ object Digits {
      * default becomes the same locale, so `"%d".format(n)`, dates and month names agree with the
      * resources.
      */
+    /**
+     * The language Android's own per-app setting chose for Core Hub (Settings → Apps → Language,
+     * Android 13+; the list comes from locales_config.xml, ADR 0028), when it is a registered one.
+     */
+    fun perAppLanguage(context: Context): AppLanguage? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+        val locales = runCatching { context.getSystemService(LocaleManager::class.java)?.applicationLocales }.getOrNull()
+        return locales?.takeIf { !it.isEmpty }?.let { AppLanguage.match(it[0]) }
+    }
+
+    /** Tells Android the in-app choice, so its per-app language setting shows the same (13+). */
+    fun publishAppLanguage(context: Context, language: AppLanguage?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        runCatching {
+            context.getSystemService(LocaleManager::class.java)?.applicationLocales =
+                if (language == null) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(language.tag)
+        }
+    }
+
     fun wrap(base: Context, language: AppLanguage?): Context {
         val config = Configuration(base.resources.configuration)
         val locales = locales(language, config.locales)

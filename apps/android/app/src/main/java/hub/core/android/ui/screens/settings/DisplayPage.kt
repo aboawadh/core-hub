@@ -54,12 +54,12 @@ private fun DisplayPage(showLanguage: Boolean) {
         if (showLanguage) {
             item { SectionTitle(stringResource(R.string.display_language)) }
             item {
+                // Arabic and English keep their own words; a language added to the registry (ADR 0028)
+                // is named in itself.
+                val named = mapOf(AppLanguage.AR to stringResource(R.string.display_language_ar), AppLanguage.EN to stringResource(R.string.display_language_en))
                 Segmented(
-                    listOf(
-                        Segment<AppLanguage?>(null, stringResource(R.string.display_language_system)),
-                        Segment<AppLanguage?>(AppLanguage.AR, stringResource(R.string.display_language_ar)),
-                        Segment<AppLanguage?>(AppLanguage.EN, stringResource(R.string.display_language_en)),
-                    ),
+                    listOf(Segment<AppLanguage?>(null, stringResource(R.string.display_language_system))) +
+                        AppLanguage.entries.map { Segment<AppLanguage?>(it, named[it] ?: it.info.nativeName) },
                     prefs.language,
                     { lang -> prefs.language = lang; (context as? Activity)?.recreate() },
                     Modifier.fillMaxWidth(), size = ControlSize.Lg,

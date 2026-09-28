@@ -45,12 +45,13 @@ Every user string exists in Arabic and English (AGENTS.md), with Latin digits (1
 - **iOS:** add `CoreHub/i18n/<area>.en.json` and `<area>.ar.json` (nested keys, like `en.json`).
   `L10n` merges every `<area>.<lang>.json` after `en.json`/`ar.json`. Use keys under your area
   (`files.upload`), never a key that exists elsewhere.
-- **Android:** add `res/values/strings_<area>.xml` and `res/values-ar/strings_<area>.xml`.
+- **Android:** add `apps/android/i18n/<area>.en.json` and `<area>.ar.json` (flat keys, the resource
+  names; a plural is an object of CLDR forms; placeholders `%1$s`). The string resources are
+  generated from them at build time (ADR 0028) — nobody edits `strings.xml` any more.
 
 Checked by: `pnpm i18n:check` (iOS files, duplicate keys, Arabic-Indic digits), iOS `L10nTests`,
 Android `StringsParityTest` (each English file has its Arabic twin with the same keys; no key in
-two files). Do not add to the shared `en.json`/`ar.json`/`strings.xml` unless you change a string
-already there.
+two files). Do not add to the shared `en.json`/`ar.json` unless you change a string already there.
 
 ## 3. Shared pieces
 

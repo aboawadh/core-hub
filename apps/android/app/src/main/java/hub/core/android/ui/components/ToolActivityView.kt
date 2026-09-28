@@ -132,14 +132,14 @@ fun FoldedRow(summary: ToolActivitySummary, open: Boolean, toggle: () -> Unit) {
         LucideIcon(Lucide.Wrench, null, size = 14.dp, tint = t.textMuted)
         Text(
             pluralStringResource(R.plurals.tool_activity_steps, summary.count, summary.count),
-            fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.text, maxLines = 1,
+            fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         summary.durationMs?.let { ms ->
             val (minutes, seconds) = ToolActivity.durationParts(ms)
             Text(
                 if (minutes > 0) stringResource(R.string.tool_activity_minutes, minutes.toInt(), seconds.toInt())
                 else stringResource(R.string.tool_activity_seconds, seconds.toInt()),
-                fontSize = FontTokens.sizeXs.sp, color = t.textFaint, maxLines = 1,
+                fontSize = FontTokens.sizeXs.sp, color = t.textFaint, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         if (summary.failed > 0) {

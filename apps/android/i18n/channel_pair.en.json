@@ -1,0 +1,18 @@
+{
+  "chpair_title": "Link %1$s",
+  "chpair_note": "Hermes pairs this profile's agent with a phone. Scan the code from WhatsApp on the phone: Settings → Linked devices → Link a device.",
+  "chpair_expires": "The code is valid until %1$s.",
+  "chpair_done": "Linked. The agent answers on it after its next restart.",
+  "chpair_done_as": "Linked as %1$s. The agent answers on it after its next restart.",
+  "chpair_failed": "The pairing failed.",
+  "chpair_cancelled": "The pairing was stopped.",
+  "chpair_again": "Start again",
+  "chpair_done_now": "Linked. The agent answers on it now; the first person to message it waits for your approval here.",
+  "chpair_done_as_now": "Linked as %1$s. The agent answers on it now; the first person to message it waits for your approval here.",
+  "chpair_done_self_now": "Linked. Open “Message yourself” in WhatsApp on your phone and write to the agent.",
+  "chpair_done_as_self_now": "Linked as %1$s. Open “Message yourself” in WhatsApp on your phone and write to the agent.",
+  "chpair_personal_warning": "Warning: if this is your personal number, everyone who messages it receives the agent’s pairing reply. Choose “Me (Message yourself)” instead.",
+  "chpair_continue": "Continue",
+  "chpair_qr": "The pairing code",
+  "chpair_other_phone": "Scan it with WhatsApp on the phone that has this number. If WhatsApp is on this same phone, show this page on another phone or tablet signed in to this hub and scan it from there."
+}

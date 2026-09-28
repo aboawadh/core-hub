@@ -307,7 +307,7 @@ final class PushCenter {
 
     private func register(_ token: String) async {
         guard let app, let credentials = await app.keeper.credentials else { return }
-        let locale = HubLocale(rawValue: app.language.rawValue) ?? .ar
+        let locale = HubLocale(rawValue: app.language.hubLocale) ?? .ar
         let registrar = PushRegistrar(backend: HubPushBackend(api: app.api))
         let outcome = await registrar.register(
             token: token, locale: locale, kind: credentials.kind, knownDeviceID: credentials.deviceID,

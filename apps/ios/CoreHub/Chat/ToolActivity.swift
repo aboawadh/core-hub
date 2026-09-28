@@ -74,24 +74,52 @@ struct ToolActivity: Equatable {
     }
 }
 
-/// The CLDR plural category of `count` in the app's languages: Arabic has six, English two.
-/// The catalogue keeps one key per category (`tool.activity.steps.few`), as the web's does.
+/// The CLDR plural category of a whole `count` in a language: Arabic has six, English two,
+/// Chinese one. iOS has no public plural-rules API, so the integer rules of CLDR for the languages
+/// people ask for are written here (ADR 0028); any other language counts as English does. The
+/// catalogue keeps one key per category (`tool.activity.steps.few`), as the web's does.
 enum PluralCategory {
     static func of(_ count: Int, _ language: AppLanguage) -> String {
-        switch language {
-        case .en:
-            return count == 1 ? "one" : "other"
-        case .ar:
-            let rest = count % 100
-            switch count {
+        let n = abs(count)
+        let ten = n % 10
+        let hundred = n % 100
+        switch language.base.rawValue.split(separator: "-").first.map(String.init) ?? "en" {
+        case "ar":
+            switch n {
             case 0: return "zero"
             case 1: return "one"
             case 2: return "two"
             default:
-                if (3...10).contains(rest) { return "few" }
-                if (11...99).contains(rest) { return "many" }
+                if (3...10).contains(hundred) { return "few" }
+                if (11...99).contains(hundred) { return "many" }
                 return "other"
             }
+        case "zh", "ja", "ko", "th", "vi", "id", "ms", "lo", "km", "my", "yo":
+            return "other"
+        case "fr", "pt", "hi", "bn", "fa", "am", "zu", "hy", "gu", "kn", "mr":
+            return n <= 1 ? "one" : "other"
+        case "ru", "uk", "be":
+            if ten == 1 && hundred != 11 { return "one" }
+            if (2...4).contains(ten) && !(12...14).contains(hundred) { return "few" }
+            return "many"
+        case "pl":
+            if n == 1 { return "one" }
+            if (2...4).contains(ten) && !(12...14).contains(hundred) { return "few" }
+            return "many"
+        case "cs", "sk":
+            if n == 1 { return "one" }
+            if (2...4).contains(n) { return "few" }
+            return "other"
+        case "he":
+            if n == 1 { return "one" }
+            if n == 2 { return "two" }
+            return "other"
+        case "ro":
+            if n == 1 { return "one" }
+            if n == 0 || (1...19).contains(hundred) { return "few" }
+            return "other"
+        default:
+            return n == 1 ? "one" : "other"
         }
     }
 }
