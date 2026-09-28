@@ -69,7 +69,7 @@ its approval.
   one expandable entry holding Agents (owners and admins), Tasks, **Workflows — now its own page
   `/workflows`** (the old `/schedules?section=workflows…` address redirects) — and Schedules; closed
   or open is remembered per device, and closed on one of its pages it is marked as the place (web and
-  desktop; the phones keep their drawer until they adopt it) — since 2026-09-28 (DECISIONS §125)
+  desktop; since 2026-09-28 the iPhone and Android drawers too, with Search as an icon in the drawer's header and Workflows a page of its own — DECISIONS §128) — since 2026-09-28 (DECISIONS §125)
   **Settings → Secrets** for the owner alone (web and desktop): the account password asked again on
   every visit (`auth.stepUp`, a five-minute grant held in memory, sign-in lockout on wrong tries),
   the names of the provider keys, channel variables, MCP credentials and webhook secrets grouped by
@@ -569,7 +569,12 @@ its approval.
 - **The phones' missing sections, both apps** (since 2026-09-27,
   `docs/changes/2026-09-27-twuijri-phone-parity.md`, in progress): **workflows** as the second half
   of Schedules (every profile, run with an input and the run's own limits, a live read-only run view
-  whose waiting step is approved or denied there; drawing stays on the web); **the Tasks board** as
+  whose waiting step is approved or denied there; drawing stays on the web) — since 2026-09-28 their
+  own page under «الأدوات» / Tools and edited as on the web: inbound triggers (preset, address to
+  copy, secret set or replaced and never shown, events, test event, delivery log), a condition's
+  several rules, "Send message" to Telegram or a conversation with a test send, the failure alert,
+  "Test this step", and a run's phase, filtered mark, task and event ids with "Find a run"
+  (DECISIONS §128, `docs/changes/2026-09-28-twuijri-phones-tools-workflows.md`); **the Tasks board** as
   the web's intake plus four columns side by side, drag to move (asked when a drop means two moves,
   a reason for a block) and to reorder, with the "waits for" and "seems stuck" badges (§93);
   **agent pages** editable on Android as on iOS (skills, MCP on/off and test, memory, jobs run now,

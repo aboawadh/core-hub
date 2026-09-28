@@ -83,7 +83,14 @@ final class LeftoversTests: XCTestCase {
 
     func testEachItemOpensWhereItLives() {
         XCTAssertEqual(BackgroundRules.destination(of: item(.taskRun, session: "s1")), .destination(.tasks))
-        XCTAssertEqual(BackgroundRules.destination(of: item(.workflowRun)), .destination(.schedules))
+        // A workflow run opens on the Workflows page: the run itself when the item names it (DECISIONS §128).
+        XCTAssertEqual(BackgroundRules.destination(of: item(.workflowRun)), .destination(.workflows))
+        XCTAssertEqual(
+            BackgroundRules.destination(of: item(.workflowRun, resource: ResourceRef(kind: .workflowRun, id: "wr1"), profile: "home")),
+            .workflowRun(runID: "wr1", profile: "home")
+        )
+        XCTAssertEqual(BackgroundRules.destination(of: item(.job, job: .scheduleRun)), .destination(.schedules))
+        XCTAssertEqual(BackgroundRules.destination(of: item(.job, job: .workflowRun)), .destination(.workflows))
         XCTAssertEqual(BackgroundRules.destination(of: item(.subagent, session: "s1", profile: "home")), .chat(sessionID: "s1", profile: "home"))
         XCTAssertEqual(BackgroundRules.destination(of: item(.chatRun, session: "s1")), .chat(sessionID: "s1", profile: "work"))
         XCTAssertEqual(BackgroundRules.destination(of: item(.job, job: .export)), .settings)

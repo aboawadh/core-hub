@@ -59,9 +59,54 @@ class NavigationParityTest {
         assertEquals(list("settingsTools").filter { it in ids }, Screens.settingsTools)
         assertEquals(list("agentLevel").filter { it in ids }, Screens.agentLevel)
         assertEquals(listOf(Screens.settingsTabs, Screens.settingsManagement, Screens.settingsTools), SettingsList.groups.map { it.second })
-        val primaries = Screens.rail + Screens.segments + Screens.footer + Screens.settingsTabs + Screens.settingsManagement +
+        val primaries = Screens.rail + Screens.railExtra + Screens.segments + Screens.footer + Screens.settingsTabs + Screens.settingsManagement +
             Screens.settingsTools + Screens.agentLevel
         assertEquals("no destination has two primary entries", primaries.size, primaries.toSet().size)
+    }
+
+    private fun onAndroid(o: JsonObject) = o["surfaces"]?.jsonArray?.any { it.jsonPrimitive.content == "android" } ?: true
+
+    @Test fun `railExtra, filtered to Android, is the app's list`() {
+        assertEquals(list("railExtra").filter { it in ids }, Screens.railExtra)
+        assertTrue("workflows is an Android rail entry", "workflows" in Screens.railExtra)
+    }
+
+    /** The drawer draws its groups from `sidebarGroups`, each item filtered by surface, in order (DECISIONS §128). */
+    @Test fun `the drawer's groups are the manifest's sidebarGroups for Android`() {
+        val groups = manifest.getValue("sidebarGroups").jsonObject.filterKeys { !it.startsWith("$") }
+            .filterValues { onAndroid(it.jsonObject) }
+            .map { (_, g) ->
+                val o = g.jsonObject
+                o.getValue("title").jsonPrimitive.content to o.getValue("items").jsonArray.map { it.jsonPrimitive.content }.filter { it in ids }
+            }
+        assertEquals(groups, Screens.groups)
+        for ((title, items) in Screens.groups) {
+            assertNotNull("$title is a term", Terms.ids[title])
+            items.forEach { assertNotNull("$it opens a route", Screens.routeOf(it)) }
+        }
+        // Members see the items their role allows: Agents is an owner's and admin's.
+        assertEquals(listOf("tasks", "workflows", "schedules"), SidebarGroups.visibleItems(Screens.groups.single().second, isAdmin = false))
+        assertEquals(listOf("agent_manager", "tasks", "workflows", "schedules"), SidebarGroups.visibleItems(Screens.groups.single().second, isAdmin = true))
+    }
+
+    @Test fun `the drawer's header draws brandRow, and the rows are what is left of the rail`() {
+        val brand = manifest.getValue("brandRow").jsonObject
+        assertTrue("brandRow is on Android", onAndroid(brand))
+        assertEquals(brand.getValue("items").jsonArray.map { it.jsonPrimitive.content }, Screens.brandRow)
+        Screens.brandRow.forEach { assertNotNull("$it opens a route", Screens.routeOf(it)) }
+        // Every rail entry is drawn once: as a row, in the header, or in a group.
+        val drawn = Screens.railRows + Screens.brandRow + Screens.groups.flatMap { it.second }
+        assertEquals((Screens.rail + Screens.railExtra).sorted(), drawn.sorted())
+        assertEquals(listOf("new_chat"), Screens.railRows)
+    }
+
+    @Test fun `workflows has a screen and its route resolves`() {
+        assertTrue("workflows" in Screens.all)
+        assertEquals("workflows", Route.Workflows.destination)
+        val path = manifest.getValue("surfaceRoutes").jsonObject.getValue("android").jsonObject.getValue("workflows").jsonPrimitive.content
+        assertEquals(Route.Workflows, AppPaths.route(AppPaths.resolve(path)!!, "default"))
+        assertEquals(Route.Workflows, Screens.routeOf("workflows"))
+        assertFalse("members see Workflows", "workflows" in Screens.adminOnly)
     }
 
     private fun termsXml(dir: String): Map<String, String> {

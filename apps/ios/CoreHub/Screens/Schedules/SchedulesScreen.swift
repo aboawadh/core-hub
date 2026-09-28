@@ -1,16 +1,14 @@
 // Schedules show every profile the person may enter, with no profile filter (profileScope.alwaysAll,
 // ADR 0016): each item carries its profile's badge, and anything done to it goes to its own profile
-// without moving the selector. A new one is made in the selector's profile. Workflows are
-// Workflows.swift; a schedule on its own is ScheduleDetailView, its form ScheduleEditorSheet.
+// without moving the selector. A new one is made in the selector's profile. Workflows have their own
+// page since 2026-09-28 (WorkflowsScreen.swift, DECISIONS §128), as on the web; a schedule on its own
+// is ScheduleDetailView, its form ScheduleEditorSheet.
 import CoreHubClient
 import SwiftUI
-
-enum SchedulesHalf: Hashable { case jobs, workflows }
 
 struct SchedulesScreen: View {
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
-    @State private var half: SchedulesHalf = .jobs
     @State private var list: PagedList<ScheduleItem>?
     @State private var opened: ScheduleItem?
     @State private var editing: ScheduleItem?
@@ -18,29 +16,12 @@ struct SchedulesScreen: View {
     @State private var pendingDelete: Schedule?
     @State private var note: String?
     @State private var failure: String?
-    @State private var newWorkflow = false
-    @State private var workflowsRefresh = 0
 
     var body: some View {
-        // Schedules and workflows share the page, as on the web: one segmented switch above them.
-        VStack(spacing: 0) {
-            Picker(l10n("nav.schedules"), selection: $half) {
-                Text(l10n("schedules.tab_jobs")).tag(SchedulesHalf.jobs)
-                Text(l10n("schedules.tab_workflows")).tag(SchedulesHalf.workflows)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, Space.s4)
-            .padding(.vertical, Space.s2)
-            .accessibilityIdentifier("schedules.half")
-            switch half {
-            case .jobs: jobs
-            case .workflows: WorkflowsList(refresh: workflowsRefresh)
-            }
-        }
-        .navigationTitle(l10n("nav.schedules"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if half == .jobs {
+        jobs
+            .navigationTitle(l10n("nav.schedules"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         creating = true
@@ -50,42 +31,27 @@ struct SchedulesScreen: View {
                     .accessibilityLabel(l10n("schedules.new"))
                     .accessibilityIdentifier("schedules.new")
                 }
-            } else {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        newWorkflow = true
-                    } label: {
-                        LucideIcon(.plus, size: 20)
-                    }
-                    .accessibilityLabel(l10n("workflow_editor.new"))
-                    .accessibilityIdentifier("workflows.new")
+            }
+            .onAppear { if list == nil { list = makeList() } }
+            // Schedules changed by an agent or another device (`/rt/schedules`).
+            .liveReload("/rt/schedules", events: ["schedule.", "schedule_run."]) {
+                await list?.refresh()
+            }
+            .sheet(item: $opened) { item in
+                ScheduleDetailView(schedule: item.schedule, changed: { _ in reload() }, deleted: { gone in list?.remove(gone.id) })
+            }
+            .sheet(item: $editing) { item in
+                ScheduleEditorSheet(schedule: item.schedule) { _ in reload() }
+            }
+            .sheet(isPresented: $creating) {
+                ScheduleEditorSheet(schedule: nil) { _ in reload() }
+            }
+            .confirmDelete($pendingDelete, name: { $0.name }, delete: { target in
+                try await app.api.call {
+                    try await SchedulesAPI.schedulesDelete(xHubProfile: target.profile, scheduleId: target.id, apiConfiguration: $0)
                 }
-            }
-        }
-        .navigationDestination(isPresented: $newWorkflow) {
-            WorkflowEditorPage(original: nil, profile: app.currentProfile) { _ in workflowsRefresh += 1 }
-        }
-        .onAppear { if list == nil { list = makeList() } }
-        // Schedules and workflows changed by an agent or another device (`/rt/schedules`).
-        .liveReload("/rt/schedules", events: ["schedule.", "schedule_run.", "workflow."]) {
-            await list?.refresh()
-            workflowsRefresh += 1
-        }
-        .sheet(item: $opened) { item in
-            ScheduleDetailView(schedule: item.schedule, changed: { _ in reload() }, deleted: { gone in list?.remove(gone.id) })
-        }
-        .sheet(item: $editing) { item in
-            ScheduleEditorSheet(schedule: item.schedule) { _ in reload() }
-        }
-        .sheet(isPresented: $creating) {
-            ScheduleEditorSheet(schedule: nil) { _ in reload() }
-        }
-        .confirmDelete($pendingDelete, name: { $0.name }, delete: { target in
-            try await app.api.call {
-                try await SchedulesAPI.schedulesDelete(xHubProfile: target.profile, scheduleId: target.id, apiConfiguration: $0)
-            }
-        }, deleted: { gone in list?.remove(gone.id) })
-        .accessibilityIdentifier("screen.schedules")
+            }, deleted: { gone in list?.remove(gone.id) })
+            .accessibilityIdentifier("screen.schedules")
     }
 
     @ViewBuilder

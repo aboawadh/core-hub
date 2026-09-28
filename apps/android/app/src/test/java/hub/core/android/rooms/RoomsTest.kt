@@ -221,7 +221,7 @@ class RoomsTest {
         assertEquals(listOf("01J8QK3ZR2W7M5N4P6T8V9X0Q2", "01J8QK3ZR2W7M5N4P6T8V9X0Q3", "01J8QK3ZR2W7M5N4P6T8V9X0Q1"), merged.map { it.id })
         assertEquals(Route.Room(room, "work"), PendingList.routeOf(inRoom))
         assertEquals(Route.Chat("01J8QK3ZR2W7M5N4P6T8V9X0SS", "home"), PendingList.routeOf(inChat))
-        assertEquals(Route.Schedules, PendingList.routeOf(step))
+        assertEquals(Route.Workflows, PendingList.routeOf(step))
     }
 
     // ---------------------------------------------------------------- batch mode and export

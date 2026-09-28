@@ -96,6 +96,8 @@ class AppGraph(
     val prefs = AppPrefs(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
     /** The order the person dragged the chats into, per view (ChatOrder.kt). */
     val chatOrder = hub.core.android.ui.screens.ChatOrderStore(context.getSharedPreferences("corehub.chatorder", Context.MODE_PRIVATE))
+    /** Which drawer groups («Tools») are closed on this device (nav/SidebarGroups.kt). */
+    val sidebarGroups = hub.core.android.nav.SidebarGroupsStore(context.getSharedPreferences("corehub.prefs", Context.MODE_PRIVATE))
     val store = SessionStore(
         SecureStore(context.getSharedPreferences("corehub.secure", Context.MODE_PRIVATE), sealer),
     )

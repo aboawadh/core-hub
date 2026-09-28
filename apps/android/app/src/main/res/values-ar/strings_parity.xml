@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Phone parity (docs/changes/2026-09-27-twuijri-phone-parity.md): workflows, the board, agent pages, share, models, admin, location. -->
 <resources>
-    <string name="schedules_tab_jobs">الجدولة</string>
-    <string name="schedules_tab_workflows">سير العمل</string>
     <string name="workflows_started">بدأ التشغيل.</string>
     <string name="workflow_idle">متوقف</string>
     <string name="workflow_running">يعمل</string>

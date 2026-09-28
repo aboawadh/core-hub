@@ -1,6 +1,7 @@
-// The drawer: brand, the rail in manifest order, the Chat | Rooms segments with the list below,
-// and the footer — where the profile selector sits beside the account name and the connection dot
-// (owner, 2026-09-26; NAVIGATION.md §١).
+// The drawer: brand with Search and the close button, the rail in manifest order — New chat, then
+// the «Tools» group (Agents, Tasks, Workflows, Schedules) that opens and closes (DECISIONS §128) —
+// the Chat | Rooms segments with the list below, and the footer — where the profile selector sits
+// beside the account name and the connection dot (owner, 2026-09-26; NAVIGATION.md §١).
 import CoreHubClient
 import SwiftUI
 
@@ -12,9 +13,13 @@ struct SidebarView: View {
     let navigate: (MainContent) -> Void
     let openSession: (Session) -> Void
     var selectedChannel: String? = nil
+    /// The page on screen, when it is a destination: its row (or its closed group's heading) is marked.
+    var current: DestinationID? = nil
     let close: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.l10n) private var l10n
+    /// The groups closed on this phone (`sidebar.groupsClosed`).
+    @State private var closedGroups = SidebarGroupState().closed
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,8 +28,13 @@ struct SidebarView: View {
                 .padding(.top, Space.s3)
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.s1) {
-                    ForEach(NavigationMap.visible(NavigationMap.rail, admin: app.isAdmin)) { destination in
-                        railRow(destination)
+                    ForEach(NavigationMap.drawer(admin: app.isAdmin)) { entry in
+                        switch entry {
+                        case .row(let destination):
+                            railRow(destination)
+                        case .group(let group, let members):
+                            groupRows(group, members)
+                        }
                     }
                     segments
                         .padding(.top, Space.s3)
@@ -64,6 +74,18 @@ struct SidebarView: View {
                     .font(.system(size: FontSize.sizeLg, weight: .bold))
                     .foregroundStyle(Tone.text)
                 Spacer()
+                // The brand row's entries (`brandRow`): Search, as on the unfolded web sidebar.
+                ForEach(NavigationMap.brandRow) { destination in
+                    Button {
+                        navigate(.destination(destination))
+                    } label: {
+                        LucideIcon(Icons.lucide(for: destination), size: 20)
+                            .foregroundStyle(Tone.textMuted)
+                            .tapTarget()
+                    }
+                    .accessibilityLabel(l10n(destination.titleKey))
+                    .accessibilityIdentifier("rail.\(destination.rawValue)")
+                }
                 Button(action: close) {
                     LucideIcon(.x, size: 20)
                         .foregroundStyle(Tone.textMuted)
@@ -74,8 +96,9 @@ struct SidebarView: View {
         }
     }
 
-    private func railRow(_ destination: DestinationID) -> some View {
-        Button {
+    private func railRow(_ destination: DestinationID, indent: CGFloat = 0) -> some View {
+        let selected = current == destination
+        return Button {
             navigate(destination == .newChat ? .newChat : .destination(destination))
         } label: {
             HStack(spacing: Space.s3) {
@@ -89,10 +112,50 @@ struct SidebarView: View {
             }
             .padding(.horizontal, Space.s2)
             .frame(minHeight: 44)
+            .background(selected ? Tone.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.leading, indent)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("rail.\(destination.rawValue)")
+    }
+
+    /// A group's heading and, while it is open, its members a little indented. Closed while the
+    /// page on screen is one of them, the heading is marked as the current place.
+    @ViewBuilder
+    private func groupRows(_ group: SidebarGroup, _ members: [DestinationID]) -> some View {
+        let open = !closedGroups.contains(group.id)
+        let marked = SidebarGroupState.headingMarked(group, open: open, current: current)
+        Button {
+            closedGroups = SidebarGroupState().toggle(group.id)
+        } label: {
+            HStack(spacing: Space.s3) {
+                LucideIcon(Icons.lucide(forGroup: group.id), size: 20)
+                    .frame(width: 24)
+                    .foregroundStyle(Tone.textMuted)
+                Text(l10n(group.titleKey))
+                    .font(.system(size: FontSize.sizeMd))
+                    .foregroundStyle(Tone.text)
+                Spacer()
+                LucideIcon(open ? .chevronDown : .chevronRight, size: 16)
+                    .foregroundStyle(Tone.textMuted)
+                    .flipsForRightToLeftLayoutDirection(true)
+            }
+            .padding(.horizontal, Space.s2)
+            .frame(minHeight: 44)
+            .background(marked ? Tone.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(l10n(open ? "shell.group_expanded" : "shell.group_collapsed"))
+        .accessibilityAddTraits(marked ? .isSelected : [])
+        .accessibilityIdentifier("sidebar.group.\(group.id)")
+        if open {
+            ForEach(members) { destination in
+                railRow(destination, indent: Space.s4)
+            }
+        }
     }
 
     private var segments: some View {
@@ -227,6 +290,7 @@ enum Icons {
         case .agentManager: return .bot
         case .tasks: return .listChecks
         case .schedules: return .calendarClock
+        case .workflows: return .workflow
         case .chat: return .messagesSquare
         case .rooms: return .users
         case .settings: return .settings
@@ -261,6 +325,14 @@ enum Icons {
         case .agentConfigFiles: return .fileCog
         case .agentSettings: return .slidersHorizontal
         case .globalAgent: return .globe
+        }
+    }
+
+    /// A drawer group's heading (the web's `groupIcons`).
+    static func lucide(forGroup id: String) -> Lucide {
+        switch id {
+        case "tools": return .wrench
+        default: return .layoutGrid
         }
     }
 }

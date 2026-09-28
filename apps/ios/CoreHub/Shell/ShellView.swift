@@ -13,7 +13,18 @@ enum MainContent: Equatable {
     /// A conversation Hermes keeps on a channel (Telegram, WhatsApp…), read-only (§61).
     case channel(conversationID: String, profile: String)
     case destination(DestinationID)
+    /// One workflow run on the Workflows page, in its own profile (a waiting step, a notice).
+    case workflowRun(runID: String, profile: String)
     case settings
+
+    /// The destination on screen, for the drawer to mark.
+    var place: DestinationID? {
+        switch self {
+        case .destination(let destination): return destination
+        case .workflowRun: return .workflows
+        default: return nil
+        }
+    }
 }
 
 struct ShellView: View {
@@ -59,6 +70,7 @@ struct ShellView: View {
                             navigate(.chat(sessionID: session.id, profile: session.profile))
                         },
                         selectedChannel: selectedChannel,
+                        current: main.place,
                         close: { setDrawer(false) }
                     )
                     .frame(width: min(Layout.sidebarWidth + Space.s8, geometry.size.width * 0.86))
@@ -221,6 +233,11 @@ struct ShellView: View {
             TasksScreen(openChat: { sessionID, profile in navigate(.chat(sessionID: sessionID, profile: profile)) })
         case .destination(.schedules):
             SchedulesScreen()
+        case .destination(.workflows):
+            WorkflowsScreen()
+        case .workflowRun(let runID, let profile):
+            WorkflowsScreen(openRun: WorkflowRunRef(runID: runID, profile: profile))
+                .id(runID)
         case .destination(.globalAgent):
             GlobalAgentScreen()
         case .destination(let destination):

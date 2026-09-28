@@ -230,7 +230,9 @@ object NoticeLinks {
     fun route(resource: ResourceRef?, profile: String?): Route? = when (resource?.kind) {
         ResourceRef.Kind.SESSION -> profile?.let { Route.Chat(resource.id, it) }
         ResourceRef.Kind.TASK, ResourceRef.Kind.PROJECT -> Route.Tasks
-        ResourceRef.Kind.SCHEDULE, ResourceRef.Kind.SCHEDULE_RUN, ResourceRef.Kind.WORKFLOW_RUN -> Route.Schedules
+        ResourceRef.Kind.SCHEDULE, ResourceRef.Kind.SCHEDULE_RUN -> Route.Schedules
+        // A workflow run opens on Workflows, its own page since 2026-09-28 (DECISIONS §128).
+        ResourceRef.Kind.WORKFLOW_RUN -> Route.Workflows
         else -> null
     }
 }

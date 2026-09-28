@@ -62,13 +62,29 @@ object AppPaths {
             "search" -> Route.Search
             "agent_manager" -> Route.Agents
             "tasks" -> Route.Tasks
-            "schedules" -> Route.Schedules
+            // Workflows were a tab of Schedules until 2026-09-28: its old address (`?section=workflows…`)
+            // and a workflow run named in the address (`?workflow_run=<id>`) open Workflows (DECISIONS §128).
+            "schedules" -> if (opensWorkflows(target)) Route.Workflows else Route.Schedules
+            "workflows" -> Route.Workflows
             "settings" -> Route.Settings
             "global_agent" -> Route.GlobalAgent(target.query["profile"])
             in Screens.agentLevel -> target.params["agentId"]?.let { Route.AgentPage(target.destination, it, "") }
             in Screens.settingsTabs, in Screens.settingsManagement, in Screens.settingsTools -> Route.SettingsPage(target.destination)
             else -> null
         }
+    }
+
+    private fun opensWorkflows(target: PathTarget): Boolean =
+        target.query["section"] == "workflows" || !target.query["workflow_run"].isNullOrBlank()
+
+    /**
+     * The item a path names on its page, for the page to open once it is on screen (nav/Focus.kt):
+     * `?workflow_run=<id>[&profile=<slug>]` on Workflows (or Schedules' old address) is that run.
+     */
+    fun focus(target: PathTarget, profile: String): FocusItem? {
+        if (target.destination != "workflows" && target.destination != "schedules") return null
+        val run = target.query["workflow_run"]?.takeIf { it.isNotBlank() } ?: return null
+        return FocusItem(FocusItem.Kind.WORKFLOW_RUN, run, target.query["profile"]?.takeIf { it.isNotBlank() } ?: profile)
     }
 
     /** The web page of a destination on this hub, for the pages the phone hands to the browser. */

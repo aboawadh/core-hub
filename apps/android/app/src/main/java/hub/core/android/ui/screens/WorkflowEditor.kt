@@ -66,8 +66,6 @@ import hub.core.client.model.WorkflowWrite
 import java.math.BigDecimal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
 
 /*
  * Making and editing a workflow on the phone (the web's WorkflowEditor, DECISIONS §52) — before
@@ -87,6 +85,14 @@ data class WorkflowDraft(
     val workingDir: String? = null,
     val nodes: List<WorkflowNode> = emptyList(),
     val edges: List<WorkflowEdge> = emptyList(),
+    /** Who is told when a run fails (§127), as loaded or as the person left it. */
+    val onFailure: hub.core.client.model.WorkflowFailureAlert? = null,
+    /**
+     * The person changed the failure alert in this editing session: only then is it written
+     * (null as an explicit null); untouched, it is left out so the saved one — or one this app
+     * does not understand — is kept.
+     */
+    val alertTouched: Boolean = false,
 )
 
 object WorkflowDraftRules {
@@ -101,10 +107,15 @@ object WorkflowDraftRules {
     val UNARY = setOf("exists", "empty")
 
     fun from(workflow: Workflow): WorkflowDraft =
-        WorkflowDraft(workflow.name, workflow.description.orEmpty(), workflow.workingDir, workflow.nodes, workflow.edges)
+        WorkflowDraft(workflow.name, workflow.description.orEmpty(), workflow.workingDir, workflow.nodes, workflow.edges, workflow.onFailure)
 
-    /** A duplicate: the same drawing under «<name> (copy)». */
-    fun copyOf(workflow: Workflow, name: String): WorkflowDraft = from(workflow).copy(name = name)
+    /** A duplicate: the same drawing under «<name> (copy)», with its failure alert. */
+    fun copyOf(workflow: Workflow, name: String): WorkflowDraft =
+        from(workflow).copy(name = name, alertTouched = workflow.onFailure != null)
+
+    /** The failure alert as the form left it (§127); from now on it is written. */
+    fun withAlert(draft: WorkflowDraft, alert: hub.core.client.model.WorkflowFailureAlert?): WorkflowDraft =
+        draft.copy(onFailure = alert, alertTouched = true)
 
     fun nextNodeId(kind: WorkflowNode.Kind, nodes: List<WorkflowNode>): String {
         val taken = nodes.map { it.id }.toSet()
@@ -174,7 +185,11 @@ object WorkflowDraftRules {
                 )
             },
             edges = draft.edges,
-            sendNull = if (editing && description == null) setOf(WorkflowWrite.Clearable.DESCRIPTION) else emptySet(),
+            onFailure = if (draft.alertTouched) draft.onFailure else null,
+            sendNull = buildSet {
+                if (editing && description == null) add(WorkflowWrite.Clearable.DESCRIPTION)
+                if (draft.alertTouched && draft.onFailure == null) add(WorkflowWrite.Clearable.ON_FAILURE)
+            },
         )
     }
 
@@ -184,37 +199,7 @@ object WorkflowDraftRules {
      */
     fun toCheck(draft: WorkflowDraft): WorkflowCheck {
         val write = toWrite(draft)
-        return WorkflowCheck(description = write.description, workingDir = write.workingDir, nodes = write.nodes, edges = write.edges)
-    }
-
-    /**
-     * A condition's several rules (DECISIONS §123), as lines to read, made through the model's
-     * own JSON so the words match the contract. The phone shows them and keeps them untouched
-     * when it saves (`copy` carries them); they are edited on the web.
-     */
-    fun ruleLines(rules: WorkflowRules?): Pair<String, List<String>> {
-        if (rules == null) return "all" to emptyList()
-        val json = hub.core.client.infrastructure.Serializer.kotlinxSerializationJson
-        val tree = runCatching { json.encodeToJsonElement(WorkflowRules.serializer(), rules).jsonObject }.getOrNull()
-            ?: return "all" to emptyList()
-        val match = (tree["match"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull ?: "all"
-        val items = (tree["items"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { item ->
-            val o = item as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
-            val path = (o["path"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull.orEmpty()
-            val op = (o["operator"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull.orEmpty()
-            val value = (o["value"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
-            if (value == null) "$path $op" else "$path $op \"$value\""
-        }
-        return (if (match == "any") "any" else "all") to items
-    }
-
-    /** A "Send message" step's targets as lines to read (§124); kept untouched on save. */
-    fun sendLines(send: WorkflowSend): List<String> = send.targets.map { target ->
-        when (target.platform) {
-            "telegram" -> "telegram ${target.chatId.orEmpty()}"
-            "core_hub" -> "conversation \"${target.title ?: target.sessionId.orEmpty()}\""
-            else -> target.platform
-        }
+        return WorkflowCheck(description = write.description, workingDir = write.workingDir, nodes = write.nodes, edges = write.edges, onFailure = write.onFailure)
     }
 
     /** A trigger's address on the hub the phone is signed in to. */
@@ -284,9 +269,6 @@ class WorkflowEditOps(private val apis: () -> HubApis?) {
         return hubCall { block(api) }
     }
 
-    /** The workflow's inbound triggers (§123); an older hub answers 404 and none are shown. */
-    suspend fun triggers(profile: String, workflowId: String) =
-        call { it.schedules.schedulesListWorkflowTriggers(xHubProfile = profile, workflowId = workflowId).items }
     suspend fun validate(profile: String, check: WorkflowCheck) = call { it.schedules.schedulesValidateWorkflow(profile, check) }
     suspend fun create(profile: String, write: WorkflowWrite) = call { it.schedules.schedulesCreateWorkflow(profile, write) }
     suspend fun update(profile: String, id: String, write: WorkflowWrite) = call { it.schedules.schedulesUpdateWorkflow(profile, id, write) }
@@ -349,6 +331,8 @@ fun WorkflowEditorSheet(
     onDismiss: () -> Unit,
     onSaved: (Workflow) -> Unit,
     start: WorkflowDraft? = null,
+    /** A delivery's "Open the run" (Triggers): the run view of that run. */
+    onShowRun: (String) -> Unit = {},
 ) {
     val t = LocalTokens.current
     val scope = rememberCoroutineScope()
@@ -359,14 +343,11 @@ fun WorkflowEditorSheet(
     var checkError by remember { mutableStateOf<HubError?>(null) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<HubError?>(null) }
-    var triggers by remember(workflow?.id) { mutableStateOf<List<WorkflowTrigger>>(emptyList()) }
-    LaunchedEffect(workflow?.id) {
-        val id = workflow?.id ?: return@LaunchedEffect
-        ops.triggers(where, id).onSuccess { triggers = it }
-    }
     val agents = ChatAgents.startable(rememberAgents(where))
     // The profile's chat models, for an agent step's own model (the web's StepPanel picker).
     val graph = androidx.compose.ui.platform.LocalContext.current.graph
+    // Triggers, send and step tests, conversations (WorkflowFlow.kt).
+    val flow = remember { WorkflowFlowOps { graph.store.current?.let(graph::apis) } }
     var models by remember(where) { mutableStateOf<List<hub.core.android.chat.ChatControls.ModelOption>>(emptyList()) }
     var modelsLoaded by remember(where) { mutableStateOf(false) }
     LaunchedEffect(where) {
@@ -405,7 +386,7 @@ fun WorkflowEditorSheet(
             SectionTitle(stringResource(R.string.workflows_steps))
             if (draft.nodes.isEmpty()) Text(stringResource(R.string.wfe_no_steps), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
             draft.nodes.forEach { node ->
-                StepEditor(node, draft, agents.map { it.id to it.name }, models, modelsLoaded, onDraft = { draft = it })
+                StepEditor(node, draft, agents.map { it.id to it.name }, models, modelsLoaded, where, flow, onDraft = { draft = it })
             }
             Text(stringResource(R.string.wfe_palette), fontSize = FontTokens.sizeSm.sp, color = t.textMuted)
             val titleOf: Map<WorkflowNode.Kind, String> = WorkflowNode.Kind.entries.associateWith { wfKindLabel(it) }
@@ -416,35 +397,17 @@ fun WorkflowEditorSheet(
                         kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = stepIcon(kind), modifier = Modifier.testTag("workflow.editor.add.${kind.value}"),
                     )
                 }
+                // A notice that sends (§124): kept as a `notify` step, so an older app still loads it.
+                val sendTitle = stringResource(R.string.wft_send_title)
+                HubButton(
+                    sendTitle, { draft = WorkflowFlowRules.addSendStep(draft, sendTitle) },
+                    kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Send, modifier = Modifier.testTag("workflow.editor.add.send"),
+                )
             }
-            if (triggers.isNotEmpty()) {
-                val hub = graph.store.current?.hub.orEmpty()
-                val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-                SectionTitle(stringResource(R.string.wfe_triggers))
-                Text(stringResource(R.string.wfe_triggers_read_only), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
-                triggers.forEach { trigger ->
-                    val url = WorkflowDraftRules.triggerUrl(hub, trigger.path)
-                    HubCard(Modifier.testTag("workflow.editor.trigger.${trigger.id}"), padding = 12.dp) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(trigger.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                            Badge(trigger.preset.value)
-                            if (!trigger.enabled) Badge(stringResource(R.string.wfe_trigger_off), tone = BadgeTone.Warning)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(url, Modifier.weight(1f), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace)
-                            HubIconButton(
-                                Lucide.Copy, stringResource(R.string.wfe_trigger_copy), { clipboard.setText(androidx.compose.ui.text.AnnotatedString(url)) },
-                                size = 32.dp, iconSize = 16.dp, modifier = Modifier.testTag("workflow.editor.trigger.${trigger.id}.copy"),
-                            )
-                        }
-                        Text(
-                            stringResource(if (trigger.secretStored) R.string.wfe_trigger_secret_stored else R.string.wfe_trigger_secret_missing),
-                            fontSize = FontTokens.sizeXs.sp, color = t.textMuted,
-                        )
-                        if (trigger.events.isNotEmpty()) Text(trigger.events.joinToString(", "), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = t.textMuted)
-                    }
-                }
-            }
+            Text(stringResource(R.string.wft_send_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+            // Who is told when a run fails (§127): written only once changed here.
+            FailureAlertForm(draft.onFailure, where, flow) { alert -> draft = WorkflowDraftRules.withAlert(draft, alert) }
+            WorkflowTriggersSection(workflow?.id, where, graph.store.current?.hub.orEmpty(), flow, onShowRun)
             ErrorNotice(error)
             if (draft.name.isBlank()) Text(stringResource(R.string.wfe_name_required), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
             else if (validation?.problems?.isNotEmpty() == true) Text(stringResource(R.string.wfe_save_blocked), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
@@ -475,13 +438,15 @@ private fun StepEditor(
     agents: List<Pair<String, String>>,
     models: List<hub.core.android.chat.ChatControls.ModelOption>,
     modelsLoaded: Boolean,
+    profile: String,
+    flow: WorkflowFlowOps,
     onDraft: (WorkflowDraft) -> Unit,
 ) {
     val t = LocalTokens.current
     fun change(transform: (WorkflowNode) -> WorkflowNode) = onDraft(WorkflowDraftRules.update(draft, node.id, transform))
     HubCard(Modifier.testTag("workflow.editor.step.${node.id}"), padding = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Badge(wfKindLabel(node.kind))
+            Badge(if (node.send != null) stringResource(R.string.wft_send_title) else wfKindLabel(node.kind))
             Text(node.id, Modifier.weight(1f), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace, color = t.textMuted)
             HubIconButton(
                 Lucide.Trash, stringResource(R.string.wfe_delete_step), { onDraft(WorkflowDraftRules.remove(draft, node.id)) }, size = 32.dp, iconSize = 16.dp,
@@ -522,17 +487,14 @@ private fun StepEditor(
             }
             WorkflowNode.Kind.CONDITION -> {
                 val parts = WorkflowDraftRules.splitCondition(input)
-                val (match, lines) = WorkflowDraftRules.ruleLines(node.rules)
-                if (lines.isNotEmpty()) {
-                    // Several rules (§123): shown and kept as they are; edited on the web.
-                    Text(
-                        stringResource(if (match == "any") R.string.wfe_rules_any else R.string.wfe_rules_all),
-                        fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium,
-                    )
-                    lines.forEach { line ->
-                        Text(line, Modifier.testTag("workflow.editor.step.${node.id}.rule"), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace)
-                    }
-                    Text(stringResource(R.string.wfe_rules_read_only), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                val rules = node.rules
+                // Several rules (§123): on, they start from the single line; off, they go (an explicit null).
+                ToggleRow(
+                    stringResource(R.string.wft_rules_toggle), rules != null, { on -> change { WorkflowFlowRules.withRules(it, on) } },
+                    Modifier.testTag("workflow.editor.step.${node.id}.rules.toggle"),
+                )
+                if (rules != null) {
+                    RulesForm(node, draft, rules) { next -> change { it.copy(rules = next) } }
                 } else if (parts == null) {
                     Text(stringResource(R.string.wfe_condition_raw_hint), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                     HubTextField(input, { v -> change { it.copy(input = v) } }, Modifier.fillMaxWidth(), label = stringResource(R.string.wfe_condition_text), mono = true, size = ControlSize.Md)
@@ -578,18 +540,14 @@ private fun StepEditor(
             }
             WorkflowNode.Kind.NOTIFY -> {
                 HubTextField(
-                    input, { v -> change { it.copy(input = v) } }, Modifier.fillMaxWidth(), label = stringResource(R.string.wfe_notify_text),
+                    input, { v -> change { it.copy(input = v) } }, Modifier.fillMaxWidth(),
+                    label = stringResource(if (node.send != null) R.string.wft_send_message else R.string.wfe_notify_text),
                     singleLine = false, minLines = 2, maxLines = 6, size = ControlSize.Md, fieldTag = "workflow.editor.step.${node.id}.input",
                 )
                 InsertChips(tokens) { token -> change { it.copy(input = input + token) } }
-                val send = node.send
-                if (send != null) {
-                    // A "Send message" step (§124): its targets shown and kept as they are.
-                    Text(stringResource(R.string.wfe_send_targets), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)
-                    WorkflowDraftRules.sendLines(send).forEach { line ->
-                        Text(line, Modifier.testTag("workflow.editor.step.${node.id}.send"), fontSize = FontTokens.sizeXs.sp, fontFamily = FontFamily.Monospace)
-                    }
-                    Text(stringResource(R.string.wfe_send_read_only), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
+                if (node.send != null) {
+                    // A "Send message" step (§124): where its words go, and a test send.
+                    SendStepForm(node, profile, flow) { next -> change { next } }
                 } else {
                     Text(stringResource(R.string.wfe_notify_to), fontSize = FontTokens.sizeXs.sp, color = t.textMuted)
                 }
@@ -605,6 +563,8 @@ private fun StepEditor(
         if (node.kind != WorkflowNode.Kind.APPROVAL) {
             ToggleRow(stringResource(R.string.wfe_approval_required), node.approvalRequired, { v -> change { it.copy(approvalRequired = v) } })
         }
+        // The step tried on its own with a sample (§127); folded until asked.
+        StepTestPanel(node, profile, flow)
         Connections(node, draft, onDraft)
     }
 }

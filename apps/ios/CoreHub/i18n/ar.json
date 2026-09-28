@@ -103,7 +103,9 @@
     "theme_dark": "داكن",
     "profile": "البروفايل",
     "profile_switch": "بدّل البروفايل",
-    "profile_current": "أنت في {profile}"
+    "profile_current": "أنت في {profile}",
+    "group_expanded": "مفتوحة",
+    "group_collapsed": "مطوية"
   },
   "sessions": {
     "all_profiles": "كل البروفايلات",
@@ -437,9 +439,7 @@
     "state_scheduled": "مجدول",
     "state_running": "يعمل",
     "state_paused": "موقوف مؤقتًا",
-    "state_exhausted": "انتهى",
-    "tab_jobs": "الجدولة",
-    "tab_workflows": "سير العمل"
+    "state_exhausted": "انتهى"
   },
   "setup": {
     "open": "هذا المركز بلا مالك بعد، والتهيئة مفتوحة الآن. أنشئ حساب المالك.",

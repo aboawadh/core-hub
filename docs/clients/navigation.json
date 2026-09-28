@@ -325,8 +325,8 @@
         "kind": "rail"
       },
       "roles": ["member"],
-      "surfaces": ["web", "desktop"],
-      "note": "Every workflow of every profile the person may enter, each drawn and run on its canvas (DECISIONS §52). Its own page since 2026-09-28 (owner): until then a tab of Schedules, whose old address (`/schedules?section=workflows…`) still opens it. Web and desktop for now; listed in `railExtra`, not `rail`, so the phone apps that do not have it yet still match `rail` exactly (DECISIONS §126)."
+      "surfaces": ["web", "desktop", "ios", "android"],
+      "note": "Every workflow of every profile the person may enter, each drawn and run on its canvas (DECISIONS §52). Its own page since 2026-09-28 (owner): until then a tab of Schedules, whose old address (`/schedules?section=workflows…`) still opens it. Listed in `railExtra`, not `rail`, so an app built before it still matches `rail` exactly (DECISIONS §126). On the iPhone and Android too since 2026-09-28 (DECISIONS §128): a list of the workflows, each edited as a list of steps (there is no canvas on a phone), with its triggers, rules, send targets and failure alert."
     },
     {
       "id": "settings",
@@ -653,15 +653,15 @@
   "rail": ["new_chat", "search", "agent_manager", "tasks", "schedules"],
   "railExtra": ["workflows"],
   "brandRow": {
-    "$comment": "Rail entries that web and desktop draw as an icon in the sidebar's brand row, beside the fold toggle, instead of as a row (owner, 2026-09-28, DECISIONS §126). Folded into the rail of icons the brand row has room for the toggle alone, so each comes back as a row at its place in `rail` (Search right below New chat). Presentation only: the destination, its term and its route are unchanged, and the phones still draw it as a row.",
-    "surfaces": ["web", "desktop"],
+    "$comment": "Rail entries that web and desktop draw as an icon in the sidebar's brand row, beside the fold toggle, instead of as a row (owner, 2026-09-28, DECISIONS §126). Folded into the rail of icons the brand row has room for the toggle alone, so each comes back as a row at its place in `rail` (Search right below New chat). Presentation only: the destination, its term and its route are unchanged. The phones' drawer has no fold: there the icon sits in the drawer's header beside its close button, always (DECISIONS §128).",
+    "surfaces": ["web", "desktop", "ios", "android"],
     "items": ["search"]
   },
   "sidebarGroups": {
-    "$comment": "Rail entries that web and desktop gather under one expandable heading (owner, 2026-09-28, DECISIONS §126). Not destinations: a group's `title` is a term, `items` are entries of `rail` or `railExtra` in the order shown, each in at most one group; members see only the items their role allows, and a group with none is not drawn. The heading opens and closes the group so the chats list gets the room; the choice is the device's (local storage), open by default. Closed while the current page is one of its items, the heading is marked as the current place. The phones keep `rail` as it is until they adopt it.",
+    "$comment": "Rail entries that web and desktop gather under one expandable heading (owner, 2026-09-28, DECISIONS §126). Not destinations: a group's `title` is a term, `items` are entries of `rail` or `railExtra` in the order shown, each in at most one group; members see only the items their role allows, and a group with none is not drawn. The heading opens and closes the group so the chats list gets the room; the choice is the device's (local storage on the web, the app's own settings on a phone), open by default. Closed while the current page is one of its items, the heading is marked as the current place. The phones' drawer draws it the same way since 2026-09-28 (DECISIONS §128).",
     "tools": {
       "title": "tools",
-      "surfaces": ["web", "desktop"],
+      "surfaces": ["web", "desktop", "ios", "android"],
       "items": ["agent_manager", "tasks", "workflows", "schedules"]
     }
   },
@@ -823,7 +823,8 @@
       "agent_plugins": "/agents/:agentId/plugins",
       "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
-      "global_agent": "/global-agent"
+      "global_agent": "/global-agent",
+      "workflows": "/workflows"
     },
     "android": {
       "new_chat": "/new",
@@ -864,7 +865,8 @@
       "agent_plugins": "/agents/:agentId/plugins",
       "agent_config_files": "/agents/:agentId/config-files",
       "agent_settings": "/agents/:agentId/settings",
-      "global_agent": "/global-agent"
+      "global_agent": "/global-agent",
+      "workflows": "/workflows"
     },
     "desktop": {
       "$comment": "The desktop app draws the web client (ADR 0009, ADR 0020), so it takes every web route that exists on the desktop and adds its own. `$extends` names the surface whose routes are inherited; nav:check resolves it the same way the client does.",

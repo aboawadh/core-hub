@@ -16,11 +16,11 @@ object PendingList {
     fun merge(groups: List<List<Approval>>): List<Approval> =
         groups.flatten().filter { it.status == ApprovalStatus.PENDING }.distinctBy { it.id }.sortedBy { it.createdAt }
 
-    /** Where a waiting thing is handled: its room, its conversation, or Schedules for a workflow's step. */
+    /** Where a waiting thing is handled: its room, its conversation, or Workflows for a workflow's step. */
     fun routeOf(approval: Approval): Route? = when {
         approval.roomId != null -> Route.Room(approval.roomId!!, approval.profile)
         approval.sessionId != null -> Route.Chat(approval.sessionId!!, approval.profile)
-        approval.workflowRunId != null -> Route.Schedules
+        approval.workflowRunId != null -> Route.Workflows
         else -> null
     }
 }

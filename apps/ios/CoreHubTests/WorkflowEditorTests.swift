@@ -81,36 +81,194 @@ final class WorkflowEditorTests: XCTestCase {
         XCTAssertFalse(WorkflowEditRules.canSave(draft, validation: nil))
     }
 
-    func testAConditionsRulesAreShownAndKeptWhenSaved() throws {
-        // Several rules (§123) come from the web; the phone shows them and saves them untouched.
-        let json = #"{"match":"any","items":[{"path":"trigger.event","operator":"==","value":"taskCreated"},{"path":"trigger.task_id","operator":"exists","value":null}]}"#
-        let rules = try JSONDecoder().decode(WorkflowRules.self, from: Data(json.utf8))
-        let shown = WorkflowEditRules.ruleLines(rules)
-        XCTAssertEqual(shown.match, "any")
-        XCTAssertEqual(shown.lines, [#"trigger.event == "taskCreated""#, "trigger.task_id exists"])
-        XCTAssertTrue(WorkflowEditRules.ruleLines(nil).lines.isEmpty)
+    /// A node as the hub reads it: the JSON the write encodes.
+    private func json(_ value: some Encodable) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as? [String: Any])
+    }
+
+    func testAConditionsRulesRoundTripExactly() throws {
+        // Several rules (§123) come from the hub; saved here, they go back as they came — an
+        // operator this app does not offer included (it is a plain string).
+        let raw = #"{"match":"any","items":[{"path":"trigger.event","operator":"==","value":"taskCreated"},{"path":"trigger.task_id","operator":"exists","value":null},{"path":"trigger.body.x","operator":"~=","value":"a"}]}"#
+        let rules = try JSONDecoder().decode(WorkflowRules.self, from: Data(raw.utf8))
         var draft = empty()
         draft.name = "Filter"
         WorkflowEditRules.add(.condition, title: "Only new", to: &draft)
         draft.nodes[0].rules = rules
-        XCTAssertEqual(WorkflowEditRules.write(draft, clearing: false).nodes?[0].rules, rules)
+        let written = try XCTUnwrap(WorkflowEditRules.write(draft, clearing: true).nodes?.first)
+        XCTAssertEqual(written.rules, rules)
         XCTAssertEqual(WorkflowEditRules.check(draft).nodes?[0].rules, rules)
-        XCTAssertEqual(
-            WorkflowEditRules.triggerURL(hub: "https://hub.example/", path: "/hooks/T1"),
-            "https://hub.example/hooks/T1"
-        )
+        let sent = try json(written)["rules"] as? [String: Any]
+        let original = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? NSDictionary)
+        XCTAssertEqual(sent.map { NSDictionary(dictionary: $0) }, original)
+        // A condition this app never gave rules says nothing about them: the hub keeps its own.
+        var plain = empty()
+        WorkflowEditRules.add(.condition, title: "C", to: &plain)
+        let untouched = try json(XCTUnwrap(WorkflowEditRules.write(plain, clearing: true).nodes?.first))
+        XCTAssertFalse(untouched.keys.contains("rules"))
     }
 
-    func testASendMessageStepIsShownAndKeptWhenSaved() throws {
-        // A notify node with targets (§124) comes from the web; the phone shows and keeps them.
-        let json = #"{"targets":[{"platform":"telegram","chat_id":"-1001"},{"platform":"core_hub","session_id":"01J8QK3ZR2W7M5N4P6T8V9X0SS","title":"Reports","agent_id":null}]}"#
-        let send = try JSONDecoder().decode(WorkflowSend.self, from: Data(json.utf8))
-        XCTAssertEqual(WorkflowEditRules.sendLines(send), ["telegram -1001", #"conversation "Reports""#])
+    func testSwitchingSeveralRulesOnStartsFromTheComparisonAndOffSendsAnExplicitNull() throws {
+        var draft = empty()
+        draft.name = "Filter"
+        WorkflowEditRules.add(.condition, title: "C", to: &draft)
+        draft.nodes[0].input = "trigger.count >= 3"
+        WorkflowEditRules.setSeveralRules(true, node: &draft.nodes[0])
+        XCTAssertEqual(draft.nodes[0].rules, WorkflowRules(match: .all, items: [WorkflowRule(path: "trigger.count", _operator: ">=", value: "3")]))
+        XCTAssertFalse(draft.nodes[0].sendNull.contains(.rules))
+        WorkflowEditRules.setSeveralRules(false, node: &draft.nodes[0])
+        XCTAssertNil(draft.nodes[0].rules)
+        let off = try json(XCTUnwrap(WorkflowEditRules.write(draft, clearing: true).nodes?.first))
+        XCTAssertTrue(off["rules"] is NSNull, "switched off, the rules are removed on the hub too")
+        XCTAssertEqual(off["input"] as? String, "trigger.count >= 3", "the single line stays")
+        // On again after off: the rules are sent, not the null.
+        WorkflowEditRules.setSeveralRules(true, node: &draft.nodes[0])
+        let on = try json(XCTUnwrap(WorkflowEditRules.write(draft, clearing: true).nodes?.first))
+        XCTAssertNotNil(on["rules"] as? [String: Any])
+        // No rule left at all: the same explicit null.
+        draft.nodes[0].rules?.items = []
+        let emptied = try json(XCTUnwrap(WorkflowEditRules.write(draft, clearing: true).nodes?.first))
+        XCTAssertTrue(emptied["rules"] is NSNull)
+    }
+
+    func testTheFirstRuleIsTheSingleComparisonOrTheTriggersEvent() {
+        XCTAssertEqual(WorkflowEditRules.firstRule("input exists"), WorkflowRule(path: "input", _operator: "exists", value: nil))
+        XCTAssertEqual(WorkflowEditRules.firstRule(#"steps.a.output contains "done""#), WorkflowRule(path: "steps.a.output", _operator: "contains", value: "done"))
+        let event = WorkflowRule(path: "trigger.event", _operator: "==", value: "")
+        XCTAssertEqual(WorkflowEditRules.firstRule(nil), event)
+        XCTAssertEqual(WorkflowEditRules.firstRule(""), event)
+        XCTAssertEqual(WorkflowEditRules.firstRule("a and b"), event)
+    }
+
+    func testEditingRulesKeepsValuesTheWayTheEngineReadsThem() {
+        var rules = WorkflowRules(match: .all, items: [WorkflowRule(path: "trigger.event", _operator: "==", value: "taskCreated")])
+        rules = WorkflowEditRules.setRule(rules, at: 0, op: "exists")
+        XCTAssertNil(rules.items[0].value, "exists and empty carry no value")
+        rules = WorkflowEditRules.setRule(rules, at: 0, op: "!=")
+        XCTAssertEqual(rules.items[0].value, "", "back to a comparison: an empty value")
+        rules = WorkflowEditRules.setRule(rules, at: 0, path: "trigger.task_id", value: "T1")
+        XCTAssertEqual(rules.items[0], WorkflowRule(path: "trigger.task_id", _operator: "!=", value: "T1"))
+        XCTAssertEqual(WorkflowEditRules.setRule(rules, at: 5, path: "x"), rules, "an index out of range changes nothing")
+        XCTAssertEqual(WorkflowEditRules.removeRule(rules, at: 0), rules, "the last rule stays")
+        rules = WorkflowEditRules.addRule(rules)
+        XCTAssertEqual(rules.items.last, WorkflowRule(path: "trigger.event", _operator: "==", value: ""))
+        XCTAssertEqual(WorkflowEditRules.removeRule(rules, at: 0).items, [WorkflowRule(path: "trigger.event", _operator: "==", value: "")])
+        var draft = empty()
+        WorkflowEditRules.add(.agent, title: "A", to: &draft)
+        WorkflowEditRules.add(.condition, title: "B", to: &draft)
+        XCTAssertEqual(WorkflowEditRules.ruleSuggestions(draft, of: "condition_1"), WorkflowEditRules.triggerPaths + ["input", "steps.agent_1.output"])
+        XCTAssertEqual(WorkflowEditRules.triggerPaths.first, "trigger.event")
+    }
+
+    func testSendTargetsAreAddedAndRemovedAndAnUnknownPlatformIsKept() throws {
+        let raw = #"{"targets":[{"platform":"whatsapp","chat_id":"+9665"},{"platform":"core_hub","session_id":"01J8QK3ZR2W7M5N4P6T8V9X0SS","title":"Reports"}]}"#
+        var send = try JSONDecoder().decode(WorkflowSend.self, from: Data(raw.utf8))
+        let whatsapp = send.targets[0]
+        send = WorkflowEditRules.setTarget(send, platform: "telegram", WorkflowEditRules.telegramTarget(chatID: " -1001 "))
+        XCTAssertEqual(WorkflowEditRules.target(send, "telegram")?.chatId, "-1001")
+        send = WorkflowEditRules.setTarget(send, platform: "telegram", WorkflowEditRules.telegramTarget(chatID: "-1002"))
+        XCTAssertEqual(send.targets.filter { $0.platform == "telegram" }.count, 1, "one target per platform")
+        send = WorkflowEditRules.setTarget(send, platform: "core_hub", nil)
+        XCTAssertNil(WorkflowEditRules.target(send, "core_hub"))
+        XCTAssertEqual(send.targets.map(\.platform), ["whatsapp", "telegram"])
+        XCTAssertEqual(send.targets.first, whatsapp, "a platform this app does not know is kept untouched")
+        let session = Session(id: "01J8QK3ZR2W7M5N4P6T8V9X0SS", profile: "work", ownerId: "u1", createdAt: Fixture.date, updatedAt: Fixture.date,
+                              agentId: "01J8QK3ZR2W7M5N4P6T8V9X0AG", title: "Reports", source: .chat, pinned: false, archived: false,
+                              messageCount: 0, status: .idle, notify: false)
+        XCTAssertEqual(WorkflowEditRules.conversationTarget(session),
+                       WorkflowSendTarget(platform: "core_hub", sessionId: session.id, title: "Reports", agentId: "01J8QK3ZR2W7M5N4P6T8V9X0AG"))
+        XCTAssertEqual(WorkflowEditRules.conversationTarget(nil), WorkflowSendTarget(platform: "core_hub"))
+        XCTAssertTrue(WorkflowEditRules.canTestSend(send, text: "Hello"))
+        XCTAssertFalse(WorkflowEditRules.canTestSend(send, text: "  "))
+        XCTAssertFalse(WorkflowEditRules.canTestSend(WorkflowSend(targets: []), text: "Hello"))
+        XCTAssertEqual(WorkflowEditRules.sendTest(send, text: " Hi ").text, "Hi")
+        let result = WorkflowSendResult(status: .partial, messageIds: [], deliveredTo: ["telegram:-1002"],
+                                        failures: [WorkflowSendResultFailuresInner(target: "whatsapp:+9665", reason: "unknown platform")])
+        XCTAssertEqual(WorkflowEditRules.failureLines(result), ["whatsapp:+9665: unknown platform"])
+    }
+
+    func testTheSendMessageEntryAddsANotifyStepWithNoTargetYet() throws {
         var draft = empty()
         draft.name = "Report"
-        WorkflowEditRules.add(.notify, title: "Send", to: &draft)
-        draft.nodes[0].send = send
-        XCTAssertEqual(WorkflowEditRules.write(draft, clearing: false).nodes?[0].send, send)
+        WorkflowEditRules.add(.agent, title: "A", to: &draft)
+        let id = WorkflowEditRules.addSend(title: "Send message", to: &draft)
+        XCTAssertEqual(id, "notify_1")
+        XCTAssertEqual(draft.nodes.last?.kind, .notify)
+        XCTAssertEqual(draft.nodes.last?.title, "Send message")
+        XCTAssertEqual(draft.nodes.last?.send, WorkflowSend(targets: []))
+        XCTAssertEqual(draft.edges.last.map { "\($0.from)>\($0.to)" }, "agent_1>notify_1")
+        let sent = try json(XCTUnwrap(WorkflowEditRules.write(draft, clearing: false).nodes?.last))
+        XCTAssertEqual((sent["send"] as? [String: Any])?["targets"] as? [String], [])
+    }
+
+    private func saved(onFailure: WorkflowFailureAlert?) -> Workflow {
+        Workflow(id: "01J8QK3ZR2W7M5N4P6T8V9X0WF", profile: "work", ownerId: "u1", createdAt: Fixture.date, updatedAt: Fixture.date,
+                 name: "Report", nodes: [], edges: [], status: .idle, runCount: 0, scheduleCount: 0, limits: WorkflowLimits(),
+                 onFailure: onFailure)
+    }
+
+    func testTheFailureAlertIsWrittenOnlyWhenChangedAndClearedWithANull() throws {
+        let alert = WorkflowFailureAlert(inbox: true, send: WorkflowSend(targets: [WorkflowSendTarget(platform: "telegram", chatId: "-1")]))
+        var draft = WorkflowEditRules.draft(saved(onFailure: alert))
+        XCTAssertEqual(draft.onFailure, alert)
+        // Untouched: left out, so the hub keeps what it has (and what this app cannot read).
+        let untouched = WorkflowEditRules.write(draft, clearing: true)
+        XCTAssertNil(untouched.onFailure)
+        XCTAssertFalse(untouched.sendNull.contains(.onFailure))
+        XCTAssertFalse(try json(untouched).keys.contains("on_failure"))
+        // The inbox alone: the alert, with no targets (an explicit null).
+        WorkflowEditRules.setAlert(inbox: true, send: WorkflowSend(targets: []), in: &draft)
+        let inbox = try json(WorkflowEditRules.write(draft, clearing: true))
+        let written = try XCTUnwrap(inbox["on_failure"] as? [String: Any])
+        XCTAssertEqual(written["inbox"] as? Bool, true)
+        XCTAssertTrue(written["send"] is NSNull)
+        // Targets alone keep an alert too.
+        WorkflowEditRules.setAlert(inbox: false, send: WorkflowSend(targets: [WorkflowSendTarget(platform: "core_hub")]), in: &draft)
+        XCTAssertEqual(draft.onFailure?.inbox, false)
+        XCTAssertEqual(draft.onFailure?.send?.targets.count, 1)
+        // Nothing left: cleared on the hub with a null.
+        WorkflowEditRules.setAlert(inbox: false, send: WorkflowSend(targets: []), in: &draft)
+        XCTAssertNil(draft.onFailure)
+        let cleared = WorkflowEditRules.write(draft, clearing: true)
+        XCTAssertTrue(cleared.sendNull.contains(.onFailure))
+        XCTAssertTrue(try json(cleared)["on_failure"] is NSNull)
+        // A new workflow (a copy) carries what it has and never sends a null.
+        let copy = WorkflowEditRules.copy(saved(onFailure: alert), name: "Report (copy)")
+        XCTAssertEqual(WorkflowEditRules.write(copy, clearing: false).onFailure, alert)
+        var fresh = empty()
+        WorkflowEditRules.setAlert(inbox: false, send: nil, in: &fresh)
+        XCTAssertFalse(WorkflowEditRules.write(fresh, clearing: false).sendNull.contains(.onFailure))
+    }
+
+    func testATriggersAddressIsTheHubTheAppIsSignedInToAndItsPath() {
+        XCTAssertEqual(WorkflowEditRules.triggerURL(hub: "https://hub.example/", path: "/hooks/T1"), "https://hub.example/hooks/T1")
+        XCTAssertEqual(WorkflowEditRules.triggerURL(hub: "http://10.0.0.2:8080", path: "/hooks/T1"), "http://10.0.0.2:8080/hooks/T1")
+    }
+
+    func testTryingAStepSendsItAsWrittenWithTheSamplesAndRefusesBadJSON() throws {
+        var draft = empty()
+        WorkflowEditRules.add(.notify, title: "Tell", to: &draft)
+        draft.nodes[0].agentId = "stray"
+        XCTAssertEqual(WorkflowEditRules.stepTest(node: draft.nodes[0], input: "", trigger: "{not json", execute: false), .failure(.badJSON))
+        guard case .success(let body) = WorkflowEditRules.stepTest(node: draft.nodes[0], input: "  ", trigger: WorkflowEditRules.sampleTrigger, execute: true) else {
+            return XCTFail("the sample event is valid JSON")
+        }
+        XCTAssertNil(body.node.agentId, "the step as it would be saved")
+        XCTAssertEqual(body.execute, false, "only an agent step runs for real")
+        XCTAssertNil(body.input)
+        XCTAssertTrue(try json(body)["input"] is NSNull, "no sample input is an explicit null")
+        XCTAssertEqual(body.trigger?["event"], JSONValue.string("taskStatusUpdated"))
+        XCTAssertEqual(body.trigger?["task_id"], JSONValue.string("sample-task"))
+        XCTAssertEqual(body.trigger?["body"]?["history_items"]?[0]?["after"]?["status"], JSONValue.string("review"))
+        var agent = empty()
+        WorkflowEditRules.add(.agent, title: "A", to: &agent, agentID: "A1")
+        guard case .success(let run) = WorkflowEditRules.stepTest(node: agent.nodes[0], input: " hi ", trigger: "", execute: true) else {
+            return XCTFail("an empty event is no event")
+        }
+        XCTAssertEqual(run.execute, true)
+        XCTAssertEqual(run.input, "hi")
+        XCTAssertNil(run.trigger)
+        XCTAssertEqual(run.node.agentId, "A1")
     }
 
     func testTheLiveCheckSendsTheDrawingWithoutTheName() {

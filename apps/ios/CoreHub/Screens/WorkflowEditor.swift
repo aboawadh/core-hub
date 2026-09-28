@@ -1,11 +1,12 @@
 // A workflow drawn on the phone (the web draws it on a canvas, WorkflowEditor.tsx): its name, its
-// steps as a list — each opened to edit what the engine does with it and what follows it — and
-// the hub's check of the drawing as it changes (`schedules.validateWorkflow`). Saving is
-// `createWorkflow` / `updateWorkflow` with the contract's `WorkflowWrite`, so a workflow made here
-// opens on the web's canvas, and one drawn there is edited here. Rules: WorkflowEditRules.swift.
+// steps as a list — each opened to edit what the engine does with it and what follows it, a
+// condition's several rules, a "Send message" step's targets, and "Test this step" — who is told
+// when a run fails, its triggers (WorkflowTriggers.swift), and the hub's check of the drawing as
+// it changes (`schedules.validateWorkflow`). Saving is `createWorkflow` / `updateWorkflow` with the
+// contract's `WorkflowWrite`, so a workflow made here opens on the web's canvas, and one drawn
+// there is edited here. Rules: WorkflowEditRules.swift.
 import CoreHubClient
 import SwiftUI
-import UIKit
 
 struct WorkflowEditorPage: View {
     /// The saved workflow, or nil for a new one.
@@ -24,8 +25,8 @@ struct WorkflowEditorPage: View {
     @State private var saving = false
     @State private var error: String?
     @State private var removing: String?
-    /// The workflow's inbound triggers (§123), shown read-only; empty on an older hub.
-    @State private var triggers: [WorkflowTrigger] = []
+    /// A run opened from a trigger's delivery log.
+    @State private var openedRun: String?
 
     init(original: Workflow?, profile: String, start: WorkflowEditRules.Draft? = nil, saved: @escaping (Workflow) -> Void) {
         self.original = original
@@ -87,6 +88,13 @@ struct WorkflowEditorPage: View {
                         }
                         .accessibilityIdentifier("workflow.edit.add.\(kind.rawValue)")
                     }
+                    // A notice that sends (§124): kept as a `notify` step, so older apps still load it.
+                    Button {
+                        WorkflowEditRules.addSend(title: l10n("workflow_editor.send.title"), to: &draft)
+                    } label: {
+                        Label { Text(l10n("workflow_editor.send.title")) } icon: { Image(lucide: .messagesSquare) }
+                    }
+                    .accessibilityIdentifier("workflow.edit.add.send")
                 } label: {
                     LucideLabel(l10n("workflow_editor.editor.palette"), icon: .plus, size: 16)
                 }
@@ -96,17 +104,8 @@ struct WorkflowEditorPage: View {
             } footer: {
                 Text(l10n("workflow_editor.steps_hint"))
             }
-            if !triggers.isEmpty {
-                Section {
-                    ForEach(triggers, id: \.id) { trigger in
-                        TriggerRow(trigger: trigger, url: WorkflowEditRules.triggerURL(hub: hub, path: trigger.path))
-                    }
-                } header: {
-                    Text(l10n("workflow_editor.triggers.title"))
-                } footer: {
-                    Text(l10n("workflow_editor.triggers.read_only"))
-                }
-            }
+            alertSection
+            WorkflowTriggersSection(workflowID: original?.id, profile: profile) { runID in openedRun = runID }
         }
         .navigationTitle(original == nil ? l10n("workflow_editor.new") : l10n("workflow_editor.edit"))
         .navigationBarTitleDisplayMode(.inline)
@@ -118,7 +117,9 @@ struct WorkflowEditorPage: View {
             }
         }
         .task(id: draft) { await check() }
-        .task { await loadTriggers() }
+        .navigationDestination(item: $openedRun) { runID in
+            WorkflowRunLoader(ref: WorkflowRunRef(runID: runID, profile: profile))
+        }
         .alert(
             l10n("workflow_editor.remove_step_title"),
             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })
@@ -184,16 +185,23 @@ struct WorkflowEditorPage: View {
         }
     }
 
-    private var hub: String { app.credentials?.hubURL.absoluteString ?? "" }
-
-    /// The triggers of a saved workflow. An older hub has none to list: nothing is shown.
-    private func loadTriggers() async {
-        guard let id = original?.id else { return }
-        let profile = profile
-        let listed = try? await app.api.call {
-            try await SchedulesAPI.schedulesListWorkflowTriggers(xHubProfile: profile, workflowId: id, apiConfiguration: $0)
+    /// Who is told when a run fails (§127): the inbox and/or the targets a "Send message" step
+    /// takes. Written only once changed here.
+    private var alertSection: some View {
+        Section {
+            Toggle(l10n("workflow_editor.alert.inbox"), isOn: Binding(
+                get: { draft.onFailure?.inbox ?? false },
+                set: { WorkflowEditRules.setAlert(inbox: $0, send: draft.onFailure?.send, in: &draft) }
+            ))
+            .accessibilityIdentifier("workflow.alert.inbox")
+            SendTargetsForm(send: draft.onFailure?.send ?? WorkflowSend(targets: []), profile: profile, tag: "workflow.alert") { send in
+                WorkflowEditRules.setAlert(inbox: draft.onFailure?.inbox ?? false, send: send, in: &draft)
+            }
+        } header: {
+            Text(l10n("workflow_editor.alert.title"))
+        } footer: {
+            Text(l10n("workflow_editor.alert.hint"))
         }
-        triggers = listed?.items ?? []
     }
 
     /// The hub checks the drawing a moment after each change.
@@ -276,6 +284,11 @@ struct WorkflowStepPage: View {
     @State private var pickingModel = false
     /// The profile's model catalogue, as the chat's chips read it.
     @State private var controls: ChatControlsModel
+    /// The rule whose path is being typed: its suggestions show under it.
+    @FocusState private var rulePath: Int?
+    @State private var sending = false
+    @State private var sendResult: WorkflowSendResult?
+    @State private var sendError: String?
 
     private var index: Int? { draft.nodes.firstIndex { $0.id == nodeID } }
 
@@ -307,6 +320,7 @@ struct WorkflowStepPage: View {
                     }
                 }
                 connections(node)
+                StepTestSection(node: node, profile: profile)
                 Section {
                     Button(l10n("workflow_editor.editor.delete_step"), role: .destructive) {
                         // Leave the page first: its fields must not read a step that is gone.
@@ -370,18 +384,9 @@ struct WorkflowStepPage: View {
             delaySection(index)
         case .notify:
             if let send = draft.nodes[index].send {
-                // A "Send message" step (§124): its words here, its targets shown and kept.
-                templateSection(index, label: "workflow_editor.send.message", footer: "workflow_editor.send.read_only")
-                Section {
-                    ForEach(Array(WorkflowEditRules.sendLines(send).enumerated()), id: \.offset) { _, line in
-                        Text(line)
-                            .font(.system(size: FontSize.sizeXs, design: .monospaced))
-                            .environment(\.layoutDirection, .leftToRight)
-                            .accessibilityIdentifier("workflow.step.send_target")
-                    }
-                } header: {
-                    Text(l10n("workflow_editor.send.targets"))
-                }
+                // A "Send message" step (§124): its words, then where they go.
+                templateSection(index, label: "workflow_editor.send.message", footer: "workflow_editor.send.hint")
+                sendSection(index, send)
             } else {
                 templateSection(index, label: "workflow_editor.form.notify_text", footer: "workflow_editor.form.notify_to")
             }
@@ -422,24 +427,61 @@ struct WorkflowStepPage: View {
         draft.nodes[index].input = current.isEmpty || current.hasSuffix(" ") || current.hasSuffix("\n") ? current + text : current + " " + text
     }
 
+    /// Where a "Send message" step's words go, and "Send test message" (§124).
+    @ViewBuilder
+    private func sendSection(_ index: Int, _ send: WorkflowSend) -> some View {
+        Section {
+            SendTargetsForm(send: send, profile: profile) { next in draft.nodes[index].send = next }
+            Button {
+                Task { await testSend(send, text: draft.nodes[index].input) }
+            } label: {
+                LucideLabel(l10n("workflow_editor.send.test"), icon: .play, size: 16)
+            }
+            .disabled(sending || !WorkflowEditRules.canTestSend(send, text: draft.nodes[index].input))
+            .accessibilityIdentifier("workflow.send.test")
+            if let sendError { NoticeView(text: sendError, tone: .danger) }
+            if let sendResult {
+                VStack(alignment: .leading, spacing: Space.s1) {
+                    Text(l10n("workflow_editor.send.status.\(sendResult.status.rawValue)"))
+                        .font(.system(size: FontSize.sizeSm, weight: .medium))
+                    ForEach(WorkflowEditRules.failureLines(sendResult), id: \.self) { line in
+                        Text(line).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.danger).contentDirection(of: line)
+                    }
+                }
+                .accessibilityIdentifier("workflow.send.test_result")
+            }
+        } header: {
+            Text(l10n("workflow_editor.send.targets"))
+        }
+    }
+
+    private func testSend(_ send: WorkflowSend, text: String?) async {
+        sending = true
+        defer { sending = false }
+        let profile = profile, body = WorkflowEditRules.sendTest(send, text: text)
+        do {
+            sendResult = try await app.api.call {
+                try await SchedulesAPI.schedulesTestWorkflowSend(xHubProfile: profile, workflowSendTest: body, apiConfiguration: $0)
+            }
+            sendError = nil
+        } catch {
+            sendResult = nil
+            sendError = HubFailure(error).describe(l10n)
+        }
+    }
+
     @ViewBuilder
     private func conditionSection(_ index: Int) -> some View {
         let parts = WorkflowEditRules.split(draft.nodes[index].input ?? "")
-        let rules = WorkflowEditRules.ruleLines(draft.nodes[index].rules)
-        if !rules.lines.isEmpty {
-            // Several rules (§123): shown and kept as they are; edited on the web.
-            Section {
-                ForEach(Array(rules.lines.enumerated()), id: \.offset) { _, line in
-                    Text(line)
-                        .font(.system(size: FontSize.sizeXs, design: .monospaced))
-                        .environment(\.layoutDirection, .leftToRight)
-                        .accessibilityIdentifier("workflow.step.rule")
-                }
-            } header: {
-                Text(l10n(rules.match == "any" ? "workflow_editor.rules.any" : "workflow_editor.rules.all"))
-            } footer: {
-                Text(l10n("workflow_editor.rules.read_only"))
-            }
+        Section {
+            Toggle(l10n("workflow_editor.form.rules_toggle"), isOn: Binding(
+                get: { draft.nodes[index].rules != nil },
+                set: { WorkflowEditRules.setSeveralRules($0, node: &draft.nodes[index]) }
+            ))
+            .accessibilityIdentifier("workflow.step.rules_toggle")
+        }
+        if let rules = draft.nodes[index].rules {
+            rulesSection(index, rules)
         } else if rawCondition || parts == nil {
             Section {
                 TextField(l10n("workflow_editor.form.condition_text"), text: Binding(
@@ -492,6 +534,91 @@ struct WorkflowStepPage: View {
             } footer: {
                 Text(l10n("workflow_editor.form.condition_path_hint") + " " + l10n("workflow_editor.form.condition_routes_hint"))
             }
+        }
+    }
+
+    /// A condition's several rules (§123): every one must hold, or any one; each a path (with the
+    /// paths a run can read offered while it is typed), an operator and a value.
+    @ViewBuilder
+    private func rulesSection(_ index: Int, _ rules: WorkflowRules) -> some View {
+        let set: (WorkflowRules) -> Void = { draft.nodes[index].rules = $0 }
+        let suggestions = WorkflowEditRules.ruleSuggestions(draft, of: nodeID)
+        Section {
+            Picker(l10n("workflow_editor.form.rules_match"), selection: Binding(
+                get: { rules.match },
+                set: { var next = rules; next.match = $0; set(next) }
+            )) {
+                Text(l10n("workflow_editor.form.rules_all")).tag(WorkflowRules.Match.all)
+                Text(l10n("workflow_editor.form.rules_any")).tag(WorkflowRules.Match.any)
+            }
+            .accessibilityIdentifier("workflow.step.rules_match")
+            ForEach(Array(rules.items.enumerated()), id: \.offset) { at, rule in
+                VStack(alignment: .leading, spacing: Space.s2) {
+                    HStack(spacing: Space.s2) {
+                        TextField("trigger.event", text: Binding(
+                            get: { rule.path },
+                            set: { set(WorkflowEditRules.setRule(rules, at: at, path: $0)) }
+                        ))
+                        .monoField()
+                        .focused($rulePath, equals: at)
+                        .accessibilityLabel(l10n("workflow_editor.form.condition_path"))
+                        .accessibilityIdentifier("workflow.step.rule.\(at).path")
+                        Button {
+                            set(WorkflowEditRules.removeRule(rules, at: at))
+                        } label: {
+                            LucideIcon(.x, size: 14).tapTarget()
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(rules.items.count == 1)
+                        .accessibilityLabel(l10n("workflow_editor.form.rules_remove"))
+                        .accessibilityIdentifier("workflow.step.rule.\(at).remove")
+                    }
+                    if rulePath == at {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Space.s1) {
+                                ForEach(suggestions, id: \.self) { path in
+                                    Button(path) { set(WorkflowEditRules.setRule(rules, at: at, path: path)) }
+                                        .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                                        .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                        .environment(\.layoutDirection, .leftToRight)
+                    }
+                    Picker(l10n("workflow_editor.form.condition_operator"), selection: Binding(
+                        get: { rule._operator },
+                        set: { set(WorkflowEditRules.setRule(rules, at: at, op: $0)) }
+                    )) {
+                        ForEach(WorkflowEditRules.operators, id: \.self) { op in
+                            Text(l10n("workflow_editor.form.operators.\(WorkflowEditRules.operatorKey[op] ?? "eq")")).tag(op)
+                        }
+                        // An operator this app does not offer stays as saved.
+                        if !WorkflowEditRules.operators.contains(rule._operator) {
+                            Text(rule._operator).tag(rule._operator)
+                        }
+                    }
+                    .accessibilityIdentifier("workflow.step.rule.\(at).operator")
+                    if !WorkflowEditRules.unary.contains(rule._operator) {
+                        TextField(l10n("workflow_editor.form.condition_value"), text: Binding(
+                            get: { rule.value ?? "" },
+                            set: { set(WorkflowEditRules.setRule(rules, at: at, value: $0)) }
+                        ))
+                        .contentDirection(of: rule.value ?? "")
+                        .accessibilityIdentifier("workflow.step.rule.\(at).value")
+                    }
+                }
+                .padding(.vertical, Space.s1)
+            }
+            Button {
+                set(WorkflowEditRules.addRule(rules))
+            } label: {
+                LucideLabel(l10n("workflow_editor.form.rules_add"), icon: .plus, size: 14)
+            }
+            .accessibilityIdentifier("workflow.step.rules_add")
+        } header: {
+            Text(l10n("workflow_editor.kinds.condition"))
+        } footer: {
+            Text(l10n("workflow_editor.form.rules_hint"))
         }
     }
 
@@ -584,46 +711,3 @@ struct WorkflowStepPage: View {
     }
 }
 
-
-/// One inbound trigger of a workflow (§123): its sender, its address to copy, and whether a
-/// secret is stored. Changed on the web.
-private struct TriggerRow: View {
-    let trigger: WorkflowTrigger
-    let url: String
-    @Environment(\.l10n) private var l10n
-    @State private var copied = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Space.s2) {
-            HStack(spacing: Space.s1) {
-                Text(trigger.name).font(.system(size: FontSize.sizeMd, weight: .semibold))
-                StatusPill(text: l10n("workflow_editor.triggers.presets.\(trigger.preset.rawValue)"))
-                if !trigger.enabled { StatusPill(text: l10n("workflow_editor.triggers.off"), kind: .warn) }
-            }
-            HStack {
-                Text(url).font(.system(size: FontSize.sizeXs, design: .monospaced)).lineLimit(2).textSelection(.enabled)
-                    .accessibilityIdentifier("workflow.trigger.\(trigger.id).url")
-                Spacer()
-                Button {
-                    UIPasteboard.general.string = url
-                    copied = true
-                } label: {
-                    Text(copied ? l10n("workflow_editor.triggers.copied") : l10n("workflow_editor.triggers.copy"))
-                        .font(.system(size: FontSize.sizeXs))
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("workflow.trigger.\(trigger.id).copy")
-            }
-            .environment(\.layoutDirection, .leftToRight)
-            Text(trigger.secretStored ? l10n("workflow_editor.triggers.secret_stored") : l10n("workflow_editor.triggers.secret_missing"))
-                .font(.system(size: FontSize.sizeXs))
-                .foregroundStyle(Tone.textMuted)
-            if !trigger.events.isEmpty {
-                Text(trigger.events.joined(separator: ", "))
-                    .font(.system(size: FontSize.sizeXs, design: .monospaced))
-                    .foregroundStyle(Tone.textMuted)
-                    .environment(\.layoutDirection, .leftToRight)
-            }
-        }
-    }
-}

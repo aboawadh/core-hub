@@ -52,7 +52,11 @@ object NoticeTracker {
             if (id.isNullOrBlank()) "/settings/notifications"
             else "/chat/${enc(id)}" + (profile?.takeIf { it.isNotBlank() }?.let { "?profile=${enc(it)}" } ?: "")
         ResourceRef.Kind.TASK.value, ResourceRef.Kind.PROJECT.value -> "/tasks"
-        ResourceRef.Kind.SCHEDULE.value, ResourceRef.Kind.SCHEDULE_RUN.value, ResourceRef.Kind.WORKFLOW_RUN.value -> "/schedules"
+        ResourceRef.Kind.SCHEDULE.value, ResourceRef.Kind.SCHEDULE_RUN.value -> "/schedules"
+        // A workflow run opens on Workflows, the run itself when the notice names it (DECISIONS §128).
+        ResourceRef.Kind.WORKFLOW_RUN.value ->
+            if (id.isNullOrBlank()) "/workflows"
+            else "/workflows?workflow_run=${enc(id)}" + (profile?.takeIf { it.isNotBlank() }?.let { "&profile=${enc(it)}" } ?: "")
         else -> "/settings/notifications"
     }
 

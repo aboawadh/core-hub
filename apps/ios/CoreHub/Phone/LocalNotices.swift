@@ -88,7 +88,7 @@ final class LocalNotices: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func follow(_ tap: NoticeRouting.Tap, app: AppModel) {
-        app.pendingRoute = NoticeRouting.route(kind: tap.kind, sessionID: tap.sessionID, profile: tap.profile, selector: app.currentProfile)
+        app.pendingRoute = NoticeRouting.route(kind: tap.kind, sessionID: tap.sessionID, profile: tap.profile, selector: app.currentProfile, runID: tap.runID)
     }
 
     private func post(_ notice: Notice) {
@@ -149,6 +149,8 @@ enum NoticeRouting {
     static let profileKey = "profile"
     static let kindKey = "resource_kind"
     static let noticeKey = "notice_id"
+    /// A workflow run's id, so a tap opens that run.
+    static let runKey = "workflow_run_id"
 
     /// What a tapped or arriving notification says about its notice.
     struct Tap: Equatable {
@@ -156,6 +158,8 @@ enum NoticeRouting {
         var sessionID: String?
         var profile: String?
         var noticeID: String?
+        /// The workflow run a notice is about (`resource.kind = workflow_run`).
+        var runID: String? = nil
     }
 
     /// Reads both shapes: a local notice's flat keys (`userInfo(for:)`) and the hub's push
@@ -165,12 +169,16 @@ enum NoticeRouting {
             kind: info[kindKey] as? String,
             sessionID: info[sessionKey] as? String,
             profile: info[profileKey] as? String,
-            noticeID: info[noticeKey] as? String
+            noticeID: info[noticeKey] as? String,
+            runID: info[runKey] as? String
         )
         if let resource = info["resource"] as? [String: Any], let kind = resource["kind"] as? String {
             tap.kind = tap.kind ?? kind
             if kind == "session", let id = resource["id"] as? String, !id.isEmpty {
                 tap.sessionID = tap.sessionID ?? id
+            }
+            if kind == "workflow_run", let id = resource["id"] as? String, !id.isEmpty {
+                tap.runID = tap.runID ?? id
             }
         }
         return tap
@@ -182,6 +190,7 @@ enum NoticeRouting {
         if let resource = notice.resource {
             info[kindKey] = resource.kind.rawValue
             if resource.kind == .session { info[sessionKey] = resource.id }
+            if resource.kind == .workflowRun { info[runKey] = resource.id }
         }
         return info
     }
@@ -194,11 +203,16 @@ enum NoticeRouting {
         Array((posted + [id]).suffix(300))
     }
 
-    static func route(kind: String?, sessionID: String?, profile: String?, selector: String) -> MainContent? {
+    /// A workflow or its run opens Workflows (the run itself when its id is known); a schedule, Schedules.
+    static func route(kind: String?, sessionID: String?, profile: String?, selector: String, runID: String? = nil) -> MainContent? {
         if let sessionID { return .chat(sessionID: sessionID, profile: profile ?? selector) }
         switch kind {
         case "task", "subtask", "project", "worktree": return .destination(.tasks)
-        case "schedule", "schedule_run", "workflow", "workflow_run", "step": return .destination(.schedules)
+        case "schedule", "schedule_run": return .destination(.schedules)
+        case "workflow_run":
+            if let runID, !runID.isEmpty { return .workflowRun(runID: runID, profile: profile ?? selector) }
+            return .destination(.workflows)
+        case "workflow", "step": return .destination(.workflows)
         case "agent": return .destination(.agentManager)
         default: return nil
         }

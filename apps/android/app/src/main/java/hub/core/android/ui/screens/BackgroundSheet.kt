@@ -106,17 +106,17 @@ object BackgroundRules {
         JobKind.WEBHOOK_TEST to Route.SettingsPage("webhooks"),
         JobKind.DEVICE_REQUEST to Route.SettingsPage("device_connections"),
         JobKind.SCHEDULE_RUN to Route.Schedules,
-        JobKind.WORKFLOW_RUN to Route.Schedules,
+        JobKind.WORKFLOW_RUN to Route.Workflows,
     )
 
     /**
-     * Where an item lives: the task board (a task run), Schedules (a workflow run), its conversation
+     * Where an item lives: the task board (a task run), Workflows (a workflow run), its conversation
      * (a chat or schedule run, a subagent — the Subagents sheet is there), or the page its job is
      * about; null when it has no place of its own.
      */
     fun routeOf(item: BackgroundItem): Route? = when {
         item.kind == BackgroundKind.TASK_RUN -> Route.Tasks
-        item.kind == BackgroundKind.WORKFLOW_RUN -> Route.Schedules
+        item.kind == BackgroundKind.WORKFLOW_RUN -> Route.Workflows
         item.sessionId != null -> Route.Chat(item.sessionId!!, item.profile)
         item.kind == BackgroundKind.JOB -> item.jobKind?.let(jobPages::get)
             ?: if (item.resource?.kind == ResourceRef.Kind.AGENT) Route.Agents else null

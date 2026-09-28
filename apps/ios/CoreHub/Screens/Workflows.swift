@@ -1,5 +1,5 @@
-// Workflows on the phone (B13): every workflow of every profile the person may enter (the
-// Schedules page's second half, as on the web), run with the limits the hub supports, and a
+// Workflows on the phone (B13): every workflow of every profile the person may enter (their own
+// page, WorkflowsScreen.swift, as on the web), run with the limits the hub supports, and a
 // read-only view of a run whose steps follow it live — a waiting step is approved or denied right
 // there, and a finished run is run again from any step. A workflow is drawn, edited, copied and
 // deleted here too (WorkflowEditor.swift), and its saved limits changed. Every call about a
@@ -106,6 +106,18 @@ enum WorkflowLogic {
         default: return .neutral
         }
     }
+
+    /// "Find a run" (§123): the loaded runs whose task or event id contains the text, in any case.
+    static func find(_ runs: [WorkflowRun], _ text: String) -> [WorkflowRun] {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return runs }
+        return runs.filter { run in
+            [run.taskId, run.eventId].contains { $0?.lowercased().contains(needle) == true }
+        }
+    }
+
+    /// How many runs a workflow's page reads, so "Find a run" has something to look through.
+    static let runsPage = 50
 
     static func icon(_ kind: WorkflowNode.Kind?) -> Lucide {
         switch kind {
@@ -237,7 +249,7 @@ final class WorkflowRunModel {
     }
 }
 
-/// The Workflows half of Schedules: a row per workflow, its profile's badge when there are several.
+/// The Workflows page's list: a row per workflow, its profile's badge when there are several.
 struct WorkflowsList: View {
     /// Bumped by the page when a workflow was made or changed elsewhere (the New button).
     var refresh = 0
@@ -325,6 +337,7 @@ struct WorkflowDetail: View {
     @State private var opened: String?
     @State private var runsKey = 0
     @State private var runs: [WorkflowRun]?
+    @State private var find = ""
 
     var body: some View {
         let (limits, problem) = WorkflowLogic.limits(minutes: minutes, cost: cost, stepMinutes: stepMinutes)
@@ -365,13 +378,28 @@ struct WorkflowDetail: View {
                 if let runs {
                     if runs.isEmpty {
                         Text(l10n("workflows.no_runs")).font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.textMuted)
+                    } else {
+                        // The runs about one task or one event (§123), matched on the ids a trigger gave them.
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(l10n("workflow_editor.run_find")).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                            TextField(l10n("workflow_editor.run_find"), text: $find, prompt: Text(l10n("workflow_editor.run_find_hint")))
+                                .monoField()
+                                .accessibilityIdentifier("workflow.runs.find")
+                        }
                     }
-                    ForEach(runs, id: \.id) { run in
+                    ForEach(WorkflowLogic.find(runs, find), id: \.id) { run in
                         Button { opened = run.id } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text((run.startedAt ?? run.createdAt).shortText(app.language))
                                         .font(.system(size: FontSize.sizeSm)).foregroundStyle(Tone.text)
+                                    if let task = run.taskId {
+                                        Text(l10n("workflow_editor.run_task", ["id": task]))
+                                            .font(.system(size: FontSize.sizeXs, design: .monospaced))
+                                            .foregroundStyle(Tone.textMuted)
+                                            .lineLimit(1)
+                                            .environment(\.layoutDirection, .leftToRight)
+                                    }
                                     if let line = run.error ?? run.input {
                                         Text(line).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted).lineLimit(1)
                                     }
@@ -459,7 +487,7 @@ struct WorkflowDetail: View {
         let profile = workflow.profile, id = workflow.id
         do {
             runs = try await app.api.call {
-                try await SchedulesAPI.schedulesListWorkflowRuns(xHubProfile: profile, workflowId: id, limit: 10, apiConfiguration: $0)
+                try await SchedulesAPI.schedulesListWorkflowRuns(xHubProfile: profile, workflowId: id, limit: WorkflowLogic.runsPage, apiConfiguration: $0)
             }.items
         } catch {
             runs = []
@@ -508,15 +536,32 @@ struct WorkflowRunView: View {
                             StatusPill(text: l10n.has("workflow_editor.phase.\(phase)") ? l10n("workflow_editor.phase.\(phase)") : phase)
                                 .accessibilityIdentifier("workflow.run.phase")
                         }
-                        if let task = run.taskId {
-                            StatusPill(text: l10n("workflow_editor.run_task", ["id": task]))
-                        }
                         if let started = run.startedAt {
                             Text(started.shortText(app.language)).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
                         }
                         Spacer()
                         if let cost = run.cost {
                             Text(l10n("workflows.limit_cost", ["amount": cost.amount])).font(.system(size: FontSize.sizeXs)).foregroundStyle(Tone.textMuted)
+                        }
+                    }
+                    // What a trigger's event said about the run (§123): not one to act on, its task, its event.
+                    if run.filtered == true || run.taskId != nil || run.eventId != nil {
+                        HStack(spacing: Space.s2) {
+                            if run.filtered == true {
+                                StatusPill(text: l10n("workflow_editor.run_filtered"))
+                                    .accessibilityIdentifier("workflow.run.filtered")
+                            }
+                            if let task = run.taskId {
+                                StatusPill(text: l10n("workflow_editor.run_task", ["id": task]), kind: .info)
+                                    .environment(\.layoutDirection, .leftToRight)
+                                    .accessibilityIdentifier("workflow.run.task")
+                            }
+                            if let event = run.eventId {
+                                StatusPill(text: l10n("workflow_editor.run_event", ["id": event]))
+                                    .environment(\.layoutDirection, .leftToRight)
+                                    .accessibilityIdentifier("workflow.run.event")
+                            }
+                            Spacer(minLength: 0)
                         }
                     }
                     if let input = run.input, !input.isEmpty {

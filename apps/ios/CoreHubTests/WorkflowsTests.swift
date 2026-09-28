@@ -67,6 +67,23 @@ final class WorkflowsTests: XCTestCase {
         XCTAssertEqual(WorkflowLogic.minutes(1), 1)
     }
 
+    func testFindingARunLooksAtItsTaskAndEventIdsInAnyCase() {
+        func made(_ id: String, task: String?, event: String?) -> WorkflowRun {
+            WorkflowRun(
+                id: id, profile: "work", ownerId: "me", createdAt: date, updatedAt: date, workflowId: "wf", jobId: "job",
+                status: .succeeded, trigger: RunTrigger(kind: .user), steps: [], limits: WorkflowLimits(),
+                eventId: event, taskId: task, filtered: task == nil ? true : nil
+            )
+        }
+        let runs = [made("r1", task: "86ABC12", event: "h-1"), made("r2", task: nil, event: "HIST-99"), made("r3", task: nil, event: nil)]
+        XCTAssertEqual(WorkflowLogic.find(runs, "").map(\.id), ["r1", "r2", "r3"], "nothing typed: every run")
+        XCTAssertEqual(WorkflowLogic.find(runs, " abc ").map(\.id), ["r1"], "a task id, in any case")
+        XCTAssertEqual(WorkflowLogic.find(runs, "hist").map(\.id), ["r2"], "an event id")
+        XCTAssertEqual(WorkflowLogic.find(runs, "h-").map(\.id), ["r1"])
+        XCTAssertTrue(WorkflowLogic.find(runs, "zzz").isEmpty)
+        XCTAssertEqual(WorkflowLogic.runsPage, 50, "enough runs are read to look through")
+    }
+
     func testTheLimitFactsAreInThePersonsLanguage() {
         let facts = WorkflowLogic.facts(workflow().limits, L10n(.en, bundle: Bundle(for: AppModel.self)))
         XCTAssertEqual(facts, ["30 min", "$2.00"])
