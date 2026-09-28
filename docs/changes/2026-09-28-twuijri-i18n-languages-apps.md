@@ -63,7 +63,18 @@ node --test scripts/i18n.test.mjs                 pass 8 · fail 0
 وتسميات بسطر واحد تُقص بلا «…». lint أندرويد لم يكتمل محليًا (نفدت الذاكرة الحرة إلى 5 GB مع
 عمليات أخرى على الجهاز، فأوقفه الحارس) — يُشغَّل في CI.
 
-CI: يُضاف بعد الدفع.
+CI على الطلب #214 (الدفعة 047e1b36): 15 فحصًا كلها خضراء —
+```
+pass | Android build, unit tests, lint          (lint و PseudoLocaleLayoutTest و TextAuditTest ضمنه)
+pass | Build and test on the iOS simulator      (LanguagesTests ضمنه)
+pass | Generate the Swift client (CoreHubClient)
+pass | Lint, typecheck, contracts, client tests, build · Lint, typecheck, contracts, tests, build
+pass | Server unit tests (1/3, 2/3, 3/3) · Translations fit their labels (measured widths)
+pass | Web smoke journeys · Desktop app smoke · Docker image · db:migrate
+pass | PR adds or updates a change record · PR leaves graphify-out/ to the code-map bot
+```
+التشغيل الأول فشل في iOS على اختبار واحد (ترتيب سلسلة `ar-XB`: الأساس قبل رجوعه) وأُصلح؛ البناء
+نفسه نجح من أول مرة.
 
 ## المخاطر والرجوع
 - iOS لا يُبنى محليًا: التغييرات في Swift مثبتة بـCI فقط.
