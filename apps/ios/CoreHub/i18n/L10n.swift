@@ -81,7 +81,7 @@ struct AppLanguage: RawRepresentable, Hashable, Identifiable, Codable {
     }
 
     /// The contract's `Locale` (`ar` | `en`) nearest to this language: the hub's own words and
-    /// the `Accept-Language` of the operations that document only those two (DECISIONS §129).
+    /// the `Accept-Language` of the operations that document only those two (DECISIONS §130).
     var hubLocale: String { chain.first { $0 == .ar || $0 == .en }?.rawValue ?? "en" }
 
     /// What the one-press language switch goes to: the other of two languages, else the next.

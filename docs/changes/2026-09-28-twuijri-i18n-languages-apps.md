@@ -15,7 +15,7 @@
   APK قبل النقل وبعده متطابقة (`aapt2 dump resources`: ‏2741 نصًا وجمعًا، 0 فروق).
   `locales_config.xml` و`android:localeConfig` من السجل (لغة لكل تطبيق في أندرويد 13+)، والتطبيق
   يقرأ اختيار النظام ويكتب اختياره فيه (`LocaleManager`). `AppLanguage` صار من السجل لا تعدادًا،
-  و`hubLocale` هو أقرب العربية/الإنجليزية للعقد (§129). `MissingTranslation` معطّل في lint لأن
+  و`hubLocale` هو أقرب العربية/الإنجليزية للعقد (§130). `MissingTranslation` معطّل في lint لأن
   اللغة الجزئية تقرأ الإنجليزية عمدًا. `pnpm i18n:check` يرفض أي `strings*.xml` مكتوب يدويًا.
 - **iOS**: `AppLanguage` من السجل (`Generated/Languages.swift`)، و`L10n` يدمج السلسلة فوق
   الإنجليزية، و`InfoPlist.strings` و`CFBundleLocalizations` من السجل (فيظهر اختيار اللغة في

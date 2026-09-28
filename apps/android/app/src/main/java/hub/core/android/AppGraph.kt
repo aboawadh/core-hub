@@ -69,7 +69,7 @@ class AppLanguage private constructor(val info: LanguageInfo) {
 
     /**
      * The contract's `Locale` (`ar` | `en`) nearest to this language: the hub stores it and writes
-     * its own notices in it (DECISIONS §129). The first of the two on the fallback chain.
+     * its own notices in it (DECISIONS §130). The first of the two on the fallback chain.
      */
     val hubLocale: String
         get() = (listOf(tag) + info.fallback + "en").first { it == "ar" || it == "en" }
@@ -203,7 +203,7 @@ class AppGraph(
         PushRegistrar(store, { apis(it) }, { token -> DeviceProof.proof(proofKeys, "fcm", token) }) {
             thisPhone(store.deviceKey, DeviceInfos.current(context).name, pushBlocker())
         },
-        // The contract's Locale is Arabic or English: the nearest of the two (DECISIONS §129).
+        // The contract's Locale is Arabic or English: the nearest of the two (DECISIONS §130).
         { prefs.effectiveLanguage.hubLocale },
         scope,
     )
