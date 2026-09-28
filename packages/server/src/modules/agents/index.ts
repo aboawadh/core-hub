@@ -2081,6 +2081,10 @@ export const agentsModule = defineModule({
       if (record && !platform && record.gatewayState === 'running') {
         // A change the gateway is about to follow (`channelsChanged`) is not one for Restart.
         if (runtime.channelsSettling(profile)) return health('unknown', null);
+        // One gateway per host: it takes a named profile's changed channels on its own scan.
+        if (profile !== 'default' && runtime.profileGateways.topology() === 'one-per-host') {
+          return health('unknown', null);
+        }
         // Hermes names every platform it was started with (`connecting` first), so a running
         // gateway that does not name this one started before it was switched on.
         return health('offline', null, true);
