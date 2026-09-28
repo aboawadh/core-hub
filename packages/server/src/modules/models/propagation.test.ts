@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import YAML from 'yaml';
 import { LEGACY_MANAGED_MARKER, MANAGED_MARKER, mergeEnv, parseEnv, quoteValue } from './dotenv.js';
 import {
   agentEnvironment,
@@ -357,6 +358,110 @@ describe('models: OpenAI-compatible endpoints as Hermes providers', () => {
     const result = writeHermesProviders(home, []);
     expect(result.removed).toEqual(['providers.corehub-lmstudio']);
     expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).not.toContain('providers:');
+  });
+});
+
+// ------------------------------------ scheduled jobs (Hermes's cron.model_provider)
+
+describe('models: scheduled jobs run on the selection too', () => {
+  const endpoint = route({ name: 'corehub-custom-cli-proxy-api' });
+  const onEndpoint = { provider: 'corehub-custom-cli-proxy-api', model: 'gpt-5.4' };
+  const builtIn = { provider: 'anthropic', model: 'claude-sonnet-4-5' };
+  const cronOf = (home: string): unknown =>
+    (YAML.parse(readFileSync(path.join(home, 'config.yaml'), 'utf8')) as { cron?: unknown }).cron;
+
+  it('names the endpoint for scheduled jobs, where Hermes would snapshot `custom` and find no key', () => {
+    const home = hermesHome();
+    const result = writeHermesConfiguration(
+      home,
+      state({ hermesProviders: [endpoint], hermesModel: onEndpoint }),
+    );
+    expect(result.config.changed).toEqual(
+      expect.arrayContaining(['model.provider', 'cron.model_provider', 'cron.model']),
+    );
+    expect(cronOf(home)).toEqual({
+      model_provider: 'corehub-custom-cli-proxy-api',
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('writes nothing for a provider Hermes snapshots under its own name', () => {
+    const home = hermesHome();
+    const result = writeHermesConfiguration(home, state({ hermesModel: builtIn }));
+    expect(result.config.changed).toEqual(['model.default', 'model.provider']);
+    expect(cronOf(home)).toBeUndefined();
+  });
+
+  it('follows the selection it wrote, to a built-in provider too', () => {
+    // Jobs made while the endpoint was the default keep their `custom` snapshot: the pair has
+    // to go on outranking it after the switch, or they fail again.
+    const home = hermesHome();
+    writeHermesConfiguration(home, state({ hermesProviders: [endpoint], hermesModel: onEndpoint }));
+    const result = writeHermesConfiguration(
+      home,
+      state({ hermesProviders: [endpoint], hermesModel: builtIn }),
+    );
+    expect(result.config.changed).toEqual(
+      expect.arrayContaining(['cron.model_provider', 'cron.model']),
+    );
+    expect(cronOf(home)).toEqual({ model_provider: 'anthropic', model: 'claude-sonnet-4-5' });
+  });
+
+  it('leaves a pair somebody set apart alone', () => {
+    const home = hermesHome({
+      'config.yaml': [
+        'model:',
+        '  default: gpt-5.4',
+        '  provider: corehub-custom-cli-proxy-api',
+        'cron:',
+        '  model: cheap-model   # mine, keep it',
+        '  model_provider: openrouter',
+        '',
+      ].join('\n'),
+    });
+    const result = writeHermesConfiguration(
+      home,
+      state({ hermesProviders: [endpoint], hermesModel: { ...onEndpoint, model: 'gpt-5.5' } }),
+    );
+    expect(result.config.changed).toContain('model.default');
+    expect(result.config.changed).not.toContain('cron.model');
+    expect(result.config.changed).not.toContain('cron.model_provider');
+    expect(readFileSync(path.join(home, 'config.yaml'), 'utf8')).toContain('# mine, keep it');
+    expect(cronOf(home)).toEqual({ model: 'cheap-model', model_provider: 'openrouter' });
+  });
+
+  it('keeps the other cron settings and fills a `cron:` that is empty', () => {
+    const withSibling = hermesHome({ 'config.yaml': 'cron:\n  wrap_response: false\n' });
+    writeHermesConfiguration(
+      withSibling,
+      state({ hermesProviders: [endpoint], hermesModel: onEndpoint }),
+    );
+    expect(cronOf(withSibling)).toEqual({
+      wrap_response: false,
+      model_provider: 'corehub-custom-cli-proxy-api',
+      model: 'gpt-5.4',
+    });
+
+    const empty = hermesHome({ 'config.yaml': 'cron:\n' });
+    writeHermesConfiguration(
+      empty,
+      state({ hermesProviders: [endpoint], hermesModel: onEndpoint }),
+    );
+    expect(cronOf(empty)).toEqual({
+      model_provider: 'corehub-custom-cli-proxy-api',
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('says nothing the second time, so the gateway is not recycled for nothing', () => {
+    const home = hermesHome();
+    const next = () =>
+      writeHermesConfiguration(
+        home,
+        state({ hermesProviders: [endpoint], hermesModel: onEndpoint }),
+      );
+    next();
+    expect(next().config.dirty).toBe(false);
   });
 });
 
