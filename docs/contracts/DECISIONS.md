@@ -4196,3 +4196,38 @@ left out). A target of a platform the phone does not know is kept as it is.
 Rejected: a canvas on the phone (a list of steps is what a phone screen holds; the drawing's
 positions are kept); a Tools destination with its own page (as in §126); keeping the Search row in
 the phone rail too (two entries to one place).
+
+## 129. A Hermes with one gateway per host serves every profile from the hub's one gateway
+
+Proposed (2026-09-28) — a real user's desktop app (local mode, his own newer Hermes) showed «hermes
+gateway exited (code 75): One gateway per host serves every profile; manage it with `hermes -p
+default gateway restart`». Owner to confirm. No contract change.
+
+Hermes v2026.9.21 (`0.21.4`) made one `hermes gateway run` per host (per OS user) the only
+topology: the first gateway serves every profile, and a second one attaches to it and exits 75
+(`gateway/host_attach.py`; §119's floor, v2026.9.14 = `0.21.3`, is the last release without it).
+Its host lock lives in `$XDG_STATE_HOME/hermes/gateway-locks`, not in the home, and a served
+profile's keys are now scoped per turn (no longer process-wide `os.environ`, the reason the hub
+started a gateway per profile).
+
+- **Topology by version, 75 as the fallback.** The hub reads `hermes --version` when it starts
+  Hermes and after Restart. From `0.21.4` it starts no gateway per named profile; the default
+  gateway serves them. Below, or unknown, nothing changes — except that a gateway exiting 75 with
+  Hermes's one-gateway-per-host words switches the topology (a plain 75 is still a restart).
+- **The card.** A named profile with a channel or a job keeps its row, following the default
+  gateway: its pid, and `running` once Hermes lists the profile in `served_profiles`; its
+  platforms are Hermes's `<profile>:<platform>` entries. A profile Hermes still does not serve
+  after the gateway was restarted for it says so (`error`).
+- **Changes.** A channel or setting change in a named profile asks the running gateway to
+  `rescan-profiles` on its control socket (Hermes also does it every 30 s); a gateway that came
+  up serving only the default profile (one profile at start) is restarted once so it decides
+  again — again only when somebody changes something.
+- **Beside a person's own Hermes.** The hub's home is a Hermes root of its own, so on a
+  one-gateway-per-host Hermes the gateway and every Hermes command of the hub get
+  `HERMES_GATEWAY_LOCK_DIR=<home>/gateway-locks` when the person's `~/.hermes` is not the hub's
+  home. Their gateway and the hub's then each own their home. Never on an older Hermes and never
+  in the image.
+
+Rejected: `gateway.standalone: true` per profile (Hermes calls it a temporary shim to be
+removed); `--force` (Hermes's escape from its own safety check); attaching to the person's gateway
+(it serves their home, not the hub's).
