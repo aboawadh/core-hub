@@ -1,6 +1,7 @@
 package hub.core.android.ui.screens
 
 import android.content.Context
+import androidx.compose.ui.text.style.TextOverflow
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -237,7 +238,7 @@ private fun SenderSheet(ops: AdminTwoOps, sender: PushSender, onDismiss: () -> U
                 { picker.launch(if (fcm) arrayOf("application/json", "text/plain", "*/*") else arrayOf("application/pkcs8", "application/octet-stream", "text/plain", "*/*")) },
                 kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.File, modifier = Modifier.testTag("push.form.file"),
             )
-            fileName?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, modifier = Modifier.weight(1f)) }
+            fileName?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)) }
         }
         fileProblem?.let { NoticeBox(it, BadgeTone.Danger, Modifier.testTag("push.form.file_problem")) }
         if (fcm && account?.ok == true) NoticeBox(stringResource(R.string.admin_push_fcm_ok, account.projectId.orEmpty()), BadgeTone.Success, Modifier.testTag("push.form.file_ok"))

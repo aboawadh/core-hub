@@ -239,7 +239,11 @@ its approval.
   note shows only where the hub does not run Hermes (or an older hub). A WhatsApp card in «أنا»
   mode offers «عنوان الردود» / "Reply header": the agent's name or a typed title, previewed as a
   reply will start (DECISIONS §86). Hermes's card lists its
-  messaging gateways and their state. Since 2026-09-25 Discord, Slack, Matrix, Mattermost and
+  messaging gateways and their state. Since 2026-09-28 (DECISIONS §129, proposed — owner to
+  confirm) a Hermes of v2026.9.21 (`0.21.4`) or later, which allows one gateway per host serving
+  every profile, gets no gateway per named profile: the default one serves them all, each named
+  profile's row follows it, and a channel change there asks it to rescan; beside a person's own
+  Hermes the hub's gateway takes a host lock inside its own home. An older Hermes is unchanged. Since 2026-09-25 Discord, Slack, Matrix, Mattermost and
   Email link with plain setup steps, the check with the platform, the account named on the
   linked row, its own settings panel and Unlink; the other Hermes platforms with a generic form
   and a note that nothing there is checked. Since 2026-09-26 the page lists **only the linked
@@ -968,8 +972,14 @@ pseudo-locales (`en-XA`, `ar-XB`, `zh-XC`, `th-XD`) walk 18 main screens at desk
 in the web journeys and fail on spilled, clipped or lone-letter labels, overlapping controls and
 sideways scroll. With a third language the language switch becomes a menu and Display a list —
 proven by unit tests with a stand-in registry, not yet with a real translation. The hub keeps
-storing `ar`/`en` as a person's `locale` (the contract's enum); the phones read the registry in
-phase 2 (`feat/i18n-languages-apps`).
+storing `ar`/`en` as a person's `locale` (the contract's enum). Since phase 2
+(`feat/i18n-languages-apps`) the phones read the registry too: Android's strings are JSON
+catalogues in `apps/android/i18n` with the resources generated at build time (the compiled
+resources identical to before), a per-app language list for Android 13+ (`locales_config`), and
+iOS's `AppLanguage`, fallback chain, `InfoPlist.strings` and `CFBundleLocalizations` from the same
+file; Android's Robolectric test walks 10 screens in the four pseudo-locales and fails on text cut
+without an ellipsis or a lone letter; iOS's XCTest keeps a chip one line in each. iOS builds and
+tests run in CI only.
 
 ## Name
 Since 2026-09-24 the product is **Core Hub** («كور هب», ADR 0017): packages `@corehub/*`, the

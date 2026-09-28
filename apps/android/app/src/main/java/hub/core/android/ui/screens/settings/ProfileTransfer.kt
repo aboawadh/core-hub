@@ -1,6 +1,7 @@
 package hub.core.android.ui.screens
 
 import android.net.Uri
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -186,7 +187,7 @@ internal fun ImportProfileSheet(ops: AdminTwoOps, taken: List<String>, onDismiss
                 { picker.launch(arrayOf("application/gzip", "application/x-gzip", "application/x-tar", "application/octet-stream", "*/*")) },
                 kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.File, enabled = !busy, modifier = Modifier.testTag("import.choose"),
             )
-            Text(file?.name ?: stringResource(R.string.admin_profiles_import_no_file), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1, modifier = Modifier.weight(1f))
+            Text(file?.name ?: stringResource(R.string.admin_profiles_import_no_file), fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         }
         ToggleRow(
             stringResource(R.string.admin_profiles_import_replace_default), replaceDefault, { replaceDefault = it },

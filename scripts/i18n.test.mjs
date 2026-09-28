@@ -95,6 +95,22 @@ beforeEach(() => {
     write(`${dir}/en.json`, EN);
     write(`${dir}/ar.json`, AR);
   }
+  // A phone app: flat resource names, Android's `%1$s`, and a screen's strings in an area file.
+  write('apps/android/i18n/en.json', { back: 'Back', error_code: 'The hub refused: %1$s' });
+  write('apps/android/i18n/ar.json', { back: 'رجوع', error_code: 'رفض المركز: %1$s' });
+  write('apps/android/i18n/tasks.en.json', {
+    steps: { one: '%1$d step', other: '%1$d steps' },
+  });
+  write('apps/android/i18n/tasks.ar.json', {
+    steps: {
+      zero: 'لا خطوات',
+      one: 'خطوة',
+      two: 'خطوتان',
+      few: '%1$d خطوات',
+      many: '%1$d خطوة',
+      other: '%1$d خطوة',
+    },
+  });
   assert.equal(run('i18n/generate.mjs').code, 0);
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -141,6 +157,9 @@ describe('i18n:new and a partial language', () => {
     assert.equal(entry.nativeName, 'Français');
     for (const dir of ['packages/server', 'packages/cli', 'packages/web'])
       assert.deepEqual(read(`${dir}/src/i18n/fr.json`).nav, { chat: '', tasks: '' });
+    // The phones too: every area of the English catalogue.
+    assert.deepEqual(read('apps/android/i18n/fr.json'), { back: '', error_code: '' });
+    assert.deepEqual(read('apps/android/i18n/tasks.fr.json'), { steps: { one: '', other: '' } });
     assert.match(
       readFileSync(path.join(root, 'packages/web/src/i18n/catalogues.ts'), 'utf8'),
       /fr\.json/,
@@ -181,6 +200,9 @@ describe('i18n:new and a partial language', () => {
     assert.match(check().out, /changes a `code` span/);
     fr({ ...EN, hint: 'Lancez `corehub help`.' });
     assert.match(check().out, /drops \{topic\}/);
+    write('apps/android/i18n/fr.json', { back: 'Retour', error_code: 'Refus : %2$s' });
+    assert.match(check().out, /android: fr "error_code" has %2\$s, which English does not/);
+    write('apps/android/i18n/fr.json', { back: 'Retour', error_code: '' });
     fr({ ...EN, files: { count: { one: 'Un fichier' } } });
     assert.match(check().out, /"files.count" is translated without "files.count.other"/);
     // A plural form may leave its number out; a word English does not have is only a warning.

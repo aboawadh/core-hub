@@ -110,6 +110,7 @@ targets:
       - path: CoreHub/i18n
       - path: CoreHub/Share/ShareInbox.swift
       - path: CoreHub/Generated/Product.swift
+      - path: CoreHub/Generated/Languages.swift
     entitlements:
       path: CoreHubShare/CoreHubShare.entitlements
       properties:

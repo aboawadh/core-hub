@@ -37,7 +37,7 @@ import { createInterface } from 'node:readline';
 import { HUB_ORIGIN_ENV } from './hub-tools/block.js';
 import type { FastifyBaseLogger } from 'fastify';
 import { parse as parseYaml } from 'yaml';
-import { probeHttp, whichSync, type HostEnvironment } from './adapters/host.js';
+import { probeHttp, readVersion, whichSync, type HostEnvironment } from './adapters/host.js';
 import {
   stdioTuiChannel,
   TUI_STOPPED,
@@ -50,6 +50,7 @@ import {
   ProfileGateways,
   activeCronJobs,
   readGatewayRecord,
+  saysOneGatewayPerHost,
   type GatewayRuntimeRecord,
   type GatewayStatus,
 } from './hermes-gateways.js';
@@ -142,6 +143,13 @@ export interface HermesRuntimeOptions {
   whatsappBridge?: string;
   /** How long channel changes are gathered before the gateway follows (tests shorten it). */
   channelSettleMs?: number;
+  /**
+   * Reads the installed Hermes's version (`hermes --version`), which says how it places its
+   * messaging gateways (`hermes-gateways.ts`). Tests replace it; `null` is "unknown".
+   */
+  hermesVersion?: (hermes: string, env: NodeJS.ProcessEnv) => Promise<string | null>;
+  /** Asks the root gateway to rescan its profiles (tests replace the control socket). */
+  rescanProfiles?: (root: string) => Promise<unknown>;
 }
 
 /** Hermes's profile id rule (`_PROFILE_ID_RE`); a hub slug always satisfies it. */
@@ -248,10 +256,16 @@ export class HermesRuntime {
   /** Set while the default gateway is held down on purpose (`withDefaultGatewayStopped`). */
   private relaunchGate: Promise<void> | null = null;
   /**
-   * The messaging gateways of the named profiles (`hermes-gateways.ts`). The process above
-   * serves the default profile only; each other profile with a channel gets its own.
+   * The messaging gateways of the named profiles (`hermes-gateways.ts`). On an older Hermes the
+   * process above serves the default profile only and each other profile with a channel gets
+   * its own; on one with one gateway per host (v2026.9.21 and later) it serves them all.
    */
   readonly profileGateways: ProfileGateways;
+  /**
+   * The running gateway was started with a host-lock folder of this home's own
+   * (`gatewayLockEnv`), and so is every Hermes command the hub runs while it is.
+   */
+  private lockIsolated = false;
 
   constructor(private readonly options: HermesRuntimeOptions) {
     this.endpoint = (options.endpoint ?? HERMES_DEFAULT_ENDPOINT).replace(/\/$/, '');
@@ -271,6 +285,16 @@ export class HermesRuntime {
       ...(options.gatewayBackoffMs ? { backoffMs: options.gatewayBackoffMs } : {}),
       ...(options.gatewayRescanMs !== undefined ? { rescanMs: options.gatewayRescanMs } : {}),
       ...(options.whatsappBridge ? { whatsappBridge: options.whatsappBridge } : {}),
+      ...(options.rescanProfiles ? { rescanProfiles: options.rescanProfiles } : {}),
+      // On a Hermes that runs one gateway per host, the process below serves every profile.
+      rootGateway: {
+        status: () => ({
+          state: this.state,
+          pid: this.child?.pid ?? null,
+          startedAt: this.child ? this.startedAt : null,
+        }),
+        restart: () => this.restartRootGateway(),
+      },
     });
   }
 
@@ -320,12 +344,20 @@ export class HermesRuntime {
         pid: channel.pid ?? null,
         state,
       })),
-      ...this.gateways().map((gateway) => ({
-        kind: 'gateway' as const,
-        profile: gateway.profile,
-        pid: gateway.pid,
-        state: gateway.state,
-      })),
+      ...this.gateways()
+        // One gateway per host: a named profile's row is the default one's process, listed once.
+        .filter(
+          (gateway) =>
+            gateway.profile === 'default' ||
+            gateway.pid === null ||
+            gateway.pid !== this.child?.pid,
+        )
+        .map((gateway) => ({
+          kind: 'gateway' as const,
+          profile: gateway.profile,
+          pid: gateway.pid,
+          state: gateway.state,
+        })),
     ];
   }
 
@@ -681,8 +713,65 @@ export class HermesRuntime {
       ...(this.options.host.pathValue ? { PATH: this.options.host.pathValue } : {}),
       ...this.providerEnv,
       ...this.sharedInstallEnv(),
+      ...this.gatewayLockEnv(),
       HERMES_HOME: this.status().home ?? this.home,
     };
+  }
+
+  /**
+   * `HERMES_GATEWAY_LOCK_DIR` inside this home, while the gateway runs with it (`lockIsolated`).
+   *
+   * A Hermes with one gateway per host (v2026.9.21 and later, `hermes-gateways.ts`) keeps that
+   * host's lock and the record of its one gateway per OS user — `$XDG_STATE_HOME/hermes/
+   * gateway-locks`, not per home (`gateway/host_rendezvous.py`, `gateway/status.py`
+   * §_get_lock_dir). Beside a person's own Hermes (the desktop app's local mode), their gateway
+   * for `~/.hermes` is then "the" gateway, and the hub's, for a home of its own, is told the
+   * other one already serves its `default` profile and exits 75 — the card said so, and nothing
+   * of the hub's home was served. This home is a Hermes root of its own, so it takes the lock
+   * folder Hermes lets be moved, inside itself. Only then: an older Hermes keeps its lock folder
+   * exactly where it was, and so does a hub whose home is the only one (the image).
+   */
+  private gatewayLockEnv(): NodeJS.ProcessEnv {
+    if (!this.lockIsolated || this.options.host.inherited?.HERMES_GATEWAY_LOCK_DIR) return {};
+    return { HERMES_GATEWAY_LOCK_DIR: path.join(this.home, 'gateway-locks') };
+  }
+
+  /**
+   * Reads the installed Hermes's version and tells the profile gateways how this Hermes places
+   * them. Never throws; an unreadable version changes nothing.
+   */
+  private async probeTopology(): Promise<void> {
+    const hermes = this.executable();
+    if (!hermes) return;
+    const read =
+      this.options.hermesVersion ??
+      (async (binary: string, env: NodeJS.ProcessEnv) =>
+        (await readVersion([binary, '--version'], { env })).version);
+    const version = await read(hermes, this.cliEnv()).catch(() => null);
+    await this.profileGateways.noteVersion(version);
+    // Updated in place to a Hermes with one gateway per host while its gateway runs with the
+    // person's host lock: it moves to this home's own, or the person's gateway is refused.
+    if (
+      this.profileGateways.topology() === 'one-per-host' &&
+      !this.lockIsolated &&
+      this.child &&
+      this.personalInstall()
+    ) {
+      await this.restartRootGateway();
+    }
+  }
+
+  /**
+   * Stops the root gateway and starts it again at once (no backoff, not a crash), so a Hermes
+   * with one gateway per host decides again which profiles it serves. Nothing when a restart
+   * is already under way.
+   */
+  private async restartRootGateway(): Promise<void> {
+    const child = this.child;
+    if (this.mode !== 'managed' || this.stopping || this.restartRequested || !child) return;
+    this.restartRequested = true;
+    this.log.info({ pid: child.pid }, 'hermes: gateway restarted to serve every profile');
+    await this.terminate(child);
   }
 
   /**
@@ -849,13 +938,21 @@ export class HermesRuntime {
       return this.mode;
     }
     this.mode = 'managed';
+    // Beside a person's own Hermes the version is read first: a Hermes with one gateway per
+    // host must not take the person's host lock even for a moment (`gatewayLockEnv`).
+    const personal = this.personalInstall();
+    const probed = personal ? this.probeTopology().catch(() => undefined) : null;
+    if (probed) await probed;
     this.launch(binary);
     this.scheduleHealth();
     // Every named profile with a channel to answer on or a job to fire gets its gateway at
-    // boot too, and the set is checked again from then on.
-    void this.profileGateways.reconcile().catch((error: unknown) => {
-      this.log.warn({ err: error }, 'hermes: could not start the profile gateways');
-    });
+    // boot too — once Hermes's version says whether it runs one gateway per host, when the
+    // default one serves them all — and the set is checked again from then on.
+    void (probed ?? this.probeTopology())
+      .then(() => this.profileGateways.reconcile())
+      .catch((error: unknown) => {
+        this.log.warn({ err: error }, 'hermes: could not start the profile gateways');
+      });
     this.profileGateways.watch();
     return this.mode;
   }
@@ -865,8 +962,10 @@ export class HermesRuntime {
     if (this.mode !== 'managed') {
       throw new Error(`hermes runtime is ${this.mode}, not managed by this hub`);
     }
-    // Hermes may have been updated in place (`selfUpdate`): its Python is looked for again.
+    // Hermes may have been updated in place (`selfUpdate`): its Python is looked for again, and
+    // its version read again (a newer one may run one gateway per host).
     void this.resolvePython();
+    void this.probeTopology().catch(() => undefined);
     // Every messaging gateway: the keys and endpoints a restart makes live are theirs too.
     const others = this.profileGateways.restartAll();
     const child = this.child;
@@ -930,6 +1029,9 @@ export class HermesRuntime {
       this.log.warn({ err: error }, 'hermes: could not prepare the gateway configuration');
     }
     if (activeChannels(this.home).includes('whatsapp')) this.prepareWhatsAppBridge();
+    // A Hermes with one gateway per host, beside a person's own: a host lock of this home's own.
+    this.lockIsolated =
+      this.profileGateways.topology() === 'one-per-host' && this.personalInstall();
     const url = new URL(this.endpoint);
     const env: NodeJS.ProcessEnv = {
       ...(this.options.host.inherited ?? {}),
@@ -937,6 +1039,7 @@ export class HermesRuntime {
       // negotiable, and a provider named `API_SERVER_KEY` would be a very bad joke.
       ...this.providerEnv,
       ...this.sharedInstallEnv(),
+      ...this.gatewayLockEnv(),
       HERMES_HOME: this.home,
       API_SERVER_ENABLED: 'true',
       API_SERVER_KEY: this.apiKey() ?? '',
@@ -989,6 +1092,29 @@ export class HermesRuntime {
           this.launch(binary);
         }
         return;
+      }
+      if (code === 75 && saysOneGatewayPerHost(this.lastLines.join('\n'))) {
+        // Hermes runs one gateway per host and found another one: the person's own (their
+        // `~/.hermes`, on the same OS user) or a profile gateway of this hub. Both are the hub's
+        // to settle — a lock folder of this home's own, no profile gateway beside this one —
+        // and then it starts again at once. Only when that changes something: otherwise the
+        // other gateway is nobody the hub can move, and the card says what Hermes said.
+        const wasPerProfile = this.profileGateways.topology() === 'per-profile';
+        const canIsolate = !this.lockIsolated && this.personalInstall();
+        if (wasPerProfile || canIsolate) {
+          this.log.info(
+            { isolateLock: canIsolate },
+            'hermes: another gateway owns this host; this home takes its own and starts again',
+          );
+          this.setState('starting', null);
+          void this.profileGateways
+            .useOneGatewayPerHost('the gateway exited 75: one gateway per host')
+            .catch(() => undefined)
+            .finally(() => {
+              if (!this.stopping && !this.child && !this.restartTimer) this.launch(binary);
+            });
+          return;
+        }
       }
       this.log.error({ code, signal }, 'hermes: gateway crashed; restarting');
       this.setState('error', reason);

@@ -175,7 +175,7 @@ fun ListRow(
                     Text(subtitle, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
             }
-            if (value != null) Text(value, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1)
+            if (value != null) Text(value, fontSize = FontTokens.sizeSm.sp, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             trailing?.invoke(this)
             if (chevron) LucideIcon(Lucide.ChevronRight, null, size = 16.dp, tint = t.textFaint)
         }

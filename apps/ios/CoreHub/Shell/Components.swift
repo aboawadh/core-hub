@@ -78,14 +78,14 @@ struct LanguageMenu: View {
                     app.language = language
                 } label: {
                     if language == app.language {
-                        Label { Text(l10n("shell.language_\(language.rawValue)")) } icon: { Image(lucide: .check) }
+                        Label { Text(l10n.name(of: language)) } icon: { Image(lucide: .check) }
                     } else {
-                        Text(l10n("shell.language_\(language.rawValue)"))
+                        Text(l10n.name(of: language))
                     }
                 }
             }
         } label: {
-            LucideLabel(l10n("shell.language_\(app.language.rawValue)"), icon: .globe, size: 16)
+            LucideLabel(l10n.name(of: app.language), icon: .globe, size: 16)
                 .labelStyle(.titleAndIcon)
                 .font(.system(size: FontSize.sizeSm))
         }
@@ -215,7 +215,7 @@ struct ChipButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: FontSize.sizeSm, weight: .medium))
             .foregroundStyle(quiet ? Tone.textMuted : Tone.text)
-            .lineLimit(1)
+            .singleLine()
             .padding(.horizontal, Space.s3)
             .frame(minHeight: Control.heightSm + 4)
             .background(quiet ? Color.clear : Tone.surface2, in: Capsule())

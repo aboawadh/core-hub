@@ -1,6 +1,7 @@
 package hub.core.android.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -129,7 +130,7 @@ internal fun HubToolsView(
                 kind = ButtonKind.Secondary, size = ControlSize.Sm, icon = Lucide.Activity, loading = testing, enabled = data.enabled,
                 modifier = Modifier.testTag("hub.tools.test"),
             )
-            data.url?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace, maxLines = 1, modifier = Modifier.weight(1f)) }
+            data.url?.let { Text(it, fontSize = FontTokens.sizeXs.sp, color = t.textMuted, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)) }
         }
         McpTestView(data.serverName, test)
         Text(stringResource(R.string.agents2_hub_recent), fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.Medium)

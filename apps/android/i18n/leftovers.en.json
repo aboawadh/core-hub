@@ -1,0 +1,22 @@
+{
+  "background_title": "Background",
+  "background_open_count": "Running in the background: %1$d",
+  "background_none": "Nothing is running.",
+  "background_none_body": "Chats, tasks, schedules, workflows, jobs and subagents appear here while they work.",
+  "background_finished": "Finished in the last 24 hours (%1$d)",
+  "background_stop": "Stop",
+  "background_open_item": "Open",
+  "background_untitled": "Untitled",
+  "background_failed": "The background list could not be read.",
+  "background_kind_chat_run": "Chat",
+  "background_kind_task_run": "Task",
+  "background_kind_schedule_run": "Schedule",
+  "background_kind_workflow_run": "Workflow",
+  "background_kind_job": "Job",
+  "background_kind_subagent": "Subagent",
+  "background_status_queued": "Queued",
+  "background_status_running": "Running",
+  "background_status_succeeded": "Done",
+  "background_status_failed": "Failed",
+  "background_status_cancelled": "Stopped"
+}

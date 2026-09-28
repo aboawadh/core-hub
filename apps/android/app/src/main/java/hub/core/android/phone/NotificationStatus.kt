@@ -21,6 +21,7 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -127,7 +128,11 @@ fun NotificationRows() {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     LucideIcon(Lucide.Bell, null, size = 20.dp, tint = LocalTokens.current.textMuted)
                     Text(stringResource(R.string.push_label), fontSize = FontTokens.sizeMd.sp, modifier = Modifier.weight(1f))
-                    Badge(stringResource(PushStatus.label(push, allowed, denied)), tone = tone, dot = true)
+                    // Half the row at most, at its end: a long state in a longer language ends in an
+                    // ellipsis instead of squeezing the label to a letter a line (ADR 0028).
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        Badge(stringResource(PushStatus.label(push, allowed, denied)), tone = tone, dot = true)
+                    }
                 }
                 Text(stringResource(PushStatus.note(push)), fontSize = FontTokens.sizeSm.sp, color = LocalTokens.current.textMuted)
             }
