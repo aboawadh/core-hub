@@ -40,6 +40,7 @@ import {
 import { createHermesJobs } from '../../server/src/modules/schedules/hermes-jobs.js';
 import { FakeHermesApi } from '../../server/src/modules/schedules/testing/fake-hermes-api.js';
 import { fakeHermesPlugins } from '../../server/src/modules/agents/testing/fake-hermes-plugins.js';
+import { fakeMcpLogin } from '../../server/src/modules/agents/testing/fake-mcp-login.js';
 import { agentsServiceFor } from '../../server/src/modules/agents/index.js';
 import { HermesRefusal, type HermesTask } from '../../server/src/modules/tasks/hermes-kanban.js';
 import type {
@@ -961,12 +962,6 @@ function seedPairing(): void {
     },
   });
 }
-/** The MCP OAuth sign-ins the scripted Hermes has started (journey: DECISIONS §122). */
-const mcpOAuth = new Map<
-  string,
-  { id: string; name: string; profile: string; state: string; status: string }
->();
-let oauthFlows = 0;
 const scriptedHermesApi: HermesApiCall = async <T>(
   method: string,
   route: string,
@@ -1029,82 +1024,6 @@ const scriptedHermesApi: HermesApiCall = async <T>(
     delete approved[user];
     writePairing(profile, 'approved', approved, platform);
     return answer({ ok: true });
-  }
-  // MCP OAuth (journey: DECISIONS §122), as Hermes's dashboard runs it: `…/auth` names the
-  // provider's page, and the "provider" here signs the person in at once — its page is the
-  // redirect the hub wrote into the server's block, with a code and the flow's state — so the
-  // tab the MCP page opens lands straight on the hub's callback, which hands it back here.
-  const oauthStart = /^\/api\/mcp\/servers\/([^/]+)\/auth$/.exec(url.pathname);
-  if (method === 'POST' && oauthStart) {
-    const profile = url.searchParams.get('profile') ?? 'default';
-    const name = decodeURIComponent(oauthStart[1]!);
-    const config = readFileSync(path.join(hermesHome(profile), 'config.yaml'), 'utf8');
-    // The redirect the hub wrote into this server's block (not another server's).
-    const lines = config.split('\n');
-    const at = lines.findIndex((line) => line === `  ${name}:`);
-    const block = at === -1 ? [] : lines.slice(at + 1);
-    const end = block.findIndex((line) => /^ {0,2}\S/.test(line));
-    const redirect =
-      (end === -1 ? block : block.slice(0, end))
-        .map((line) => /redirect_uri:\s*(\S+)/.exec(line)?.[1])
-        .find(Boolean) ?? '';
-    oauthFlows += 1;
-    const flow = {
-      id: `e2e-oauth-${oauthFlows}`,
-      name,
-      profile,
-      state: `e2e-state-${oauthFlows}`,
-      status: 'authorization_required',
-    };
-    mcpOAuth.set(flow.id, flow);
-    return answer({
-      flow_id: flow.id,
-      server_name: name,
-      status: flow.status,
-      authorization_url: `${redirect}?code=e2e-code&state=${flow.state}`,
-      error: null,
-    });
-  }
-  const oauthFlow = /^\/api\/mcp\/oauth\/flows\/([^/]+)$/.exec(url.pathname);
-  if (oauthFlow) {
-    const flow = mcpOAuth.get(decodeURIComponent(oauthFlow[1]!));
-    if (!flow) throw new Error('OAuth flow not found or expired');
-    if (method === 'DELETE') flow.status = 'error';
-    return answer({
-      flow_id: flow.id,
-      server_name: flow.name,
-      status: flow.status,
-      authorization_url: null,
-      error: flow.status === 'error' ? 'Cancelled by user' : null,
-      tools:
-        flow.status === 'approved'
-          ? [
-              { name: 'get_tasks', description: 'List the tasks of a list.' },
-              { name: 'create_task', description: 'Create a task.' },
-              { name: 'get_workspace_hierarchy', description: 'The spaces, folders and lists.' },
-            ]
-          : [],
-    });
-  }
-  const oauthBack = /^\/api\/mcp\/oauth\/callback\/([^/]+)$/.exec(url.pathname);
-  if (oauthBack) {
-    const flow = [...mcpOAuth.values()].find(
-      (each) =>
-        each.status === 'authorization_required' && each.state === url.searchParams.get('state'),
-    );
-    if (!flow || url.searchParams.get('code') !== 'e2e-code') throw new Error('OAuth flow expired');
-    const tokens = path.join(hermesHome(flow.profile), 'mcp-tokens');
-    mkdirSync(tokens, { recursive: true });
-    writeFileSync(
-      path.join(tokens, `${flow.name}.json`),
-      JSON.stringify({
-        access_token: 'e2e-access',
-        refresh_token: 'e2e-refresh',
-        expires_at: Date.now() / 1000 + 3600,
-      }),
-    );
-    flow.status = 'approved';
-    return answer('<h1>Authorization received</h1>');
   }
   const mcp = /^\/api\/mcp\/servers\/([^/]+)\/test/.exec(route);
   if (mcp && mcp[1] === 'clickup') {
@@ -1265,6 +1184,13 @@ overrideAgents({
   adapterOptions: { hermes: { fetchImpl: scriptedGateway } },
   hermesApi: scriptedHermesApi,
   hermesCli: scriptedPlugins.cli,
+  // Hermes's `hermes mcp login` (DECISIONS §122): its "provider" signs the person in at once — its
+  // page is the redirect the hub wrote, with a code and the state — so the tab the MCP page opens
+  // lands straight on the hub's callback, which hands it to this login's listener.
+  mcpLogin: fakeMcpLogin({
+    code: 'e2e-code',
+    authorize: (redirect, state) => `${redirect}?code=e2e-code&state=${state}`,
+  }),
   pairingPollMs: 700,
   telegramFetch: scriptedTelegram,
   channelProbe: { fetchImpl: scriptedPlatforms },

@@ -1,31 +1,28 @@
 /**
  * Signing an MCP server in by OAuth from the hub's pages (contract decision §122).
  *
- * Hermes already does the whole sign-in for its own dashboard (MIT source
- * `hermes_cli/web_routers/mcp.py` and `tools/mcp_dashboard_oauth.py`, tag v2026.9.14, read and
- * described here in our words): `POST /api/mcp/servers/{name}/auth?profile=` discovers the
- * provider, registers a client, and answers a flow with the provider's authorization URL;
- * `GET /api/mcp/oauth/flows/{id}` says how it stands (`starting`, `authorization_required`,
- * `approved` with the tools it then listed, or `error`); `DELETE` of the same stops it; and
- * `GET /api/mcp/oauth/callback/{server}` takes the browser back, accepting it only with the
- * `state` of a flow it started. Hermes keeps the tokens in the profile's home, under
- * `mcp-tokens/<server>.json` (plus `.client.json`, `.meta.json` and `.cimd-off`).
+ * Hermes does the sign-in, with its own command `hermes mcp login <server>` (MIT source
+ * `hermes_cli/mcp_config.py` §_reauth_oauth_server and `tools/mcp_oauth.py`, v2026.9.14, read and
+ * described here in our words): it discovers the provider, registers a client whose redirect is
+ * the server's `oauth.redirect_uri`, prints the provider's page, waits on a listener at
+ * `127.0.0.1:<oauth.redirect_port>/callback`, exchanges the code with PKCE, keeps the tokens in
+ * the profile's home (`mcp-tokens/<server>.json`, `.client.json`, `.meta.json`, `.cimd-off`),
+ * connects once and says "Authenticated — N tool(s)".
  *
- * What the hub adds is the part Hermes cannot know from inside the container: **where the
- * browser can come back to.** Hermes would name its own address, `127.0.0.1:<port>`, which the
- * person's browser cannot reach. Hermes reads the server's `oauth.redirect_uri` first, so the
- * hub writes its own public callback there before starting, and relays the browser's arrival to
- * Hermes's callback. **No token passes through the hub**: it reads only the metadata of the
- * token file (whether it exists, when it runs out, whether it can be renewed) and never returns
- * or logs a value from it.
+ * The hub adds the two things Hermes cannot know from where it runs: **where the browser can come
+ * back to** — the hub's public callback, written as `oauth.redirect_uri` — and **the way from there
+ * to Hermes's listener** — the callback hands the provider's query, unchanged, to
+ * `127.0.0.1:<port>`. The CLI's listener keeps RFC 9207's `iss`, which a provider such as ClickUp
+ * requires; Hermes's dashboard route did not until v2026.9.21 (the ClickUp report of 2026-09-28).
+ * **No token passes through the hub**: it reads only the metadata of the token file and never
+ * returns or logs a value from it, nor Hermes's output as it is.
  */
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { HubError } from '../../lib/errors.js';
 import { t, type Language } from '../../i18n/index.js';
 import { PRODUCT } from '@corehub/contracts';
-import { HermesDashboardRefusal, HermesDashboardUnavailable } from './hermes-dashboard.js';
-import { hermesFault, type HermesApiCall } from './hermes-tools.js';
 
 // ------------------------------------------------------------------ what is stored
 
@@ -168,40 +165,111 @@ export function isHubCallback(uri: string, apiBase: string, name: string): boole
 /** The contract's `McpOAuthFlow.status`. */
 export type McpOAuthStatus = 'pending' | 'approved' | 'failed' | 'cancelled' | 'expired';
 
-/** Hermes's `DashboardOAuthFlow.snapshot()`, plus `tools` on its status route. */
-interface HermesFlow {
-  flow_id?: unknown;
-  status?: unknown;
-  authorization_url?: unknown;
-  error?: unknown;
-  tools?: unknown;
-}
-
-/** Hermes's sentence for a flow its `DELETE` stopped (`web_routers/mcp.py`). */
-const CANCELLED = 'Cancelled by user';
-
-/** Hermes forgets a flow fifteen minutes after it started (`_MCP_DASHBOARD_OAUTH_TTL`). */
+/** Hermes waits 300 s for the browser (its `oauth.timeout`); the hub keeps a sign-in a while longer. */
 export const FLOW_TTL_MS = 15 * 60_000;
 
-/** How long starting may take: Hermes waits up to 30 s for the provider's authorization URL. */
+/** How long starting may take: Hermes discovers the provider and registers before it names the page. */
 export const START_TIMEOUT_MS = 45_000;
+
+/** How long the callback page waits for Hermes to finish before it says "still finishing". */
+export const CALLBACK_WAIT_MS = 45_000;
+
+/**
+ * One run of Hermes's own `hermes mcp login <server>` (the CLI's browser sign-in), as the hub
+ * drives it. What it printed is kept to find the provider's page and the outcome; it holds no
+ * token (Hermes prints the authorization URL, a count of tools and its reasons) and is never
+ * logged or returned as it is.
+ */
+export interface McpLoginProcess {
+  output(): string;
+  running(): boolean;
+  /** Resolves when the process has ended. */
+  exited: Promise<void>;
+  kill(): void;
+}
+
+/** Starts `hermes <argv>` with `HERMES_HOME` set to a profile's home. */
+export type McpLoginSpawner = (home: string, argv: string[]) => McpLoginProcess;
+
+/**
+ * The real spawner. Two things in the environment matter: `HERMES_HOME` is the profile's home
+ * (where Hermes keeps the tokens), and `SSH_CLIENT` is set so Hermes does not open a browser on
+ * the machine the hub runs on — the person's own browser, on the page the hub hands them, is the
+ * one that signs in (Hermes's `_can_open_browser` says no inside an SSH session; on a server
+ * there is no browser anyway, on the desktop app there would be a second one).
+ */
+export function mcpLoginSpawner(options: {
+  command: string;
+  env: () => NodeJS.ProcessEnv;
+}): McpLoginSpawner {
+  return (home, argv) => {
+    let output = '';
+    let alive = true;
+    const child = spawn(options.command, argv, {
+      env: {
+        ...options.env(),
+        HERMES_HOME: home,
+        SSH_CLIENT: 'corehub 0 0',
+        NO_COLOR: '1',
+        COLUMNS: '1000',
+      },
+      cwd: home,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    const keep = (chunk: Buffer) => {
+      if (output.length < 256 * 1024) output += chunk.toString('utf8');
+    };
+    child.stdout?.on('data', keep);
+    child.stderr?.on('data', keep);
+    const exited = new Promise<void>((resolve) => {
+      child.on('error', (error) => {
+        output += `\n${error.message}`;
+        alive = false;
+        resolve();
+      });
+      child.on('close', () => {
+        alive = false;
+        resolve();
+      });
+    });
+    return {
+      output: () => output,
+      running: () => alive,
+      exited,
+      kill: () => {
+        if (alive) child.kill('SIGTERM');
+      },
+    };
+  };
+}
+
+/** The contract's `McpOAuthFlow` minus the fields the record fills. */
+export interface McpOAuthView {
+  status: McpOAuthStatus;
+  authorization_url: string | null;
+  error: string | null;
+  tools: Array<{ name: string; description: string | null }>;
+}
 
 export interface McpOAuthFlowRecord {
   id: string;
   agentId: string;
   profile: string;
+  home: string;
   serverName: string;
-  hermesFlowId: string;
+  /** Where Hermes's callback listener waits, on this host (`oauth.redirect_port`). */
+  port: number;
   redirectUri: string;
   createdAt: number;
-  /**
-   * The `state` of the provider's page Hermes named: the callback finds its sign-in by it (with
-   * the server's name), so the page it answers can wait for Hermes's outcome. Not a secret of
-   * the kind a token is — it travels in the browser's address bar — but it is never logged.
-   */
+  /** The `state` of the provider's page: the callback finds its sign-in by it. Never logged. */
   state: string | null;
-  /** What was last heard, answered again once Hermes has forgotten the flow. */
-  last: McpOAuthView;
+  authorizationUrl: string | null;
+  process: McpLoginProcess;
+  cancelled: boolean;
+  /** The tools Hermes listed once signed in (asked once, after the sign-in). */
+  tools: Array<{ name: string; description: string | null }>;
+  toolsAsked: Promise<void> | null;
 }
 
 /** The `state` query parameter of an authorization URL, if it has one. */
@@ -214,118 +282,98 @@ export function stateOf(authorizationUrl: string | null): string | null {
   }
 }
 
-/**
- * Hermes's own words for why a sign-in failed, with the hub's sentence first where the hub
- * knows the cause. Hermes before v2026.9.21 (0.21.4) drops the provider's RFC 9207 `iss` from
- * the callback, and the MCP SDK then refuses the sign-in of every provider that advertises it
- * (ClickUp does): the person is told to update Hermes rather than shown the SDK's sentence alone.
- */
-export function explainFlowError(error: string | null, language: Language): string | null {
-  if (!error) return null;
-  if (/missing iss parameter/i.test(error)) {
-    return `${t('agents.mcp_oauth.needs_newer_hermes', language)} (${error})`;
+// eslint-disable-next-line no-control-regex
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g;
+const lines = (text: string) =>
+  text
+    .replace(ANSI, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+/** The provider's page Hermes printed ("Open this URL in your browser"), once it has. */
+export function authorizationUrlIn(output: string): string | null {
+  for (const line of lines(output)) {
+    const match = /^(https?:\/\/\S+)$/.exec(line);
+    if (match && /[?&]state=/.test(match[1]!)) return match[1]!;
   }
-  return error;
+  return null;
 }
 
-/** The contract's `McpOAuthFlow` minus the fields the record fills. */
-export interface McpOAuthView {
-  status: McpOAuthStatus;
-  authorization_url: string | null;
-  error: string | null;
-  tools: Array<{ name: string; description: string | null }>;
+/** "✓ Authenticated — 3 tool(s) available": Hermes signed in, and how many tools it saw. */
+export function signedInIn(output: string): { tools: number | null } | null {
+  for (const line of lines(output)) {
+    const match = /Authenticated(?:\s*[—-]\s*(\d+) tool)?/.exec(line);
+    if (match) return { tools: match[1] ? Number(match[1]) : null };
+  }
+  return null;
 }
 
-/** Hermes's state as the contract's. */
-export function viewOf(flow: HermesFlow): McpOAuthView {
-  const status = typeof flow.status === 'string' ? flow.status : 'starting';
-  const error = typeof flow.error === 'string' && flow.error.trim() ? flow.error.trim() : null;
-  const mapped: McpOAuthStatus =
-    status === 'approved'
-      ? 'approved'
-      : status === 'error'
-        ? error === CANCELLED
-          ? 'cancelled'
-          : 'failed'
-        : status === 'starting' || status === 'authorization_required'
-          ? 'pending'
-          : 'failed';
-  const tools = Array.isArray(flow.tools)
-    ? (flow.tools as Array<{ name?: unknown; description?: unknown }>)
-        .filter((tool) => typeof tool?.name === 'string')
-        .map((tool) => ({
-          name: tool.name as string,
-          description:
-            typeof tool.description === 'string' && tool.description !== ''
-              ? tool.description
-              : null,
-        }))
-    : [];
+/** Why Hermes's sign-in ended without a token, in its own words (its last sentence of failure). */
+export function failureIn(output: string): string {
+  const all = lines(output);
+  const said = [...all]
+    .reverse()
+    .find((line) =>
+      /Authentication failed:|no OAuth token was obtained|timed out|not configured for OAuth|has no URL|Error/i.test(
+        line,
+      ),
+    );
+  const text = (said ?? all.at(-1) ?? 'Hermes ended the sign-in without a token').replace(
+    /^[✗✘×!\s]+/,
+    '',
+  );
+  return text.length > 600 ? `${text.slice(0, 600)}…` : text;
+}
+
+/** How a sign-in stands, from Hermes's process and the profile's token file. */
+export function viewOfLogin(record: McpOAuthFlowRecord): McpOAuthView {
+  const url = record.authorizationUrl;
+  if (record.cancelled) {
+    return { status: 'cancelled', authorization_url: url, error: null, tools: [] };
+  }
+  if (record.process.running()) {
+    return { status: 'pending', authorization_url: url, error: null, tools: [] };
+  }
+  const output = record.process.output();
+  const token = oauthStateOf(record.home, record.serverName, true).status === 'connected';
+  if (signedInIn(output) && token) {
+    return { status: 'approved', authorization_url: url, error: null, tools: record.tools };
+  }
+  const reason = failureIn(output);
   return {
-    status: mapped,
-    authorization_url:
-      typeof flow.authorization_url === 'string' && flow.authorization_url
-        ? flow.authorization_url
-        : null,
-    error: mapped === 'approved' || mapped === 'pending' ? null : error,
-    tools: mapped === 'approved' ? tools : [],
+    status: /timed out/i.test(reason) ? 'expired' : 'failed',
+    authorization_url: null,
+    error: reason,
+    tools: [],
   };
 }
 
-const query = (profile: string) => `profile=${encodeURIComponent(profile)}`;
-
-/** Start Hermes's sign-in for `name` in `profile`. Hermes's refusals are the hub's (`hermesFault`). */
-export async function startHermesFlow(
-  api: HermesApiCall,
-  profile: string,
+/**
+ * Start `hermes mcp login <server>` and wait until it names the provider's page (or ends
+ * without one). The caller has written the server's `auth: oauth`, `oauth.redirect_uri` (the
+ * hub's callback) and `oauth.redirect_port` (a free port here) first.
+ */
+export async function startLogin(
+  spawner: McpLoginSpawner,
+  home: string,
   name: string,
-): Promise<{ hermesFlowId: string; view: McpOAuthView }> {
-  let flow: HermesFlow;
-  try {
-    flow = await api<HermesFlow>(
-      'POST',
-      `/api/mcp/servers/${encodeURIComponent(name)}/auth?${query(profile)}`,
-      undefined,
-      { timeoutMs: START_TIMEOUT_MS },
-    );
-  } catch (error) {
-    return hermesFault(error);
-  }
-  const id = typeof flow?.flow_id === 'string' ? flow.flow_id : '';
-  if (!id) {
-    throw new HubError('service_unavailable', {
-      details: { reason: 'hermes_api_unavailable', message: 'Hermes started no sign-in' },
-    });
-  }
-  return { hermesFlowId: id, view: viewOf(flow) };
-}
-
-/** How Hermes's flow stands now; `expired` once Hermes no longer knows it. */
-export async function pollHermesFlow(
-  api: HermesApiCall,
-  hermesFlowId: string,
-): Promise<McpOAuthView | null> {
-  try {
-    return viewOf(
-      await api<HermesFlow>('GET', `/api/mcp/oauth/flows/${encodeURIComponent(hermesFlowId)}`),
-    );
-  } catch (error) {
-    if (error instanceof HermesDashboardRefusal && error.status === 404) return null;
-    return hermesFault(error);
+  waitMs = START_TIMEOUT_MS,
+): Promise<{ process: McpLoginProcess; authorizationUrl: string | null }> {
+  const process = spawner(home, ['mcp', 'login', name]);
+  const began = Date.now();
+  for (;;) {
+    const url = authorizationUrlIn(process.output());
+    if (url) return { process, authorizationUrl: url };
+    if (!process.running() || Date.now() - began > waitMs) {
+      if (process.running()) process.kill();
+      return { process, authorizationUrl: null };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
 
-/** Ask Hermes to stop waiting. Idempotent on Hermes's side. */
-export async function cancelHermesFlow(api: HermesApiCall, hermesFlowId: string): Promise<void> {
-  try {
-    await api('DELETE', `/api/mcp/oauth/flows/${encodeURIComponent(hermesFlowId)}`);
-  } catch (error) {
-    if (error instanceof HermesDashboardRefusal && error.status === 404) return;
-    hermesFault(error);
-  }
-}
-
-/** The sign-ins this hub started, kept as long as Hermes keeps them. Per hub, in memory. */
+/** The sign-ins this hub started, kept as long as Hermes waits for them. Per hub, in memory. */
 export class McpOAuthFlows {
   private readonly flows = new Map<string, McpOAuthFlowRecord>();
 
@@ -333,6 +381,17 @@ export class McpOAuthFlows {
 
   add(record: McpOAuthFlowRecord): void {
     this.sweep();
+    // One sign-in per server and profile at a time: a new one ends the one before.
+    for (const other of this.flows.values()) {
+      if (
+        other.serverName === record.serverName &&
+        other.home === record.home &&
+        other.process.running()
+      ) {
+        other.cancelled = true;
+        other.process.kill();
+      }
+    }
     this.flows.set(record.id, record);
   }
 
@@ -367,82 +426,67 @@ export class McpOAuthFlows {
     return new Date(record.createdAt + FLOW_TTL_MS).toISOString();
   }
 
+  /** Every sign-in still waiting: stopped when the hub closes. */
+  running(): McpOAuthFlowRecord[] {
+    return [...this.flows.values()].filter((record) => record.process.running());
+  }
+
   private sweep(): void {
     const cutoff = this.now() - FLOW_TTL_MS;
-    for (const [id, record] of this.flows) if (record.createdAt < cutoff) this.flows.delete(id);
+    for (const [id, record] of this.flows) {
+      if (record.createdAt < cutoff) {
+        record.process.kill();
+        this.flows.delete(id);
+      }
+    }
   }
 }
 
 // ------------------------------------------------------------------ the callback
 
-/** What handing the callback to Hermes did: the code arrived, or why not. */
-export type RelayOutcome = 'received' | 'declined' | 'expired' | 'unavailable';
+/**
+ * What the page says. `connected` only once Hermes's sign-in ended with a token in the profile's
+ * home (DECISIONS §122, amended): the code arriving is `pending` while Hermes exchanges it and
+ * reaches the server, and `failed` with Hermes's reason when that fails.
+ */
+export type CallbackOutcome = 'connected' | 'failed' | 'pending' | 'declined' | 'expired';
 
 /**
- * What the page says. `connected` only once Hermes reports the sign-in finished — the token
- * exchanged and stored, the server answering with it (DECISIONS §122, amended): the code merely
- * arriving is `pending` while Hermes works and becomes `failed` with Hermes's reason when the
- * exchange or the first connection fails.
+ * Hand the browser's arrival to Hermes's callback listener on this host, the query exactly as
+ * the provider sent it — `code`, `state`, `error` and RFC 9207's `iss`, which Hermes's CLI
+ * listener carries to the MCP SDK (its dashboard route before v2026.9.21 dropped `iss`, and a
+ * provider that advertises it — ClickUp — was then refused). Nothing about it is logged or
+ * thrown: the query holds the authorization code.
  */
-export type CallbackOutcome =
-  'connected' | 'failed' | 'pending' | Exclude<RelayOutcome, 'received'>;
-
-/** How long the callback page waits for Hermes to finish before it says "still finishing". */
-export const CALLBACK_WAIT_MS = 45_000;
-
-/**
- * After Hermes took the code: ask how the sign-in ended, until it did or `waitMs` ran out. The
- * record keeps what was heard, so the MCP page's next poll answers the same.
- */
-export async function awaitSignIn(
-  api: HermesApiCall,
+export async function relayToLogin(
   record: McpOAuthFlowRecord,
-  options: { waitMs?: number; pollMs?: number; sleep?: (ms: number) => Promise<void> } = {},
-): Promise<McpOAuthView> {
-  const waitMs = options.waitMs ?? CALLBACK_WAIT_MS;
-  const pollMs = options.pollMs ?? 500;
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const began = Date.now();
-  for (;;) {
-    let view: McpOAuthView | null;
-    try {
-      view = await pollHermesFlow(api, record.hermesFlowId);
-    } catch {
-      return record.last;
-    }
-    record.last = view ?? { ...record.last, status: 'expired', authorization_url: null };
-    if (record.last.status !== 'pending' || Date.now() - began >= waitMs) return record.last;
-    await sleep(pollMs);
+  rawQuery: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    const response = await fetchImpl(
+      `http://127.0.0.1:${record.port}/callback${rawQuery ? `?${rawQuery}` : ''}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    await response.text().catch(() => '');
+    return response.ok;
+  } catch {
+    return false;
   }
 }
 
-/**
- * Hand the browser's arrival to Hermes's callback, the query exactly as the provider sent it.
- * Nothing about it is logged or thrown: the query holds the authorization code, and an error
- * from the call would carry the URL with it.
- */
-export async function relayCallback(
-  api: HermesApiCall | null,
-  name: string,
-  rawQuery: string,
-): Promise<RelayOutcome> {
-  if (!api) return 'unavailable';
-  const params = new URLSearchParams(rawQuery);
-  try {
-    await api(
-      'GET',
-      `/api/mcp/oauth/callback/${encodeURIComponent(name)}${rawQuery ? `?${rawQuery}` : ''}`,
-    );
-    return params.has('error') ? 'declined' : 'received';
-  } catch (error) {
-    if (error instanceof HermesDashboardRefusal) {
-      if (error.status === 404 || error.status === 409) return 'expired';
-      return 'declined';
-    }
-    if (error instanceof HermesDashboardUnavailable) return 'unavailable';
-    return 'unavailable';
-  }
+/** Wait (at most `waitMs`) for Hermes's sign-in to end. */
+export async function awaitLogin(
+  record: McpOAuthFlowRecord,
+  waitMs = CALLBACK_WAIT_MS,
+): Promise<void> {
+  await Promise.race([
+    record.process.exited,
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, waitMs);
+      timer.unref?.();
+    }),
+  ]);
 }
 
 const escape = (text: string): string =>

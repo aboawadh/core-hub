@@ -7,22 +7,23 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HubError } from '../../lib/errors.js';
-import { HermesDashboardRefusal, HermesDashboardUnavailable } from './hermes-dashboard.js';
-import type { HermesApiCall } from './hermes-tools.js';
 import {
   McpOAuthFlows,
   FLOW_TTL_MS,
+  authorizationUrlIn,
   callbackPage,
   callbackUri,
-  explainFlowError,
-  stateOf,
+  failureIn,
   hubBaseOf,
   isHubCallback,
   oauthStateOf,
-  relayCallback,
   removeOAuthTokens,
+  signedInIn,
+  stateOf,
   tokenFileStem,
-  viewOf,
+  viewOfLogin,
+  type McpLoginProcess,
+  type McpOAuthFlowRecord,
 } from './mcp-oauth.js';
 
 const homes: string[] = [];
@@ -171,89 +172,119 @@ describe('where the browser comes back to', () => {
   });
 });
 
-describe("Hermes's flow in the contract's words", () => {
-  it('maps each state', () => {
-    expect(viewOf({ status: 'starting' }).status).toBe('pending');
-    expect(
-      viewOf({ status: 'authorization_required', authorization_url: 'https://a/x?state=s' }),
-    ).toEqual({
-      status: 'pending',
-      authorization_url: 'https://a/x?state=s',
-      error: null,
-      tools: [],
+/** What `hermes mcp login` printed against a real OAuth server (v2026.9.14), abridged. */
+const PRINTED = `
+  Starting OAuth flow for 'clickup'...
+
+  MCP OAuth: authorization required.
+  Open this URL in your browser:
+
+    http://127.0.0.1:45619/authorize?response_type=code&client_id=client-1&redirect_uri=https%3A%2F%2Fhub.example%2Fapi%2Fv1%2Fmcp-oauth%2Fcallback%2Fclickup&state=TirSYaqL2Af&code_challenge=pbft&code_challenge_method=S256
+
+  (Headless environment detected — open the URL manually.)
+
+  Or paste the redirect URL here (or the \`\`?code=...&state=...\`\` portion) and press Enter.
+`;
+
+function fakeProcess(output: string, running = false): McpLoginProcess {
+  return {
+    output: () => output,
+    running: () => running,
+    exited: Promise.resolve(),
+    kill: () => undefined,
+  };
+}
+
+describe("reading Hermes's login", () => {
+  it('finds the provider’s page, the sign-in and the reason it failed', () => {
+    expect(authorizationUrlIn(PRINTED)).toMatch(
+      /^http:\/\/127\.0\.0\.1:45619\/authorize\?.*state=TirSYaqL2Af/,
+    );
+    expect(authorizationUrlIn('  Starting OAuth flow...')).toBeNull();
+    expect(signedInIn(`${PRINTED}\n  ✓ Authenticated — 3 tool(s) available\n`)).toEqual({
+      tools: 3,
     });
+    expect(signedInIn('  ✓ Authenticated (server reported no tools)')).toEqual({ tools: null });
+    expect(signedInIn(PRINTED)).toBeNull();
     expect(
-      viewOf({ status: 'approved', tools: [{ name: 'get_tasks', description: '' }, { bad: 1 }] }),
-    ).toMatchObject({ status: 'approved', tools: [{ name: 'get_tasks', description: null }] });
-    expect(viewOf({ status: 'error', error: 'Cancelled by user' }).status).toBe('cancelled');
-    expect(viewOf({ status: 'error', error: 'invalid_client' })).toMatchObject({
-      status: 'failed',
-      error: 'invalid_client',
-    });
-    expect(viewOf({ status: 'something-new' }).status).toBe('failed');
+      failureIn(
+        `${PRINTED}\n  ✗ Authentication failed: Token exchange failed (400): invalid_grant\n`,
+      ),
+    ).toBe('Authentication failed: Token exchange failed (400): invalid_grant');
+    expect(failureIn('')).toBe('Hermes ended the sign-in without a token');
   });
 
-  it('keeps a flow only for the agent, profile and server it was started in, and for as long as Hermes does', () => {
+  it('says approved only with Hermes’s word and a token in the profile’s home', () => {
+    const dir = home();
+    const record = (output: string, running = false): McpOAuthFlowRecord => ({
+      id: 'F1',
+      agentId: 'A',
+      profile: 'default',
+      home: dir,
+      serverName: 'clickup',
+      port: 1,
+      redirectUri: 'https://hub.example/cb',
+      createdAt: 0,
+      state: 's',
+      authorizationUrl: 'u',
+      process: fakeProcess(output, running),
+      cancelled: false,
+      tools: [],
+      toolsAsked: null,
+    });
+    expect(viewOfLogin(record(PRINTED, true)).status).toBe('pending');
+    const signed = `${PRINTED}\n  ✓ Authenticated — 3 tool(s) available`;
+    // Hermes's word without a token file is not a sign-in.
+    expect(viewOfLogin(record(signed)).status).toBe('failed');
+    tokens(dir, 'clickup', { access_token: 'at-secret', expires_at: NOW / 1000 + 36000000 });
+    expect(viewOfLogin(record(signed)).status).toBe('approved');
+    expect(
+      viewOfLogin(record('  ✗ OAuth callback timed out — no authorization code received.')),
+    ).toMatchObject({
+      status: 'expired',
+    });
+    expect(viewOfLogin({ ...record(PRINTED, true), cancelled: true }).status).toBe('cancelled');
+  });
+
+  it('keeps a flow only for the agent, profile and server it was started in, for as long as Hermes waits', () => {
     let now = 0;
     const flows = new McpOAuthFlows(() => now);
+    let killed = 0;
+    const running = { ...fakeProcess('', true), kill: () => void (killed += 1) };
     flows.add({
       id: 'F1',
       agentId: 'A',
       profile: 'default',
+      home: '/h',
       serverName: 'clickup',
-      hermesFlowId: 'h',
+      port: 1,
       redirectUri: 'https://hub.example/cb',
       createdAt: 0,
-      last: { status: 'pending', authorization_url: null, error: null, tools: [] },
+      state: 's-1',
+      authorizationUrl: null,
+      process: running,
+      cancelled: false,
+      tools: [],
+      toolsAsked: null,
     });
     expect(flows.get('F1', 'A', 'default', 'clickup')).not.toBeNull();
     expect(flows.get('F1', 'A', 'work', 'clickup')).toBeNull();
     expect(flows.get('F1', 'A', 'default', 'other')).toBeNull();
+    expect(flows.byState('clickup', 's-1')?.id).toBe('F1');
+    expect(flows.byState('clickup', 's-2')).toBeNull();
+    expect(flows.byState('other', 's-1')).toBeNull();
     now = FLOW_TTL_MS + 1;
     expect(flows.get('F1', 'A', 'default', 'clickup')).toBeNull();
+    expect(killed).toBe(1);
+  });
+
+  it('extracts the state of the provider’s page', () => {
+    expect(stateOf('https://a.example/authorize?client_id=c&state=s-1')).toBe('s-1');
+    expect(stateOf(null)).toBeNull();
   });
 });
 
 describe('the callback', () => {
-  it('hands the query to Hermes as it came and reads the answer', async () => {
-    const calls: string[] = [];
-    const api: HermesApiCall = async <T>(method: string, route: string): Promise<T> => {
-      calls.push(`${method} ${route}`);
-      return '<h1>ok</h1>' as T;
-    };
-    expect(await relayCallback(api, 'click.up', 'code=c1&state=s1')).toBe('received');
-    expect(calls).toEqual(['GET /api/mcp/oauth/callback/click.up?code=c1&state=s1']);
-    expect(await relayCallback(api, 'x', 'error=access_denied&state=s1')).toBe('declined');
-  });
-
-  it("says the flow ended, was refused or that there is no Hermes, without Hermes's error", async () => {
-    const refuse =
-      (status: number): HermesApiCall =>
-      async () => {
-        throw new HermesDashboardRefusal('GET /api/mcp/oauth/callback/x?code=c1', status, 'no');
-      };
-    expect(await relayCallback(refuse(404), 'x', 'code=c1&state=s')).toBe('expired');
-    expect(await relayCallback(refuse(409), 'x', 'code=c1&state=s')).toBe('expired');
-    expect(await relayCallback(refuse(400), 'x', 'code=c1&state=s')).toBe('declined');
-    const gone: HermesApiCall = async () => {
-      throw new HermesDashboardUnavailable('down');
-    };
-    expect(await relayCallback(gone, 'x', 'code=c1')).toBe('unavailable');
-    expect(await relayCallback(null, 'x', 'code=c1')).toBe('unavailable');
-  });
-
-  it('names the Hermes update when Hermes dropped the provider’s `iss`', () => {
-    const sdk =
-      'Authorization response missing iss parameter advertised by the authorization server';
-    expect(explainFlowError(sdk, 'en')).toMatch(
-      /^This provider sends an `iss` value .* v2026\.9\.21 .*\(Authorization response missing iss/,
-    );
-    expect(explainFlowError('invalid_grant', 'en')).toBe('invalid_grant');
-    expect(explainFlowError(null, 'en')).toBeNull();
-    expect(stateOf('https://a.example/authorize?client_id=c&state=s-1')).toBe('s-1');
-    expect(stateOf(null)).toBeNull();
-  });
-
   it('answers a page in the language asked, naming the server safely', () => {
     const ar = callbackPage('connected', 'clickup', 'ar', { tools: 3 });
     expect(ar).toContain('dir="rtl"');
@@ -264,7 +295,7 @@ describe('the callback', () => {
     expect(failed).toContain('Sign-in did not finish');
     expect(failed).toContain('invalid_grant &#60;x&#62;');
     // Nothing on any page says the sign-in worked unless it is `connected`.
-    for (const outcome of ['failed', 'pending', 'declined', 'expired', 'unavailable'] as const) {
+    for (const outcome of ['failed', 'pending', 'declined', 'expired'] as const) {
       expect(callbackPage(outcome, 'clickup', 'en')).not.toMatch(/Connected|received/i);
     }
     const en = callbackPage('declined', '<b>', 'en');

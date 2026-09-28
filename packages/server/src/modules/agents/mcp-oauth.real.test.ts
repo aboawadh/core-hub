@@ -23,34 +23,10 @@ import { startFakeOAuthMcp, type FakeOAuthMcp } from '../../../tests/fixtures/fa
 import { HermesDashboard, type DashboardSpawner } from './hermes-dashboard.js';
 import type { SpawnedProcess } from './hermes-runtime.js';
 import type { HermesApiCall } from './hermes-tools.js';
+import { mcpLoginSpawner, type McpLoginSpawner } from './mcp-oauth.js';
 
 const bin = process.env.COREHUB_HERMES_BIN;
 const image = process.env.COREHUB_HERMES_IMAGE;
-
-/** `0.21.4` from `Hermes Agent v0.21.4 (2026.9.21)`, asked of the Hermes under test. */
-function hermesVersion(): number[] {
-  const out = bin
-    ? execFileSync(bin, ['--version'], { encoding: 'utf8' })
-    : image
-      ? execFileSync(
-          'docker',
-          ['run', '--rm', '--entrypoint', '/opt/hermes/.venv/bin/hermes', image, '--version'],
-          { encoding: 'utf8' },
-        )
-      : '';
-  return (/v(\d+)\.(\d+)\.(\d+)/.exec(out) ?? ['', '0', '0', '0']).slice(1).map(Number);
-}
-
-/**
- * Hermes carries the provider's RFC 9207 `iss` through its dashboard callback from 0.21.4. CI sets
- * `COREHUB_EXPECT_OAUTH_CONNECT=1`, so an image pin older than that fails there instead of
- * quietly testing the refusal.
- */
-const carriesIss = (() => {
-  if (!bin && !image) return true;
-  const [major = 0, minor = 0, patch = 0] = hermesVersion();
-  return major > 0 || minor > 21 || (minor === 21 && patch >= 4);
-})();
 
 const healthy: typeof fetch = async () =>
   new Response('{"status":"ok"}', { status: 200, headers: { 'content-type': 'application/json' } });
@@ -79,6 +55,7 @@ describe.skipIf(!bin && !image)(
     beforeAll(async () => {
       provider = await startFakeOAuthMcp();
       let api: HermesApiCall | null = null;
+      let login: McpLoginSpawner | null = null;
       hub = await signedInHub(
         {},
         {
@@ -86,6 +63,7 @@ describe.skipIf(!bin && !image)(
           agents: {
             adapterOptions: { hermes: { fetchImpl: healthy } },
             hermesApi: (...args) => api!(...args),
+            mcpLogin: (home, argv) => login!(home, argv),
           },
         },
       );
@@ -142,6 +120,40 @@ describe.skipIf(!bin && !image)(
         startTimeoutMs: 120_000,
       });
       api = (method, route, body, options) => dashboard.request(method, route, body, options);
+      // Hermes's own `hermes mcp login`, as the hub runs it: the binary, or the image's.
+      login = image
+        ? (home, argv) => {
+            const name = `corehub-mcp-login-real-${process.pid}-${containers.length}`;
+            containers.push(name);
+            const run = mcpLoginSpawner({ command: 'docker', env: () => process.env });
+            return run(home, [
+              'run',
+              '--rm',
+              '--init',
+              '--name',
+              name,
+              '--network',
+              'host',
+              '--user',
+              `${uid}:${gid}`,
+              '-v',
+              `${root}:${root}`,
+              '-e',
+              `HERMES_HOME=${home}`,
+              '-e',
+              'HOME=/tmp',
+              '-e',
+              'SSH_CLIENT=corehub 0 0',
+              '--entrypoint',
+              '/opt/hermes/.venv/bin/hermes',
+              image,
+              ...argv,
+            ]);
+          }
+        : mcpLoginSpawner({
+            command: bin!,
+            env: () => ({ PATH: process.env.PATH ?? '', HOME: path.join(hub.dataDir, 'home') }),
+          });
       const list = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
       agent = (list.json() as { items: Array<{ id: string; kind: string }> }).items.find(
         (row) => row.kind === 'hermes',
@@ -194,18 +206,10 @@ describe.skipIf(!bin && !image)(
       return page.body;
     }
 
-    async function connect(profile: string, home: string) {
+    async function connect(profile: string, home: string, keys: string[]) {
       writeFileSync(
         path.join(home, 'config.yaml'),
-        [
-          'mcp_servers:',
-          '  clickup:',
-          `    url: ${provider.url}`,
-          // What the owner's tester wrote for ClickUp.
-          '    connect_timeout: 600',
-          '    skip_preflight: true',
-          '',
-        ].join('\n'),
+        ['mcp_servers:', '  clickup:', `    url: ${provider.url}`, ...keys, ''].join('\n'),
       );
       const before = await call('GET', `/api/v1/agents/${agent}/mcp-servers`, profile);
       expect(before.json()).toMatchObject({
@@ -226,18 +230,6 @@ describe.skipIf(!bin && !image)(
       const page = await browse(flow.authorization_url!);
       // The page speaks only once Hermes has the token, not when the code merely arrived.
 
-      if (!carriesIss) {
-        // Hermes before v2026.9.21 drops the provider's `iss`: the page says so and never
-        // claims success, and the flow reads failed with the update named.
-        expect(page).toContain('data-outcome="failed"');
-        expect(page).toContain('v2026.9.21');
-        const failed = (
-          await call('GET', `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`, profile)
-        ).json() as Flow;
-        expect(failed.status).toBe('failed');
-        expect(failed.error).toMatch(/missing iss/);
-        return;
-      }
       expect(page, `${provider.events.join(' | ')}`).toContain('data-outcome="connected"');
       const done = (
         await call('GET', `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`, profile)
@@ -262,25 +254,23 @@ describe.skipIf(!bin && !image)(
       expect((test.json() as { tools: unknown[] }).tools).toHaveLength(3);
     }
 
-    it('runs the Hermes the image pins, which carries `iss`', () => {
-      if (process.env.COREHUB_EXPECT_OAUTH_CONNECT === '1') expect(carriesIss).toBe(true);
-    });
-
     it('signs in to the default profile: Hermes exchanges the code, keeps the token in the root home, and Test lists the tools', async () => {
-      await connect('default', root);
-      if (carriesIss) expect(provider.events).toContain('token');
+      // What the owner's tester wrote for ClickUp.
+      await connect('default', root, ['    connect_timeout: 600', '    skip_preflight: true']);
+      expect(provider.events).toContain('token');
     }, 240_000);
 
     it('signs in to a named profile separately, into that profile’s own home', async () => {
       await call('POST', '/api/v1/profiles', 'default', { slug: 'work', name: 'Work' });
       const work = path.join(root, 'profiles', 'work');
-      await connect('work', work);
+      // What "Add server" → sign in writes: the address and `auth: oauth`, nothing else.
+      await connect('work', work, ['    auth: oauth']);
     }, 240_000);
 
     it('never shows a token in any answer or log line', () => {
       const logs = captured.lines.map((line) => JSON.stringify(line)).join('\n');
       const answers = bodies.join('\n');
-      if (carriesIss) expect(provider.issued.length).toBeGreaterThan(0);
+      expect(provider.issued.length).toBeGreaterThan(0);
       for (const secret of provider.issued) {
         expect(answers).not.toContain(secret);
         expect(logs).not.toContain(secret);

@@ -13,9 +13,8 @@ export const hermes: CatalogEntry = {
   protocolArgs: ['acp'],
   versionArgs: ['--version'],
   install: { kind: 'bundled' },
-  // The oldest Hermes the hub is known to work with: release v2026.9.14, which the image pinned
-  // until 2026-09-28 and every `*.real.test.ts` ran against (the image now pins v2026.9.21, the
-  // first that carries a provider's `iss` through an MCP sign-in, DECISIONS §122). The
+  // The oldest Hermes the hub is known to work with: release v2026.9.14, the version the image
+  // pins (packages/server/Dockerfile `HERMES_REF`) and every `*.real.test.ts` runs against. The
   // hub's own commands (`profile create --no-alias --clone-from`, `plugins … --no-enable`,
   // `kanban`, the TUI gateway's `llm.oneshot`, `session.steer`, `command.dispatch`, the API
   // server under `API_SERVER_KEY`) were read from that source; an older Hermes is not proven

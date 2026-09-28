@@ -3928,27 +3928,38 @@ without credentials is `400`).
 image: the callback page said "Sign-in received", but the server stayed not connected and Test got
 `401`. Reproduced against the real Hermes of the image (v2026.9.14) with a real OAuth 2.1 + MCP
 server: ClickUp advertises `authorization_response_iss_parameter_supported` and sends `iss` on the
-redirect (RFC 9207); Hermes v2026.9.14's dashboard callback takes only `code`, `state` and `error`,
-so the MCP SDK refuses the sign-in ("Authorization response missing iss parameter advertised by the
-authorization server") after the page had already said it was received. Hermes v2026.9.21 (0.21.4)
-carries `iss` through. So — proposed, owner to confirm:
-- **The image pins Hermes v2026.9.21.** The whole real-Hermes suite was run against both pins
-  (docs/changes/2026-09-28-twuijri-mcp-oauth-real-hermes.md); a new CI job,
-  "MCP OAuth against the real Hermes", installs the pinned tag the way the image does and runs the
-  sign-in end to end.
-- **The callback page says connected only when Hermes says so**: it waits (45 s at most) for the
-  flow Hermes started for that server and `state`, and answers connected with the tool count, the
-  failure in Hermes's words, or "still finishing" — never success on the code's arrival alone.
-- A failure the hub understands is explained first: Hermes older than v2026.9.21 dropping `iss`
-  reads "update Hermes", then Hermes's sentence.
+redirect (RFC 9207). Hermes v2026.9.14's **dashboard** callback route takes only `code`, `state`
+and `error`, so the MCP SDK refused the sign-in ("Authorization response missing iss parameter
+advertised by the authorization server") after the hub's page had already said it was received.
+Hermes v2026.9.21 carries `iss`, but against it several of the hub's other real-Hermes tests failed
+that pass on v2026.9.14 (the shared provider's key in named profiles, gateways side by side, a TUI
+command — docs/changes/2026-09-28-twuijri-mcp-oauth-real-hermes.md); moving the image is its own
+task. So — proposed, owner to confirm:
+- **The sign-in is Hermes's own `hermes mcp login <server>`**, the CLI's browser flow, whose
+  callback listener keeps `iss` in every version the hub supports. The hub writes `auth: oauth`,
+  `oauth.redirect_uri` (its callback, as before) and `oauth.redirect_port` (a free port on its
+  host), runs the command in the profile's home with `SSH_CLIENT` set (so Hermes opens no browser
+  on the hub's machine), gives the person the page Hermes prints, and hands the provider's query,
+  unchanged, to `127.0.0.1:<port>/callback`. Hermes exchanges the code, keeps the tokens in the
+  profile's home and says "Authenticated — N tool(s)". The image stays on v2026.9.14.
+- **The callback page says connected only when Hermes says so**: it waits (45 s at most) for that
+  sign-in to end, and answers connected with the tool count, the failure in Hermes's words,
+  declined, or "still finishing" — never success on the code's arrival alone. `approved` also
+  needs the token file in the profile's home, not Hermes's word alone.
+- A new sign-in for the same server ends the one before; a hub that closes ends its sign-ins.
 - The web follows the sign-in while the person is on the provider's tab, runs Test by itself once
   signed in, and offers Reconnect beside Disconnect when connected.
 - **"Add server" → Sign in (OAuth)**: an address and a name read from the host
-  (`mcp.clickup.com` → `clickup`, the next free name when taken); the hub writes the smallest block
-  a server that signs in needs — `url` and `auth: oauth`, no `connect_timeout` or `skip_preflight`
-  (Hermes's sign-in waits 315 s itself and skips its preflight for OAuth) — and the sign-in starts
-  at once. Only `https`, or `http` on this computer.
+  (`mcp.clickup.com` → `clickup`, the next free name when taken); the web writes the smallest
+  block a server that signs in needs — `url` and `auth: oauth`, no `connect_timeout` or
+  `skip_preflight` (Hermes's login waits 315 s itself and its preflight is skipped for OAuth) —
+  and the sign-in starts at once. Only `https`, or `http` on this computer.
+- CI: "MCP OAuth against the real Hermes" installs the image's pinned tag the way the image does
+  and runs the whole sign-in against a local OAuth 2.1 + MCP server that sends `iss`.
 
+Rejected: moving the image to Hermes v2026.9.21 in this fix (see above); patching Hermes's
+dashboard route in the image (a change to third-party code the hub does not own); dropping `iss`
+checks (older MCP SDK) — the check is the provider's protection against mix-up.
 
 ## 123. Inbound webhook triggers start a workflow; a condition can hold several rules
 

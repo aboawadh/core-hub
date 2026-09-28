@@ -91,7 +91,7 @@ RUN set -eu; \
 # fit (Telegram, Discord, Slack, WhatsApp — below): no dashboard, TUI, browsers, ffmpeg or other
 # messaging extras — the hub is the UI.
 FROM node:24-bookworm AS hermes
-ARG HERMES_REF=v2026.9.21
+ARG HERMES_REF=v2026.9.14
 ARG UV_VERSION=0.11.6
 ENV UV_PYTHON_INSTALL_DIR=/opt/hermes/python \
     UV_LINK_MODE=copy \

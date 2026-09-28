@@ -1,16 +1,16 @@
 /**
- * MCP OAuth through the hub's own routes (DECISIONS §122), with a scripted Hermes that behaves
- * like Hermes's dashboard: `…/auth` starts a flow with an authorization URL, the callback
- * accepts only the flow's `state` and then writes the tokens into the profile's home, the flow
- * route reports `approved` with the tools. The last test is the promise that matters most: no
- * token value appears in any answer or any log line.
+ * MCP OAuth through the hub's own routes (DECISIONS §122), with Hermes's `hermes mcp login`
+ * played by `testing/fake-mcp-login.ts` — a listener on the port the hub wrote, which takes the
+ * callback, writes the tokens into the profile's home and says "Authenticated" — and Hermes's
+ * test answered by a scripted API. The real command is `mcp-oauth.real.test.ts`. The last test
+ * is the promise that matters most: no token value appears in any answer or any log line.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { authed, capturingLogger, signedInHub, type TestHub } from '../../../tests/unit/helpers.js';
-import { HermesDashboardRefusal } from './hermes-dashboard.js';
 import type { HermesApiCall } from './hermes-tools.js';
+import { fakeMcpLogin, type FakeMcpLoginOptions } from './testing/fake-mcp-login.js';
 
 type Hub = TestHub & { token: string };
 let hub: Hub | null = null;
@@ -27,126 +27,55 @@ const REFRESH = 'rt-1a2b3c4d5e6f-SECRET';
 const CLIENT_SECRET = 'cs-0011223344-SECRET';
 const CODE = 'code-5566778899-SECRET';
 
-interface FakeFlow {
-  id: string;
-  server: string;
-  home: string;
-  state: string;
-  status: 'authorization_required' | 'approved' | 'error';
-  error: string | null;
-}
-
-/** Hermes's dashboard, played in memory against the hub's data folder. */
-function fakeHermes(root: string, options: { failAfterCallback?: string } = {}) {
-  const calls: string[] = [];
-  const flows = new Map<string, FakeFlow>();
-  let next = 0;
-  const homeOf = (profile: string) =>
-    profile === 'default' ? root : path.join(root, 'profiles', profile);
-  const snapshot = (flow: FakeFlow) => ({
-    flow_id: flow.id,
-    server_name: flow.server,
-    status: flow.status,
-    authorization_url: `https://auth.example/authorize?client_id=c1&state=${flow.state}`,
-    error: flow.error,
-  });
-  const api: HermesApiCall = async <T>(method: string, route: string): Promise<T> => {
-    calls.push(`${method} ${route}`);
-    const url = new URL(route, 'http://hermes');
-    const auth = /^\/api\/mcp\/servers\/([^/]+)\/auth$/.exec(url.pathname);
-    if (method === 'POST' && auth) {
-      next += 1;
-      const flow: FakeFlow = {
-        id: `hermes-flow-${next}`,
-        server: decodeURIComponent(auth[1]!),
-        home: homeOf(url.searchParams.get('profile') ?? 'default'),
-        state: `state-${next}`,
-        status: 'authorization_required',
-        error: null,
-      };
-      flows.set(flow.id, flow);
-      return snapshot(flow) as T;
-    }
-    const status = /^\/api\/mcp\/oauth\/flows\/([^/]+)$/.exec(url.pathname);
-    if (status) {
-      const flow = flows.get(decodeURIComponent(status[1]!));
-      if (!flow)
-        throw new HermesDashboardRefusal(`${method} ${route}`, 404, 'OAuth flow not found');
-      if (method === 'DELETE') {
-        if (flow.status !== 'approved') {
-          flow.status = 'error';
-          flow.error = 'Cancelled by user';
-        }
-        return { ok: true } as T;
-      }
+/** Hermes's test: the tools once the profile holds a token, its sentence before. */
+const hermesApi =
+  (root: string): HermesApiCall =>
+  async <T>(_method: string, route: string): Promise<T> => {
+    const profile = new URL(route, 'http://hermes').searchParams.get('profile') ?? 'default';
+    const home = profile === 'default' ? root : path.join(root, 'profiles', profile);
+    try {
+      readFileSync(path.join(home, 'mcp-tokens', 'clickup.json'));
+    } catch {
       return {
-        ...snapshot(flow),
-        tools:
-          flow.status === 'approved'
-            ? [
-                { name: 'get_tasks', description: 'List tasks.' },
-                { name: 'create_task', description: 'Create a task.' },
-              ]
-            : [],
+        ok: false,
+        error: 'OAuth authentication required — no token found.',
+        tools: [],
       } as T;
     }
-    const callback = /^\/api\/mcp\/oauth\/callback\/(.+)$/.exec(url.pathname);
-    if (callback) {
-      const flow = [...flows.values()].find(
-        (each) =>
-          each.server === decodeURIComponent(callback[1]!) &&
-          each.status === 'authorization_required' &&
-          each.state === url.searchParams.get('state'),
-      );
-      if (!flow) throw new HermesDashboardRefusal(`${method} ${route}`, 404, 'expired');
-      if (url.searchParams.get('code') !== CODE) {
-        throw new HermesDashboardRefusal(`${method} ${route}`, 400, 'bad code');
-      }
-      if (options.failAfterCallback) {
-        // Hermes took the code, then the exchange failed: its route still answers 200.
-        flow.status = 'error';
-        flow.error = options.failAfterCallback;
-        return '<h1>Authorization received</h1>' as T;
-      }
-      // What Hermes's worker writes once the provider exchanged the code.
-      const dir = path.join(flow.home, 'mcp-tokens');
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        path.join(dir, `${flow.server}.json`),
-        JSON.stringify({
-          access_token: ACCESS,
-          refresh_token: REFRESH,
-          token_type: 'Bearer',
-          expires_at: Date.now() / 1000 + 3600,
-        }),
-      );
-      writeFileSync(
-        path.join(dir, `${flow.server}.client.json`),
-        JSON.stringify({ client_id: 'c1', client_secret: CLIENT_SECRET }),
-      );
-      flow.status = 'approved';
-      return '<h1>Authorization received</h1>' as T;
-    }
-    throw new Error(`unscripted ${method} ${route}`);
+    return {
+      ok: true,
+      tools: [
+        { name: 'get_tasks', description: 'List tasks.' },
+        { name: 'create_task', description: 'Create a task.' },
+        { name: 'get_workspace_hierarchy', description: 'The hierarchy.' },
+      ],
+    } as T;
   };
-  return { api, calls, flows };
-}
 
 async function boot(
   logger?: ReturnType<typeof capturingLogger>['logger'],
-  options: { failAfterCallback?: string } = {},
+  login: FakeMcpLoginOptions = {},
 ) {
-  let hermes: ReturnType<typeof fakeHermes> | null = null;
-  const api: HermesApiCall = (...args) => hermes!.api(...args);
+  const calls: NonNullable<FakeMcpLoginOptions['calls']> = [];
+  let root = '';
   hub = await signedInHub(
     {},
     {
       ...(logger ? { logger } : {}),
-      agents: { adapterOptions: { hermes: { fetchImpl: healthy } }, hermesApi: api },
+      agents: {
+        adapterOptions: { hermes: { fetchImpl: healthy } },
+        hermesApi: (...args) => hermesApi(root)(...args),
+        mcpLogin: fakeMcpLogin({
+          code: CODE,
+          accessToken: ACCESS,
+          refreshToken: REFRESH,
+          calls,
+          ...login,
+        }),
+      },
     },
   );
-  const root = path.join(hub.dataDir, 'hermes');
-  hermes = fakeHermes(root, options);
+  root = path.join(hub.dataDir, 'hermes');
   const list = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
   const agent = (list.json() as { items: Array<{ id: string; kind: string }> }).items.find(
     (row) => row.kind === 'hermes',
@@ -164,7 +93,7 @@ async function boot(
       '',
     ].join('\n'),
   );
-  return { hub, agent, root, hermes };
+  return { hub, agent, root, calls };
 }
 
 const servers = async (h: Hub, agent: string, profile = 'default') =>
@@ -178,70 +107,83 @@ const servers = async (h: Hub, agent: string, profile = 'default') =>
     ).json() as { items: Array<{ name: string; oauth?: { status: string; required: boolean } }> }
   ).items;
 
+interface Flow {
+  id: string;
+  status: string;
+  authorization_url: string | null;
+  redirect_uri: string;
+  error: string | null;
+  tools: Array<{ name: string }>;
+}
+
+const start = async (h: Hub, agent: string, payload?: unknown, profile = 'default') =>
+  authed(h, h.token, {
+    method: 'POST',
+    url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
+    profile,
+    ...(payload ? { payload } : {}),
+  });
+
 describe('connecting an MCP server by OAuth', () => {
-  it('writes the callback the browser can reach, starts Hermes, relays the callback and reports approved', async () => {
-    const { hub: h, agent, root, hermes } = await boot();
+  it('prepares the block, starts Hermes’s login, hands the callback to its listener with `iss`, and says connected only once signed in', async () => {
+    const { hub: h, agent, root, calls } = await boot();
     expect((await servers(h, agent)).map((s) => [s.name, s.oauth?.status ?? null])).toEqual([
       ['clickup', 'not_connected'],
       ['local', null],
     ]);
 
-    const started = await authed(h, h.token, {
-      method: 'POST',
-      url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
-      payload: { hub_url: 'https://tunnel.example' },
-    });
+    const started = await start(h, agent, { hub_url: 'https://tunnel.example' });
     expect(started.statusCode, started.body).toBe(200);
-    const flow = started.json() as {
-      id: string;
-      status: string;
-      authorization_url: string;
-      redirect_uri: string;
-    };
+    const flow = started.json() as Flow;
     expect(flow).toMatchObject({
       status: 'pending',
       redirect_uri: 'https://tunnel.example/api/v1/mcp-oauth/callback/clickup',
-      authorization_url: 'https://auth.example/authorize?client_id=c1&state=state-1',
     });
+    expect(flow.authorization_url).toContain('state=state-1');
     expect(flow.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(hermes.calls).toEqual(['POST /api/mcp/servers/clickup/auth?profile=default']);
-    // The redirect is in the server's block; the comment and the other server stay.
+    expect(calls.map((c) => c.argv)).toEqual([['mcp', 'login', 'clickup']]);
+    expect(calls[0]!.home).toBe(root);
+    // The block Hermes's login needs; the comment and the other server stay.
     const config = readFileSync(path.join(root, 'config.yaml'), 'utf8');
     expect(config).toContain('# the person’s own comment');
-    expect(config).toContain(
-      '    oauth:\n      redirect_uri: https://tunnel.example/api/v1/mcp-oauth/callback/clickup',
+    expect(config).toMatch(
+      / {2}clickup:\n {4}url: https:\/\/mcp\.clickup\.example\/mcp\n {4}auth: oauth\n {4}oauth:\n {6}redirect_uri: https:\/\/tunnel\.example\/api\/v1\/mcp-oauth\/callback\/clickup\n {6}redirect_port: \d+/,
     );
     expect(config).toContain('  local:\n    command: node');
 
-    const poll = () =>
-      authed(h, h.token, {
-        method: 'GET',
-        url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`,
-      });
-    expect((await poll()).json()).toMatchObject({ status: 'pending' });
+    const poll = async () =>
+      (
+        await authed(h, h.token, {
+          method: 'GET',
+          url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`,
+        })
+      ).json() as Flow;
+    expect((await poll()).status).toBe('pending');
 
-    // The provider sends the browser back: no session, the query handed to Hermes as it came.
+    // The provider sends the browser back: no session; the query reaches Hermes as it came.
     const back = await h.app.inject({
       method: 'GET',
-      url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1`,
+      url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1&iss=https%3A%2F%2Fauth.example`,
       headers: { 'accept-language': 'ar' },
     });
     expect(back.statusCode).toBe(200);
     expect(back.headers['content-type']).toContain('text/html');
+    expect(calls[0]!.query).toBe(`code=${CODE}&state=state-1&iss=https%3A%2F%2Fauth.example`);
     // The page waited for Hermes: connected, with the tools it listed.
     expect(back.body).toContain('data-outcome="connected"');
-    expect(back.body).toContain('عدد الأدوات التي يعرضها: 2');
+    expect(back.body).toContain('عدد الأدوات التي يعرضها: 3');
     expect(back.body).toContain('dir="rtl"');
-    expect(hermes.calls).toContain(
-      `GET /api/mcp/oauth/callback/clickup?code=${CODE}&state=state-1`,
-    );
 
-    const done = (await poll()).json() as { status: string; tools: Array<{ name: string }> };
+    const done = await poll();
     expect(done.status).toBe('approved');
-    expect(done.tools.map((tool) => tool.name)).toEqual(['get_tasks', 'create_task']);
+    expect(done.tools.map((tool) => tool.name)).toEqual([
+      'get_tasks',
+      'create_task',
+      'get_workspace_hierarchy',
+    ]);
     expect((await servers(h, agent))[0]).toMatchObject({
       name: 'clickup',
-      oauth: { status: 'connected', required: false },
+      oauth: { status: 'connected', required: true },
     });
 
     // Used once: the same callback again is an ended sign-in, said as such.
@@ -252,17 +194,11 @@ describe('connecting an MCP server by OAuth', () => {
     expect(again.body).toContain('data-outcome="expired"');
   });
 
-  it('says the sign-in failed, with the reason, when Hermes took the code but the exchange failed', async () => {
+  it('says the sign-in failed, with Hermes’s reason, when Hermes took the code but got no token', async () => {
     const { hub: h, agent } = await boot(undefined, {
-      failAfterCallback:
-        'Authorization response missing iss parameter advertised by the authorization server',
+      failWith: 'Token exchange failed (400): invalid_grant',
     });
-    const flow = (
-      await authed(h, h.token, {
-        method: 'POST',
-        url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
-      })
-    ).json() as { id: string };
+    const flow = (await start(h, agent)).json() as Flow;
     const back = await h.app.inject({
       method: 'GET',
       url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1`,
@@ -270,14 +206,24 @@ describe('connecting an MCP server by OAuth', () => {
     });
     expect(back.body).toContain('data-outcome="failed"');
     expect(back.body).not.toMatch(/received|Connected/);
-    expect(back.body).toContain('v2026.9.21');
+    expect(back.body).toContain('invalid_grant');
     const polled = await authed(h, h.token, {
       method: 'GET',
       url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`,
     });
     expect(polled.json()).toMatchObject({ status: 'failed' });
-    expect((polled.json() as { error: string }).error).toMatch(/Update Hermes.*missing iss/);
+    expect((polled.json() as Flow).error).toMatch(/invalid_grant/);
     expect((await servers(h, agent))[0]?.oauth?.status).toBe('not_connected');
+  });
+
+  it('says declined when the person refused at the provider', async () => {
+    const { hub: h, agent } = await boot();
+    await start(h, agent);
+    const back = await h.app.inject({
+      method: 'GET',
+      url: '/api/v1/mcp-oauth/callback/clickup?error=access_denied&state=state-1',
+    });
+    expect(back.body).toContain('data-outcome="declined"');
   });
 
   it("uses the request's own address without `hub_url`, and keeps a redirect the person wrote", async () => {
@@ -296,11 +242,7 @@ describe('connecting an MCP server by OAuth', () => {
       path.join(root, 'config.yaml'),
       'mcp_servers:\n  clickup:\n    url: https://mcp.clickup.example/mcp\n    oauth:\n      redirect_uri: https://my-proxy.example/cb\n',
     );
-    const second = await authed(h, h.token, {
-      method: 'POST',
-      url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
-      payload: { hub_url: 'https://tunnel.example' },
-    });
+    const second = await start(h, agent, { hub_url: 'https://tunnel.example' });
     expect(second.json()).toMatchObject({ redirect_uri: 'https://my-proxy.example/cb' });
     expect(readFileSync(path.join(root, 'config.yaml'), 'utf8')).toContain(
       'redirect_uri: https://my-proxy.example/cb',
@@ -309,21 +251,20 @@ describe('connecting an MCP server by OAuth', () => {
 
   it('refuses a stdio server, a bad hub_url, a missing server and a flow of another profile', async () => {
     const { hub: h, agent, root } = await boot();
-    const start = (name: string, payload?: unknown, profile = 'default') =>
+    const named = (name: string, payload?: unknown) =>
       authed(h, h.token, {
         method: 'POST',
         url: `/api/v1/agents/${agent}/mcp-servers/${name}/oauth`,
-        profile,
         ...(payload ? { payload } : {}),
       });
-    expect((await start('local')).json()).toMatchObject({
+    expect((await named('local')).json()).toMatchObject({
       code: 'conflict',
       details: { reason: 'mcp_oauth_stdio' },
     });
-    expect((await start('clickup', { hub_url: 'javascript:alert(1)' })).statusCode).toBe(400);
-    expect((await start('nope')).statusCode).toBe(404);
+    expect((await named('clickup', { hub_url: 'javascript:alert(1)' })).statusCode).toBe(400);
+    expect((await named('nope')).statusCode).toBe(404);
 
-    const flow = (await start('clickup')).json() as { id: string };
+    const flow = (await named('clickup')).json() as Flow;
     await authed(h, h.token, {
       method: 'POST',
       url: '/api/v1/profiles',
@@ -346,34 +287,48 @@ describe('connecting an MCP server by OAuth', () => {
     });
   });
 
-  it('cancels a sign-in through Hermes, and says expired once Hermes forgot it', async () => {
-    const { hub: h, agent, hermes } = await boot();
-    const flow = (
-      await authed(h, h.token, {
-        method: 'POST',
-        url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
-      })
-    ).json() as { id: string };
+  it('cancels a sign-in by ending Hermes’s login; a new one ends the one before', async () => {
+    const { hub: h, agent } = await boot();
+    const flow = (await start(h, agent)).json() as Flow;
     const cancelled = await authed(h, h.token, {
       method: 'DELETE',
       url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${flow.id}`,
     });
     expect(cancelled.statusCode, cancelled.body).toBe(200);
     expect(cancelled.json()).toMatchObject({ status: 'cancelled' });
-    expect(hermes.calls).toContain('DELETE /api/mcp/oauth/flows/hermes-flow-1');
+    const late = await h.app.inject({
+      method: 'GET',
+      url: `/api/v1/mcp-oauth/callback/clickup?code=${CODE}&state=state-1`,
+    });
+    expect(late.body).toContain('data-outcome="expired"');
 
-    const second = (
-      await authed(h, h.token, {
-        method: 'POST',
-        url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth`,
-      })
-    ).json() as { id: string };
-    hermes.flows.clear();
-    const forgotten = await authed(h, h.token, {
+    const second = (await start(h, agent)).json() as Flow;
+    const third = (await start(h, agent)).json() as Flow;
+    const replaced = await authed(h, h.token, {
       method: 'GET',
       url: `/api/v1/agents/${agent}/mcp-servers/clickup/oauth/${second.id}`,
     });
-    expect(forgotten.json()).toMatchObject({ status: 'expired', authorization_url: null });
+    expect(replaced.json()).toMatchObject({ status: 'cancelled' });
+    expect(third.status).toBe('pending');
+  });
+
+  it('says so when this hub runs no Hermes to sign in with', async () => {
+    hub = await signedInHub({}, { agents: { adapterOptions: { hermes: { fetchImpl: healthy } } } });
+    const list = await authed(hub, hub.token, { method: 'GET', url: '/api/v1/agents' });
+    const agent = (list.json() as { items: Array<{ id: string; kind: string }> }).items.find(
+      (row) => row.kind === 'hermes',
+    )!.id;
+    const home = path.join(hub.dataDir, 'hermes');
+    mkdirSync(home, { recursive: true });
+    writeFileSync(
+      path.join(home, 'config.yaml'),
+      'mcp_servers:\n  clickup:\n    url: https://x.example/mcp\n',
+    );
+    const none = await start(hub, agent);
+    expect(none.json()).toMatchObject({
+      code: 'state_invalid',
+      details: { reason: 'hermes_not_supervised' },
+    });
   });
 
   it("disconnects by deleting that profile's sign-in files and says not connected", async () => {
@@ -393,14 +348,14 @@ describe('connecting an MCP server by OAuth', () => {
     expect((await servers(h, agent))[0]?.oauth?.status).toBe('not_connected');
   });
 
-  it('answers the callback with a page even when there is no Hermes to hand it to', async () => {
+  it('answers the callback of a sign-in it does not know with a page, never success', async () => {
     hub = await signedInHub();
     const res = await hub.app.inject({
       method: 'GET',
       url: '/api/v1/mcp-oauth/callback/clickup?code=x&state=y',
     });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('data-outcome="unavailable"');
+    expect(res.body).toContain('data-outcome="expired"');
   });
 });
 

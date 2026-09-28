@@ -125,7 +125,8 @@ jobs:
   # DECISIONS §122 (amended): MCP OAuth end to end against the real Hermes at the tag the image
   # pins, installed the way the image installs it (packages/server/Dockerfile), with a real
   # OAuth 2.1 + MCP server that behaves like ClickUp (RFC 9207 `iss`). The ClickUp report of
-  # 2026-09-28 only reproduced against the real Hermes, never against the scripted one.
+  # 2026-09-28 only reproduced against the real Hermes, never against the scripted one, so this
+  # runs on every PR.
   hermes-real:
     name: MCP OAuth against the real Hermes (the image's pinned tag)
     runs-on: ubuntu-latest
@@ -156,7 +157,6 @@ jobs:
       - name: Connect OAuth → callback → token exchange → token in the profile's home → Test
         env:
           COREHUB_HERMES_BIN: ${{ runner.temp }}/hermes/.venv/bin/hermes
-          COREHUB_EXPECT_OAUTH_CONNECT: '1'
         run: pnpm --filter @corehub/server exec vitest run --project unit src/modules/agents/mcp-oauth.real.test.ts
 
   gate:

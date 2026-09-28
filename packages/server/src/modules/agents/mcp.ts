@@ -234,27 +234,33 @@ export function deleteMcpServer(home: string, name: string): void {
 }
 
 /**
- * Point the server's OAuth callback at `uri` (`oauth.redirect_uri`, the key Hermes reads first
- * for a browser sign-in; DECISIONS §122), leaving every other key and byte alone. A
- * `redirect_uri` the person wrote themselves — anything `ours` does not recognise as the hub's
- * own callback — is kept. Answers the URI that is in the file afterwards.
+ * Make the server ready for Hermes's sign-in (DECISIONS §122): `auth: oauth` (Hermes's
+ * `mcp login` refuses a server without it), `oauth.redirect_uri` pointed at `uri` — the hub's
+ * callback — and `oauth.redirect_port` set to `port`, where Hermes's listener will wait on this
+ * host. Every other key and byte is left alone. A `redirect_uri` the person wrote themselves —
+ * anything `ours` does not recognise as the hub's own callback — is kept. Answers the redirect
+ * URI that is in the file afterwards.
  */
-export function setOAuthRedirect(
+export function prepareOAuthLogin(
   home: string,
   name: string,
   uri: string,
+  port: number,
   ours: (current: string) => boolean,
 ): string {
   if (!NAME.test(name)) throw new McpError('mcp_name_invalid');
   const doc = load(home);
   const block = doc.toJS()?.[BLOCK]?.[name] as Record<string, unknown> | undefined;
   if (!block || typeof block !== 'object') throw new McpError('mcp_not_found');
+  if (block.oauth !== undefined && !isBlock(block.oauth)) {
+    throw new McpError('mcp_oauth_block_invalid');
+  }
   const oauth = isBlock(block.oauth) ? block.oauth : null;
   const current = typeof oauth?.redirect_uri === 'string' ? oauth.redirect_uri.trim() : '';
-  if (current && !ours(current)) return current;
-  if (current === uri) return uri;
-  if (block.oauth !== undefined && !oauth) throw new McpError('mcp_oauth_block_invalid');
-  doc.setIn([BLOCK, name, 'oauth', 'redirect_uri'], uri);
+  const redirect = current && !ours(current) ? current : uri;
+  if (block.auth !== 'oauth') doc.setIn([BLOCK, name, 'auth'], 'oauth');
+  if (current !== redirect) doc.setIn([BLOCK, name, 'oauth', 'redirect_uri'], redirect);
+  doc.setIn([BLOCK, name, 'oauth', 'redirect_port'], port);
   save(home, doc);
-  return uri;
+  return redirect;
 }

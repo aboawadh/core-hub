@@ -97,7 +97,12 @@ test('MCP OAuth: "Add server" by its address signs in, turns Connected and tests
   await openMcp(page);
 
   await page.getByTestId('new-mcp').click();
-  await page.getByTestId('mcp-add-mode').getByRole('radio', { name: 'تسجيل دخول (OAuth)' }).click();
+  const signIn = page
+    .getByTestId('mcp-add-mode')
+    .getByRole('radio', { name: 'تسجيل دخول (OAuth)' });
+  await signIn.click();
+  await expect(signIn).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('mcp-config')).toHaveCount(0);
   await page.getByTestId('mcp-signin-url').fill('https://mcp.clickup.com/mcp');
   // The name is read from the host: `mcp.clickup.com` → `clickup`.
   await expect(page.getByTestId('mcp-signin-name')).toHaveValue('clickup');

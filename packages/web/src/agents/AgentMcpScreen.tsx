@@ -364,20 +364,24 @@ function ServerEditor({
             )}
           </Field>
         )}
-        <Textarea
-          rows={14}
-          dir="ltr"
-          className="skill-editor"
-          aria-label={t('mcp.config')}
-          value={text}
-          onChange={(event) => setDraft(event.target.value)}
-          data-testid="mcp-config"
-        />
-        {/* Said while typing, not after saving: a bracket in the wrong place is worth
-            knowing about before the button is pressed. */}
-        {!parsed.ok && <Notice tone="warning">{t('mcp.invalid_json')}</Notice>}
-        {(create.isError || update.isError) && (
-          <Notice tone="danger">{describeError(create.error ?? update.error, t)}</Notice>
+        {!signingIn && (
+          <>
+            <Textarea
+              rows={14}
+              dir="ltr"
+              className="skill-editor"
+              aria-label={t('mcp.config')}
+              value={text}
+              onChange={(event) => setDraft(event.target.value)}
+              data-testid="mcp-config"
+            />
+            {/* Said while typing, not after saving: a bracket in the wrong place is worth
+                knowing about before the button is pressed. */}
+            {!parsed.ok && <Notice tone="warning">{t('mcp.invalid_json')}</Notice>}
+            {(create.isError || update.isError) && (
+              <Notice tone="danger">{describeError(create.error ?? update.error, t)}</Notice>
+            )}
+          </>
         )}
       </div>
     </Dialog>

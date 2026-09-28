@@ -321,6 +321,12 @@ describe('connecting an MCP server by OAuth', () => {
     mount(fetchImpl);
     fireEvent.click(await screen.findByTestId('new-mcp'));
     fireEvent.click(await screen.findByRole('radio', { name: 'Sign in (OAuth)' }));
+    expect(screen.getByRole('radio', { name: 'Sign in (OAuth)' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('radio', { name: 'JSON' }).getAttribute('aria-checked')).toBe('false');
+    // Only the sign-in form: the JSON editor is the other way.
+    expect(screen.queryByTestId('mcp-config')).toBeNull();
     const url = await screen.findByTestId('mcp-signin-url');
     fireEvent.change(url, { target: { value: 'http://mcp.clickup.com/mcp' } });
     expect(screen.getByText('An https:// address (http:// only for this computer).')).toBeTruthy();

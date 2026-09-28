@@ -222,13 +222,10 @@
       "failed": "Hermes could not finish the sign-in to {server}. Return to Core Hub and try again; Hermes's reason:",
       "pending_title": "Still finishing",
       "pending": "The provider sent you back and Hermes is still finishing the sign-in to {server}. Return to Core Hub: the MCP page shows the result.",
-      "needs_newer_hermes": "This provider sends an `iss` value that Hermes before v2026.9.21 (0.21.4) does not pass on, so the sign-in is refused. Update Hermes, then connect again.",
       "declined_title": "Sign-in not completed",
       "declined": "The provider did not grant access to {server}. Return to Core Hub and try again.",
       "expired_title": "This sign-in has ended",
       "expired": "Core Hub is no longer waiting for this sign-in (it ran out, was cancelled or was already used). Start it again from the MCP page.",
-      "unavailable_title": "Hermes is not available",
-      "unavailable": "Core Hub could not hand this sign-in to Hermes. Return to Core Hub and try again.",
       "close": "Close this tab"
     },
     "mcp_test": {

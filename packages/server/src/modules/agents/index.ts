@@ -46,7 +46,7 @@ import { defineRoute } from '../../lib/route.js';
 import { registerWebhookRoutes } from './webhook-routes.js';
 import { registerPresetRoutes } from './presets.js';
 import { registerMcpOAuthRoutes } from './mcp-oauth-routes.js';
-import { oauthStateOf } from './mcp-oauth.js';
+import { mcpLoginSpawner, oauthStateOf, type McpLoginSpawner } from './mcp-oauth.js';
 import { levelOfHermesLine } from '../../lib/log-ring.js';
 import { t } from '../../i18n/index.js';
 import {
@@ -341,6 +341,11 @@ export interface AgentsOverrides {
    */
   hermesCli?: HermesCli;
   /**
+   * Hermes's own `hermes mcp login` as MCP OAuth runs it (DECISIONS §122), in place of the real
+   * command — for the tests and the e2e hub.
+   */
+  mcpLogin?: McpLoginSpawner;
+  /**
    * Hermes's interpreter as approving a pending memory or skill write runs it, in place of the
    * real one — for the tests and the e2e hub.
    */
@@ -461,6 +466,8 @@ interface AgentsContext {
   hermesApi(): HermesApiCall | null;
   /** Hermes's own command, or `null` where the hub does not supervise Hermes. */
   hermesCli(): HermesCli | null;
+  /** Hermes's `mcp login`, or `null` where the hub does not run Hermes (DECISIONS §122). */
+  mcpLogin(): McpLoginSpawner | null;
   /** Hermes's own Python, or `null` where the hub does not supervise Hermes. */
   hermesPython(): HermesPython | null;
   pairingPollMs: number;
@@ -837,6 +844,13 @@ function contextOf(app: FastifyInstance): AgentsContext {
       const command = runtime.executable();
       if (mode !== 'managed' || !home || !command) return null;
       return hermesCliRunner({ command, env: () => runtime.cliEnv() });
+    },
+    mcpLogin: () => {
+      if (own.mcpLogin) return own.mcpLogin;
+      const { mode, home } = runtime.status();
+      const command = runtime.executable();
+      if (mode !== 'managed' || !home || !command) return null;
+      return mcpLoginSpawner({ command, env: () => runtime.cliEnv() });
     },
     hermesPython: () => {
       if (own.hermesPython) return own.hermesPython;
@@ -1763,8 +1777,8 @@ export const agentsModule = defineModule({
 
     registerMcpOAuthRoutes(app, deps, {
       toolHome,
-      hermesApi: hermesApiOf,
-      callbackApi: (server) => contextOf(server).hermesApi(),
+      loginSpawner: (server) => contextOf(server).mcpLogin(),
+      hermesApi: (server) => contextOf(server).hermesApi(),
       toMcpServer,
       refuseManaged,
       mcpFault,

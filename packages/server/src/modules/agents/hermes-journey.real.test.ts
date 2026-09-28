@@ -51,9 +51,6 @@ describe.skipIf(!image)('Journey (real Hermes; set COREHUB_HERMES_IMAGE to run)'
     'The person likes web research summaries\n§\nيفضّل الشخص الردود القصيرة بالعربية\n',
   );
   writeFileSync(path.join(work, 'memories', 'USER.md'), 'Name: Test Owner\n');
-  // A named profile Hermes recognises has an identity file (from v2026.9.21 one without is
-  // "does not exist"); every profile Hermes itself creates has its `config.yaml`.
-  writeFileSync(path.join(work, 'config.yaml'), '{}\n');
   execFileSync('chmod', ['-R', 'a+rwX', home]);
   chmodSync(home, 0o777);
 
