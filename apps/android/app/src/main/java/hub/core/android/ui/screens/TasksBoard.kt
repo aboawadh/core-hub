@@ -364,7 +364,8 @@ fun TaskBoard(
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
                             StatusDot(statusColor(column.statuses.first()), null)
-                            Text("${columnTitle(column.id)} · ${tasks.size}", fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted)
+                            // One line always: a long translation ends with "…", never a letter on a second line.
+                            Text("${columnTitle(column.id)} · ${tasks.size}", fontSize = FontTokens.sizeSm.sp, fontWeight = FontWeight.SemiBold, color = t.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (tasks.isEmpty()) Text(stringResource(R.string.board_empty_column), fontSize = FontTokens.sizeXs.sp, color = t.textFaint, modifier = Modifier.padding(8.dp))
